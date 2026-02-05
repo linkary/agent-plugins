@@ -1,0 +1,17 @@
+.DS_Store
+
+# Build output (built on prepack)
+dist/
+
+# Local agent config dirs (sync targets)
+.cursor/
+.claude/
+.codex/
+.gemini/
+.agent/
+.agents/
+
+AGENT.md
+
+# Scratch
+.foo/
