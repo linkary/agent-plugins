@@ -34,7 +34,7 @@ async function runGit(args: string[], opts: { cwd?: string }): Promise<number> {
 export async function cmdSkillsAdd(positionals: string[], flags: ParsedFlags, _ctx: CliRunContext) {
   const source = positionals[0];
   if (!source) {
-    process.stderr.write('Usage: apg skills add <git-url|local-path> [--name <skill>] [--ref <ref>] [--force]\n');
+    process.stderr.write('Usage: ap skills add <git-url|local-path> [--name <skill>] [--ref <ref>] [--force]\n');
     return 1;
   }
 

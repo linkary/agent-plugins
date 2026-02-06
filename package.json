@@ -1,17 +1,18 @@
 {
   "name": "agent-plugins",
   "version": "0.0.1",
-  "description": "LLM skills manager and sync tool (apg)",
+  "description": "LLM skills manager and sync tool (ap)",
   "main": "dist/cli.cjs",
   "bin": {
-    "apg": "bin/apg.js",
-    "agent-plugins": "bin/apg.js"
+    "ap": "bin/ap.js",
+    "agent-plugins": "bin/ap.js",
+    "apd": "bin/ap-dev.js"
   },
   "scripts": {
     "build": "bun build src/cli.ts --target node --format cjs --outfile dist/cli.cjs",
     "dev": "bun run src/cli.ts",
     "prepack": "bun run build",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "bun test"
   },
   "files": [
     "dist",
@@ -22,5 +23,14 @@
   "license": "ISC",
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.8",
+    "@types/node": "^25.2.0"
+  },
+  "dependencies": {
+    "@inquirer/checkbox": "^5.0.4",
+    "@inquirer/confirm": "^6.0.4",
+    "@inquirer/select": "^5.0.4"
   }
 }

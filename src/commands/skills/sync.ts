@@ -6,12 +6,22 @@ import fs from 'node:fs/promises';
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { computeDirHash } from '../../util/hash-dir.js';
 import { findProjectRoot } from '../../util/project-root.js';
-import { promptSelect, promptChoice } from '../../util/prompt.js';
-import { getAdapters, resolveAdapter } from '../../targets/adapters.js';
-import { getHomeDir } from '../../util/apg-paths.js';
+import { promptChoice, promptConfirm, promptMultiSelect } from '../../util/prompt.js';
+import { getAdapters, type Scope } from '../../targets/adapters.js';
+import { selectTargetAdapters } from '../../targets/select-targets.js';
+import { getCentralSkillsDir, getHomeDir } from '../../util/apg-paths.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
 import { loadConfig } from '../../core/config.js';
 import { copyDir } from '../../util/copy-dir.js';
+
+type SyncEntry = {
+  name: string;
+  srcDir: string;
+  destDir: string;
+  adapter: { id: string; label: string };
+  scope: Scope;
+  projectRoot: string;
+};
 
 export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags, _ctx: CliRunContext) {
   const positionals = _positionals;
@@ -27,90 +37,145 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   const startCwd = cwdFlag ? path.resolve(cwdFlag) : ctx.cwd;
 
   const adapters = getAdapters();
-  const targetFlag = typeof flags.target === 'string' ? flags.target : undefined;
-  if (!targetFlag && !interactive) {
-    process.stderr.write('Missing --target and no TTY available for interactive selection.\n');
-    return 1;
-  }
-  const adapter =
-    (targetFlag ? resolveAdapter(targetFlag) : null) ??
-    (await promptSelect({
-      message: 'Select sync target:',
-      options: adapters.map((a) => ({ label: a.label, value: a.id })),
-    }).then((id) => adapters.find((a) => a.id === id) ?? null));
-
-  if (!adapter) {
-    process.stderr.write('No target selected.\n');
-    return 1;
-  }
+  const selectedAdapters = await selectTargetAdapters({
+    adapters,
+    flags,
+    interactive,
+    mode: 'multi',
+    promptMessage: 'Select sync target(s):',
+  });
+  if (selectedAdapters.length === 0) return 1;
 
   const config = await loadConfig();
-  const targetConfig = config.targets[adapter.id];
-  const scope: 'local' | 'global' =
-    scopeFlag === 'global'
-      ? 'global'
-      : scopeFlag === 'local'
-        ? 'local'
-        : targetConfig?.defaultScope === 'global'
-          ? 'global'
-          : 'local';
-
   const homeDir = getHomeDir();
-  const projectRoot = scope === 'local' ? await findProjectRoot(startCwd) : startCwd;
-  const destSkillsDir = adapter.resolveSkillsDir({ scope, projectRoot, homeDir });
 
   const availableSkills = await listCentralSkills();
-  const skillsToSync =
-    positionals.length > 0
-      ? positionals
-      : targetConfig?.include && !targetConfig.include.includes('*')
-        ? targetConfig.include.filter((s) => availableSkills.includes(s))
-        : availableSkills;
-
-  if (skillsToSync.length === 0) {
+  if (availableSkills.length === 0) {
     process.stdout.write('(no skills to sync)\n');
     return 0;
   }
 
-  if (!dryRun) await ensureDir(destSkillsDir);
+  // Phase 1: Gather all sync entries (skill + target combinations)
+  const allEntries: SyncEntry[] = [];
+  for (const adapter of selectedAdapters) {
+    const targetConfig = config.targets[adapter.id];
+    const scope = resolveScope(scopeFlag, targetConfig?.defaultScope);
+    const projectRoot = scope === 'local' ? await findProjectRoot(startCwd) : startCwd;
+    const destSkillsDir = adapter.resolveSkillsDir({ scope, projectRoot, homeDir });
 
+    // Determine which skills to sync for this target
+    const defaultSkills =
+      targetConfig?.include && !targetConfig.include.includes('*')
+        ? targetConfig.include.filter((s) => availableSkills.includes(s))
+        : availableSkills;
+
+    for (const name of defaultSkills) {
+      // Skip hidden skills (starting with .) unless explicitly specified
+      if (name.startsWith('.') && !positionals.includes(name)) continue;
+      // Filter by positionals if provided
+      if (positionals.length > 0 && !positionals.includes(name)) continue;
+
+      allEntries.push({
+        name,
+        srcDir: getCentralSkillPath(name),
+        destDir: path.join(destSkillsDir, name),
+        adapter: { id: adapter.id, label: adapter.label },
+        scope,
+        projectRoot,
+      });
+    }
+  }
+
+  if (allEntries.length === 0) {
+    process.stdout.write('No skills available to sync.\n');
+    return 0;
+  }
+
+  // Phase 2: Show unified selection list
+  let selectedEntries: SyncEntry[];
+  if (positionals.length > 0) {
+    selectedEntries = allEntries;
+  } else if (interactive && !force) {
+    const selectedKeys = await promptMultiSelect({
+      message: 'Select skills to sync:',
+      options: allEntries.map((s, i) => ({
+        label: `${s.name} -> ${s.adapter.label} (${s.scope})`,
+        value: String(i),
+      })),
+      defaultSelected: 'all',
+    });
+    if (selectedKeys.length === 0) {
+      process.stdout.write('No skills selected.\n');
+      return 0;
+    }
+    selectedEntries = selectedKeys.map((i) => allEntries[Number(i)]!);
+  } else {
+    selectedEntries = allEntries;
+  }
+
+  // Phase 3: Show unified preview
+  const srcBaseDir = getCentralSkillsDir();
+  process.stdout.write(`\nSync ${selectedEntries.length} skill(s):\n`);
+  for (const s of selectedEntries) {
+    process.stdout.write(`  ${s.name}: ${srcBaseDir}/${s.name} -> ${s.destDir}\n`);
+  }
+
+  // Phase 4: Unified confirmation
+  if (!dryRun && !force && interactive) {
+    const confirmed = await promptConfirm({ message: 'Proceed with sync?', default: true });
+    if (!confirmed) {
+      process.stdout.write('Cancelled.\n');
+      return 0;
+    }
+  }
+
+  // Phase 5: Execute sync
   const syncState = await loadSyncState();
-  const contextId = makeContextId({ target: adapter.id, scope, projectRoot: scope === 'local' ? projectRoot : undefined });
-  const context = syncState.contexts[contextId] ?? { skills: {} as Record<string, { hash: string; syncedAt: string }> };
-  syncState.contexts[contextId] = context;
-
   let conflictMode: 'ask' | 'overwrite' | 'backup' | 'skip' = force ? 'overwrite' : 'ask';
 
-  let changed = 0;
-  for (const name of skillsToSync) {
-    const srcDir = getCentralSkillPath(name);
+  // Ensure all destination directories exist
+  const destDirs = new Set(selectedEntries.map((e) => path.dirname(e.destDir)));
+  if (!dryRun) {
+    for (const dir of destDirs) {
+      await ensureDir(dir);
+    }
+  }
+
+  for (const entry of selectedEntries) {
+    const { name, srcDir, destDir, adapter, scope, projectRoot } = entry;
+
     if (!(await pathExists(srcDir))) {
       process.stderr.write(`Missing central skill: ${name}\n`);
       continue;
     }
 
-    const destDir = path.join(destSkillsDir, name);
+    const contextId = makeContextId({
+      target: adapter.id,
+      scope,
+      projectRoot: scope === 'local' ? projectRoot : undefined,
+    });
+    const context =
+      syncState.contexts[contextId] ?? ({ skills: {} as Record<string, { hash: string; syncedAt: string }> } as const);
+    syncState.contexts[contextId] = context;
+
     const srcHash = await computeDirHash(srcDir, { ignoreNames: ['.git'] });
     const destExists = await pathExists(destDir);
+
     if (!destExists) {
       if (dryRun) {
         process.stdout.write(`[dry-run] copy ${name} -> ${destDir}\n`);
-        changed++;
         continue;
       }
-      await ensureDir(destSkillsDir);
       await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
       context.skills[name] = { hash: srcHash, syncedAt: new Date().toISOString() };
-      process.stdout.write(`Synced: ${name}\n`);
-      changed++;
+      process.stdout.write(`Synced: ${name} -> ${adapter.label}\n`);
       continue;
     }
 
     const destHash = await computeDirHash(destDir, { ignoreNames: ['.git'] });
     if (destHash === srcHash) {
-      // already up to date
       context.skills[name] = { hash: srcHash, syncedAt: context.skills[name]?.syncedAt ?? new Date().toISOString() };
-      process.stdout.write(`Up-to-date: ${name}\n`);
+      process.stdout.write(`Up-to-date: ${name} (${adapter.label})\n`);
       continue;
     }
 
@@ -157,13 +222,11 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
 
     if (dryRun) {
       process.stdout.write(`[dry-run] ${mode} ${name} -> ${destDir}\n`);
-      changed++;
       continue;
     }
 
     if (mode === 'backup') {
-      const backupDir = path.join(destSkillsDir, `${name}.bak-${timestampId()}`);
-      await ensureDir(destSkillsDir);
+      const backupDir = path.join(path.dirname(destDir), `${name}.bak-${timestampId()}`);
       await fsRenameOrCopy(destDir, backupDir);
     } else {
       await removeDir(destDir);
@@ -171,13 +234,18 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
 
     await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
     context.skills[name] = { hash: srcHash, syncedAt: new Date().toISOString() };
-    process.stdout.write(`Synced: ${name}\n`);
-    changed++;
+    process.stdout.write(`Synced: ${name} -> ${adapter.label}\n`);
   }
 
   if (!dryRun) await saveSyncState(syncState);
 
   return 0;
+}
+
+function resolveScope(scopeFlag: string | undefined, defaultScope: Scope | undefined): Scope {
+  if (scopeFlag === 'global') return 'global';
+  if (scopeFlag === 'local') return 'local';
+  return defaultScope === 'global' ? 'global' : 'local';
 }
 
 async function fsRenameOrCopy(src: string, dest: string): Promise<void> {

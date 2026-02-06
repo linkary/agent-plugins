@@ -17,6 +17,12 @@ export type TargetAdapter = {
   resolveSkillsDir(params: ResolveParams): string;
 };
 
+function getCodexHomeDir(homeDir: string): string {
+  const override = process.env.CODEX_HOME;
+  if (override && override.trim()) return path.resolve(override.trim());
+  return path.join(homeDir, '.codex');
+}
+
 const adapters: TargetAdapter[] = [
   {
     id: 'cursor',
@@ -42,8 +48,8 @@ const adapters: TargetAdapter[] = [
     aliases: ['codex'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
-        ? path.join(homeDir, '.agents', 'skills')
-        : path.join(projectRoot, '.agents', 'skills'),
+        ? path.join(getCodexHomeDir(homeDir), 'skills')
+        : path.join(projectRoot, '.codex', 'skills'),
   },
   {
     id: 'claude-code',
@@ -60,7 +66,7 @@ const adapters: TargetAdapter[] = [
     aliases: ['antigravity', 'anti-gravity'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
-        ? path.join(homeDir, '.gemini', 'antigravity', 'skills')
+        ? path.join(homeDir, '.gemini', 'antigravity', 'global_skills')
         : path.join(projectRoot, '.agent', 'skills'),
   },
 ];

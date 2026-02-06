@@ -1,4 +1,4 @@
-# agent-plugins (apg)
+# agent-plugins (ap)
 
 一个用于 **LLM Agent Skills** 的集中管理与跨工具同步的 CLI。
 
@@ -12,6 +12,7 @@
 可通过环境变量覆盖默认目录：
 
 - `APG_HOME` 或 `AGENT_PLUGINS_HOME`：覆盖 `~/.agent-plugins`
+- `CODEX_HOME`：覆盖 Codex 的 `~/.codex`（影响 Codex global skills 路径）
 
 ## 安装与构建
 
@@ -24,39 +25,47 @@ node dist/cli.cjs --help
 
 发布到 npm 后会提供两个命令入口：
 
-- `apg`（简写）
+- `ap`（简写）
 - `agent-plugins`（全称）
+
+## 交互体验
+
+交互式选择（`sync/collect/manage` 以及冲突处理）默认使用 `inquirer` 的列表/多选组件；在依赖不可用时会回退到基础 `readline` 交互。
 
 ## 命令概览
 
 ```bash
 # 列出 central skills
-apg skills list
+ap skills list
 
 # 添加 skill（git 或本地目录）
-apg skills add <git-url|local-path> [--name <skill>] [--ref <ref>] [--force]
+ap skills add <git-url|local-path> [--name <skill>] [--ref <ref>] [--force]
 
 # 更新 skill（根据 add 时记录的来源）
-apg skills update [<skill>...] [--all] [--dry-run] [--force]
+ap skills update [<skill>...] [--all] [--dry-run] [--force]
 
 # 同步 central -> 目标工具
-apg skills sync [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity> [--scope local|global] [--dry-run] [--force]
+ap skills sync [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|all> [--scope local|global] [--dry-run] [--force]
 
 # 从目标工具收集 -> central
-apg skills collect [<skill>...] --target <...> [--scope local|global] [--all] [--dry-run] [--force]
+ap skills collect [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|all> [--scope local|global] [--all] [--dry-run] [--force]
 
 # 删除 central skill（默认）或删除目标端 skill（加 --target）
-apg skills rm <skill>... [--target <...>] [--scope local|global] [--dry-run]
+ap skills rm <skill>... [--target <...>] [--scope local|global] [--dry-run]
 
 # 可视化管理（交互式）
-apg skills manage
+ap skills manage
 ```
+
+说明：
+
+- `--target` 支持 `all`、逗号分隔（如 `--target cursor,codex`）或重复传入（如 `--target cursor --target codex`）
 
 子命令支持简写（按位置解析）：
 
 ```bash
-apg s ls
-apg s a /path/to/skill --name my-skill
+ap s ls
+ap s a /path/to/skill --name my-skill
 ```
 
 ## 同步目标与默认路径（macOS）
@@ -70,14 +79,14 @@ apg s a /path/to/skill --name my-skill
   - local：`<project>/.gemini/skills/`
   - global：`~/.gemini/skills/`
 - Codex
-  - local：`<project>/.agents/skills/`
-  - global：`~/.agents/skills/`
+  - local：`<project>/.codex/skills/`
+  - global：`$CODEX_HOME/skills/`（默认 `~/.codex/skills/`）
 - Claude Code
   - local：`<project>/.claude/skills/`
   - global：`~/.claude/skills/`
 - Google Antigravity
   - local：`<project>/.agent/skills/`
-  - global：`~/.gemini/antigravity/skills/`
+  - global：`~/.gemini/antigravity/global_skills/`
 
 ## 配置与状态文件
 

@@ -1,4 +1,10 @@
+import { buildShortFlagMap, getValueShortFlags } from './cli-defs.js';
+
 export type ParsedFlags = Record<string, string | boolean | string[]>;
+
+// Build maps from metadata at module load time
+const SHORT_TO_LONG = buildShortFlagMap();
+const VALUE_SHORT_FLAGS = getValueShortFlags();
 
 function pushFlag(flags: ParsedFlags, key: string, value: string | boolean) {
   const existing = flags[key];
@@ -47,18 +53,22 @@ export function parseOptions(argv: string[]): { positionals: string[]; flags: Pa
       const letters = token.slice(1).split('');
       for (let j = 0; j < letters.length; j++) {
         const ch = letters[j];
-        // single-char flags that take values
-        if (ch === 't' || ch === 'n' || ch === 'C') {
+        const longName = SHORT_TO_LONG[ch];
+
+        // Check if this short flag takes a value
+        if (VALUE_SHORT_FLAGS.has(ch)) {
           const next = argv[i + 1];
           if (next === undefined) {
-            pushFlag(flags, ch, true);
+            pushFlag(flags, longName ?? ch, true);
             continue;
           }
-          pushFlag(flags, ch, next);
+          pushFlag(flags, longName ?? ch, next);
           i++;
           continue;
         }
-        pushFlag(flags, ch, true);
+
+        // Boolean flag
+        pushFlag(flags, longName ?? ch, true);
       }
       continue;
     }
@@ -66,14 +76,9 @@ export function parseOptions(argv: string[]): { positionals: string[]; flags: Pa
     positionals.push(token);
   }
 
-  // Normalize common short flags
+  // Normalize scope shortcuts: -g → scope=global, -l → scope=local
   if (flags.g === true) flags.scope = 'global';
   if (flags.l === true) flags.scope = 'local';
-  if (flags.t) flags.target = flags.t;
-  if (flags.n) flags.name = flags.n;
-  if (flags.C) flags.cwd = flags.C;
-  if (flags.f === true) flags.force = true;
-  if (flags.d === true) flags['dry-run'] = true;
 
   return { positionals, flags };
 }

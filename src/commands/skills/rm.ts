@@ -13,7 +13,7 @@ import type { CliRunContext } from '../../runner/cli.js';
 export async function cmdSkillsRemove(positionals: string[], flags: ParsedFlags, _ctx: CliRunContext) {
   const skills = positionals;
   if (skills.length === 0) {
-    process.stderr.write('Usage: apg skills rm <skill>...\n');
+    process.stderr.write('Usage: ap skills rm <skill>...\n');
     return 1;
   }
 

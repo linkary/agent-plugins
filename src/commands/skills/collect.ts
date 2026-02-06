@@ -2,17 +2,27 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { loadConfig } from '../../core/config.js';
 import { loadRegistry, saveRegistry } from '../../core/registry.js';
-import { ensureCentralStore, getCentralSkillPath, listCentralSkills } from '../../core/skill-store.js';
+import { ensureCentralStore, getCentralSkillPath } from '../../core/skill-store.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
-import { getAdapters, resolveAdapter } from '../../targets/adapters.js';
-import { getHomeDir } from '../../util/apg-paths.js';
+import { type Scope, getAdapters } from '../../targets/adapters.js';
+import { selectTargetAdapters } from '../../targets/select-targets.js';
+import { getCentralSkillsDir, getHomeDir } from '../../util/apg-paths.js';
 import { copyDir } from '../../util/copy-dir.js';
 import { ensureDir, listDirNames, pathExists, removeDir } from '../../util/fs-utils.js';
 import { computeDirHash } from '../../util/hash-dir.js';
 import type { ParsedFlags } from '../../util/options.js';
-import { promptChoice, promptMultiSelect, promptSelect } from '../../util/prompt.js';
+import { promptChoice, promptConfirm, promptMultiSelect } from '../../util/prompt.js';
 import { findProjectRoot } from '../../util/project-root.js';
 import type { CliRunContext } from '../../runner/cli.js';
+
+type SkillEntry = {
+  name: string;
+  srcDir: string;
+  destDir: string;
+  adapter: { id: string; label: string };
+  scope: Scope;
+  projectRoot: string;
+};
 
 export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFlags, _ctx: CliRunContext) {
   const positionals = _positionals;
@@ -28,89 +38,124 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
   const startCwd = cwdFlag ? path.resolve(cwdFlag) : ctx.cwd;
 
   const adapters = getAdapters();
-  const targetFlag = typeof flags.target === 'string' ? flags.target : undefined;
-  if (!targetFlag && !interactive) {
-    process.stderr.write('Missing --target and no TTY available for interactive selection.\n');
-    return 1;
-  }
-  const adapter =
-    (targetFlag ? resolveAdapter(targetFlag) : null) ??
-    (await promptSelect({
-      message: 'Select collect source:',
-      options: adapters.map((a) => ({ label: a.label, value: a.id })),
-    }).then((id) => adapters.find((a) => a.id === id) ?? null));
-
-  if (!adapter) {
-    process.stderr.write('No source selected.\n');
-    return 1;
-  }
+  const selectedAdapters = await selectTargetAdapters({
+    adapters,
+    flags,
+    interactive,
+    mode: 'multi',
+    promptMessage: 'Select collect source(s):',
+  });
+  if (selectedAdapters.length === 0) return 1;
 
   const config = await loadConfig();
-  const targetConfig = config.targets[adapter.id];
-  const scope: 'local' | 'global' =
-    scopeFlag === 'global'
-      ? 'global'
-      : scopeFlag === 'local'
-        ? 'local'
-        : targetConfig?.defaultScope === 'global'
-          ? 'global'
-          : 'local';
-
   const homeDir = getHomeDir();
-  const projectRoot = scope === 'local' ? await findProjectRoot(startCwd) : startCwd;
-  const sourceSkillsDir = adapter.resolveSkillsDir({ scope, projectRoot, homeDir });
 
-  const available = await listDirNames(sourceSkillsDir);
-  if (available.length === 0) {
-    process.stdout.write(`(no skills found in ${adapter.label} ${scope})\n`);
+  // Phase 1: Gather all available skills from all selected targets
+  const allSkills: SkillEntry[] = [];
+  for (const adapter of selectedAdapters) {
+    const targetConfig = config.targets[adapter.id];
+    const scope = resolveScope(scopeFlag, targetConfig?.defaultScope);
+    const projectRoot = scope === 'local' ? await findProjectRoot(startCwd) : startCwd;
+    const sourceSkillsDir = adapter.resolveSkillsDir({ scope, projectRoot, homeDir });
+
+    const available = await listDirNames(sourceSkillsDir);
+    if (available.length === 0) {
+      process.stdout.write(`(no skills found in ${adapter.label} ${scope})\n`);
+      continue;
+    }
+
+    for (const name of available) {
+      // Skip hidden skills (starting with .) unless explicitly specified
+      if (name.startsWith('.') && !positionals.includes(name)) continue;
+      // Filter by positionals if provided
+      if (positionals.length > 0 && !positionals.includes(name)) continue;
+
+      allSkills.push({
+        name,
+        srcDir: path.join(sourceSkillsDir, name),
+        destDir: getCentralSkillPath(name),
+        adapter: { id: adapter.id, label: adapter.label },
+        scope,
+        projectRoot,
+      });
+    }
+  }
+
+  if (allSkills.length === 0) {
+    process.stdout.write('No skills available to collect.\n');
     return 0;
   }
 
-  const allFlag = flags.all === true;
-  const skillsToCollect =
-    positionals.length > 0
-      ? positionals
-      : allFlag
-        ? available
-        : interactive
-          ? await promptMultiSelect({
-              message: `Select skills to collect from ${adapter.label} (${scope}):`,
-              options: available.map((n) => ({ label: n, value: n })),
-            })
-          : [];
-
-  if (skillsToCollect.length === 0) {
-    process.stderr.write('No skills selected. Pass skill names, --all, or run interactively.\n');
-    return 1;
+  // Phase 2: Show unified selection list (all skills from all targets)
+  let selectedSkills: SkillEntry[];
+  if (positionals.length > 0) {
+    // Positionals already filtered above
+    selectedSkills = allSkills;
+  } else if (interactive && !force) {
+    const selectedKeys = await promptMultiSelect({
+      message: 'Select skills to collect:',
+      options: allSkills.map((s, i) => ({
+        label: `${s.name} (${s.adapter.label})`,
+        value: String(i),
+      })),
+      defaultSelected: 'all',
+    });
+    if (selectedKeys.length === 0) {
+      process.stdout.write('No skills selected.\n');
+      return 0;
+    }
+    selectedSkills = selectedKeys.map((i) => allSkills[Number(i)]!);
+  } else {
+    selectedSkills = allSkills;
   }
 
-  await ensureCentralStore();
+  // Phase 3: Show unified preview
+  const destBaseDir = getCentralSkillsDir();
+  process.stdout.write(`\nCollect ${selectedSkills.length} skill(s):\n`);
+  for (const s of selectedSkills) {
+    process.stdout.write(`  ${s.name} (${s.adapter.label}): ${s.srcDir} -> ${destBaseDir}/${s.name}\n`);
+  }
+
+  // Phase 4: Unified confirmation
+  if (!dryRun && !force && interactive) {
+    const confirmed = await promptConfirm({ message: 'Proceed with collection?', default: true });
+    if (!confirmed) {
+      process.stdout.write('Cancelled.\n');
+      return 0;
+    }
+  }
+
+  // Phase 5: Execute collection
+  if (!dryRun) await ensureCentralStore();
+
   const registry = await loadRegistry();
   const syncState = await loadSyncState();
-  const contextId = makeContextId({ target: adapter.id, scope, projectRoot: scope === 'local' ? projectRoot : undefined });
-  const context = syncState.contexts[contextId] ?? { skills: {} as Record<string, { hash: string; syncedAt: string }> };
-  syncState.contexts[contextId] = context;
-
-  const centralSkills = await listCentralSkills();
+  const centralSkills = await listDirNames(getCentralSkillsDir());
 
   let conflictMode: 'ask' | 'overwrite' | 'backup' | 'keep' | 'skip' = force ? 'overwrite' : 'ask';
-  let changed = 0;
 
-  for (const name of skillsToCollect) {
-    const srcDir = path.join(sourceSkillsDir, name);
+  for (const skill of selectedSkills) {
+    const { name, srcDir, destDir, adapter, scope, projectRoot } = skill;
+
     if (!(await pathExists(srcDir))) {
       process.stderr.write(`Missing source skill: ${name}\n`);
       continue;
     }
 
+    const contextId = makeContextId({
+      target: adapter.id,
+      scope,
+      projectRoot: scope === 'local' ? projectRoot : undefined,
+    });
+    const context = syncState.contexts[contextId] ?? { skills: {} as Record<string, { hash: string; syncedAt: string }> };
+    syncState.contexts[contextId] = context;
+
     const srcHash = await computeDirHash(srcDir, { ignoreNames: ['.git'] });
-    const destDir = getCentralSkillPath(name);
     const destExists = await pathExists(destDir);
 
     if (!destExists) {
       if (dryRun) {
         process.stdout.write(`[dry-run] collect ${name} -> ${destDir}\n`);
-        changed++;
         continue;
       }
       await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
@@ -124,7 +169,7 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
       registry.skills[name]!.updatedAt = now;
       context.skills[name] = { hash: srcHash, syncedAt: now };
       process.stdout.write(`Collected: ${name}\n`);
-      changed++;
+      centralSkills.push(name);
       continue;
     }
 
@@ -179,7 +224,6 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
       const incomingDest = getCentralSkillPath(incomingName);
       if (dryRun) {
         process.stdout.write(`[dry-run] collect ${name} -> ${incomingDest}\n`);
-        changed++;
         continue;
       }
       await copyDir(srcDir, incomingDest, { ignoreNames: ['.git'] });
@@ -191,7 +235,6 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
         source: { type: 'collected', from: { target: adapter.id, scope, path: srcDir } },
       };
       process.stdout.write(`Collected as: ${incomingName}\n`);
-      changed++;
       centralSkills.push(incomingName);
       continue;
     }
@@ -199,7 +242,6 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
     // overwrite or backup
     if (dryRun) {
       process.stdout.write(`[dry-run] ${mode} ${name} -> ${destDir}\n`);
-      changed++;
       continue;
     }
 
@@ -222,7 +264,6 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
     registry.skills[name]!.updatedAt = now;
     context.skills[name] = { hash: srcHash, syncedAt: now };
     process.stdout.write(`Collected: ${name}\n`);
-    changed++;
   }
 
   if (!dryRun) {
@@ -231,6 +272,12 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
   }
 
   return 0;
+}
+
+function resolveScope(scopeFlag: string | undefined, defaultScope: Scope | undefined): Scope {
+  if (scopeFlag === 'global') return 'global';
+  if (scopeFlag === 'local') return 'local';
+  return defaultScope === 'global' ? 'global' : 'local';
 }
 
 async function fsRenameOrCopy(src: string, dest: string): Promise<void> {
