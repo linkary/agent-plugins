@@ -22,6 +22,8 @@ export const ANSI = {
   brightCyan: '\x1b[96m',
   brightGreen: '\x1b[92m',
   brightYellow: '\x1b[93m',
+  brightBlue: '\x1b[94m',
+  brightMagenta: '\x1b[95m',
 } as const;
 
 export type TargetAdapter = {
@@ -42,7 +44,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'cursor',
     label: 'Cursor',
-    color: ANSI.cyan,
+    color: ANSI.brightMagenta,
     aliases: ['cursor'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
@@ -82,7 +84,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'antigravity',
     label: 'Google Antigravity',
-    color: ANSI.blue,
+    color: ANSI.brightBlue,
     aliases: ['antigravity', 'anti-gravity'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'

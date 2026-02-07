@@ -73,7 +73,7 @@ export async function selectTargetAdapters(params: {
   const ids = await promptMultiSelect({
     message: promptMessage,
     options: adapters.map((a) => ({ label: a.label, value: a.id })),
-    defaultSelected: 'all',
+    defaultSelected: [],
   });
   if (ids.length === 0) {
     process.stderr.write('No target selected.\n');
