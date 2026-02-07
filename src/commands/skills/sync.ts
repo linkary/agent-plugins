@@ -132,22 +132,27 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   let finalEntries: EntryWithStatus[];
 
   if (interactive && !force) {
-    const mergeCount = entriesWithStatus.filter((s) => s.willOverwrite).length;
-    const newCount = entriesWithStatus.length - mergeCount;
+    const replaceCount = entriesWithStatus.filter((s) => s.willOverwrite).length;
+    const newCount = entriesWithStatus.length - replaceCount;
     process.stdout.write(
-      `\nPreview: ${green}${newCount} new${reset}, ${cyan}${mergeCount} merge${reset}\n`,
+      `\nPreview: ${green}${newCount} new${reset}, ${yellow}${replaceCount} replace${reset}\n`,
     );
+
+    // Default: select only 'new' items (exclude 'replace')
+    const defaultSelected = entriesWithStatus
+      .map((s, i) => (!s.willOverwrite ? String(i) : null))
+      .filter((v): v is string => v !== null);
 
     const selectedKeys = await promptMultiSelect({
       message: `Confirm skills to sync (source: ${srcBaseDir}):`,
       options: entriesWithStatus.map((s, i) => {
-        const status = s.willOverwrite ? `${cyan}merge${reset}` : `${green}new${reset}`;
+        const status = s.willOverwrite ? `${yellow}replace${reset}` : `${green}new${reset}`;
         return {
           label: `${s.name} -> ${s.adapter.label} (${s.scope}) [${status}]`,
           value: String(i),
         };
       }),
-      defaultSelected: 'all',
+      defaultSelected,
     });
 
     if (selectedKeys.length === 0) {
@@ -159,7 +164,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
     // Non-interactive: show preview
     process.stdout.write(`\nSync ${entriesWithStatus.length} skill(s) from ${srcBaseDir}:\n`);
     for (const s of entriesWithStatus) {
-      const status = s.willOverwrite ? `${cyan}merge${reset}` : `${green}new${reset}`;
+      const status = s.willOverwrite ? `${yellow}replace${reset}` : `${green}new${reset}`;
       process.stdout.write(`  ${s.name} -> ${s.adapter.label} (${s.scope}) [${status}]\n`);
     }
     finalEntries = entriesWithStatus;
