@@ -1,104 +1,104 @@
 # agent-plugins (ap)
 
-一个用于 **LLM Agent Skills** 的集中管理与跨工具同步的 CLI。
+A CLI tool for centralized management and cross-tool synchronization of **LLM Agent Skills**.
 
-## 核心约定
+## Core Conventions
 
-- Central skills 目录（默认）：`$HOME/.agent-plugins/skills/<skill-name>/`
-- `add/rm/update/manage` 默认管理的是 central skills
-- `sync`：central → 目标工具（单向复制，支持冲突处理）
-- `collect`：目标工具 → central（用于把分散在各处的 skills 收集回来，支持冲突处理）
+- Central skills directory (default): `$HOME/.agent-plugins/skills/<skill-name>/`
+- `add/rm/update/manage` commands operate on central skills by default.
+- `sync`: Central → Target tool (one-way copy, supports conflict resolution).
+- `collect`: Target tool → Central (collects skills scattered across different tools, supports conflict resolution).
 
-可通过环境变量覆盖默认目录：
+You can override the default directories using environment variables:
 
-- `APG_HOME` 或 `AGENT_PLUGINS_HOME`：覆盖 `~/.agent-plugins`
-- `CODEX_HOME`：覆盖 Codex 的 `~/.codex`（影响 Codex global skills 路径）
+- `APG_HOME` or `AGENT_PLUGINS_HOME`: Overrides `~/.agent-plugins`.
+- `CODEX_HOME`: Overrides Codex's `~/.codex` (affects Codex global skills path).
 
-## 安装与构建
+## Installation and Build
 
-本项目使用 Bun 开发/构建，但产物可在 Node.js 下运行：
+This project is developed/built using Bun, but the artifacts can run under Node.js:
 
 ```bash
 bun run build
 node dist/cli.cjs --help
 ```
 
-发布到 npm 后会提供两个命令入口：
+After publishing to npm, two command entry points will be provided:
 
-- `ap`（简写）
-- `agent-plugins`（全称）
+- `ap` (short alias)
+- `agent-plugins` (full name)
 
-## 交互体验
+## Interactive Experience
 
-交互式选择（`sync/collect/manage` 以及冲突处理）默认使用 `inquirer` 的列表/多选组件；在依赖不可用时会回退到基础 `readline` 交互。
+Interactive selection (`sync/collect/manage` and conflict resolution) defaults to using `inquirer` list/multiselect components. It falls back to basic `readline` interaction if dependencies are unavailable.
 
-## 命令概览
+## Command Overview
 
 ```bash
-# 列出 central skills
+# List central skills
 ap skills list
 
-# 添加 skill（git 或本地目录）
+# Add a skill (git URL or local path)
 ap skills add <git-url|local-path> [--name <skill>] [--ref <ref>] [--force]
 
-# 更新 skill（根据 add 时记录的来源）
+# Update skills (based on the source recorded during 'add')
 ap skills update [<skill>...] [--all] [--dry-run] [--force]
 
-# 同步 central -> 目标工具
+# Sync: Central -> Target Tool
 ap skills sync [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|all> [--scope local|global] [--dry-run] [--force]
 
-# 从目标工具收集 -> central
+# Collect: Target Tool -> Central
 ap skills collect [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|all> [--scope local|global] [--all] [--dry-run] [--force]
 
-# 删除 central skill（默认）或删除目标端 skill（加 --target）
+# Remove central skill (default) or remove skill from target (with --target)
 ap skills rm <skill>... [--target <...>] [--scope local|global] [--dry-run]
 
-# 可视化管理（交互式）
+# Visual Management (Interactive)
 ap skills manage
 ```
 
-说明：
+Notes:
 
-- `--target` 支持 `all`、逗号分隔（如 `--target cursor,codex`）或重复传入（如 `--target cursor --target codex`）
+- `--target` supports `all`, comma-separated values (e.g., `--target cursor,codex`), or repeated flags (e.g., `--target cursor --target codex`).
 
-子命令支持简写（按位置解析）：
+Subcommands support abbreviations (parsed by position):
 
 ```bash
 ap s ls
 ap s a /path/to/skill --name my-skill
 ```
 
-## 同步目标与默认路径（macOS）
+## Sync Targets and Default Paths (macOS)
 
-`--scope local` 默认以 git root 为项目根目录（找不到 git root 则使用当前目录）。
+`--scope local` defaults to the git root as the project root (uses current directory if git root is not found).
 
 - Cursor
-  - local：`<project>/.cursor/skills/`
-  - global：`~/.cursor/skills/`
+  - local: `<project>/.cursor/skills/`
+  - global: `~/.cursor/skills/`
 - Gemini CLI
-  - local：`<project>/.gemini/skills/`
-  - global：`~/.gemini/skills/`
+  - local: `<project>/.gemini/skills/`
+  - global: `~/.gemini/skills/`
 - Codex
-  - local：`<project>/.codex/skills/`
-  - global：`$CODEX_HOME/skills/`（默认 `~/.codex/skills/`）
+  - local: `<project>/.codex/skills/`
+  - global: `$CODEX_HOME/skills/` (default `~/.codex/skills/`)
 - Claude Code
-  - local：`<project>/.claude/skills/`
-  - global：`~/.claude/skills/`
+  - local: `<project>/.claude/skills/`
+  - global: `~/.claude/skills/`
 - Google Antigravity
-  - local：`<project>/.agent/skills/`
-  - global：`~/.gemini/antigravity/global_skills/`
+  - local: `<project>/.agent/skills/`
+  - global: `~/.gemini/antigravity/global_skills/`
 
-## 配置与状态文件
+## Configuration and State Files
 
-- 配置：`$APG_HOME/config.json`
-  - 每个 target 的 `defaultScope`（local/global）
-  - 每个 target 的 `include`（要同步的 skills；支持 `["*"]` 表示全部）
-- 状态：`$APG_HOME/sync-state.json`
-  - 记录每个 target/scope（以及 local 的 projectRoot）上次对齐的 hash，用于判断“目标端是否被手动修改过”并优化冲突处理
+- Configuration: `$APG_HOME/config.json`
+  - `defaultScope` (local/global) for each target.
+  - `include` for each target (skills to sync; supports `["*"]` for all).
+- State: `$APG_HOME/sync-state.json`
+  - Records the last synced hash for each target/scope (and projectRoot for local). usage: Used to determine if "the target side has been manually modified" and optimize conflict resolution.
 
-## 冲突策略
+## Conflict Strategy
 
-- `sync` / `collect` 都会对比目录内容 hash
-- 冲突时：
-  - 非交互环境：需要 `--force`（否则会报错退出）
-  - 交互环境：会提示选择 `overwrite / backup / skip / keep both ...`
+- Both `sync` and `collect` compare directory content hashes.
+- In case of conflict:
+  - Non-interactive environment: Requires `--force` (otherwise exits with error).
+  - Interactive environment: Prompts to choose `overwrite / backup / skip / keep both ...`.
