@@ -87,6 +87,8 @@ export async function promptMultiSelect<T extends string>(params: {
   options: SelectOption<T>[];
   /** Values to pre-select; if 'all', all options are selected */
   defaultSelected?: T[] | 'all';
+  /** Enable real-time filter for large lists (>20 items) */
+  searchable?: boolean;
 }): Promise<T[]> {
   const { message, options, defaultSelected } = params;
   if (!process.stdin.isTTY) {

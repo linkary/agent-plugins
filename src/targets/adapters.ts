@@ -10,9 +10,24 @@ export type ResolveParams = {
   homeDir: string;
 };
 
+/** ANSI color codes for terminal output */
+export const ANSI = {
+  reset: '\x1b[0m',
+  dim: '\x1b[2m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  cyan: '\x1b[36m',
+  brightCyan: '\x1b[96m',
+  brightGreen: '\x1b[92m',
+  brightYellow: '\x1b[93m',
+} as const;
+
 export type TargetAdapter = {
   id: TargetId;
   label: string;
+  color: string; // ANSI color code for this adapter
   aliases: string[];
   resolveSkillsDir(params: ResolveParams): string;
 };
@@ -27,6 +42,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'cursor',
     label: 'Cursor',
+    color: ANSI.cyan,
     aliases: ['cursor'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
@@ -36,6 +52,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'gemini',
     label: 'Gemini CLI',
+    color: ANSI.magenta,
     aliases: ['gemini', 'gemini-cli'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
@@ -45,6 +62,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'codex',
     label: 'Codex',
+    color: ANSI.green,
     aliases: ['codex'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
@@ -54,6 +72,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'claude-code',
     label: 'Claude Code',
+    color: ANSI.yellow,
     aliases: ['claude', 'claude-code', 'claudecode'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
@@ -63,6 +82,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'antigravity',
     label: 'Google Antigravity',
+    color: ANSI.blue,
     aliases: ['antigravity', 'anti-gravity'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
@@ -72,6 +92,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'openskills',
     label: 'Openskills',
+    color: ANSI.brightCyan,
     aliases: ['openskills'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'

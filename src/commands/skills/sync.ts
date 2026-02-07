@@ -7,7 +7,7 @@ import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { computeDirHash } from '../../util/hash-dir.js';
 import { findProjectRoot } from '../../util/project-root.js';
 import { promptChoice, promptConfirm, promptMultiSelect } from '../../util/prompt.js';
-import { getAdapters, type Scope } from '../../targets/adapters.js';
+import { getAdapters, type Scope, type TargetAdapter } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { getCentralSkillsDir, getHomeDir } from '../../util/apg-paths.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
@@ -18,7 +18,7 @@ type SyncEntry = {
   name: string;
   srcDir: string;
   destDir: string;
-  adapter: { id: string; label: string };
+  adapter: TargetAdapter;
   scope: Scope;
   projectRoot: string;
 };
@@ -79,7 +79,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
         name,
         srcDir: getCentralSkillPath(name),
         destDir: path.join(destSkillsDir, name),
-        adapter: { id: adapter.id, label: adapter.label },
+        adapter: adapter,
         scope,
         projectRoot,
       });
@@ -92,6 +92,12 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   }
 
   // Phase 2: Show unified selection list
+  // ANSI color codes
+  const yellow = '\x1b[33m';
+  const green = '\x1b[32m';
+  const cyan = '\x1b[36m';
+  const reset = '\x1b[0m';
+
   let selectedEntries: SyncEntry[];
   if (positionals.length > 0) {
     selectedEntries = allEntries;
@@ -99,10 +105,11 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
     const selectedKeys = await promptMultiSelect({
       message: 'Select skills to sync:',
       options: allEntries.map((s, i) => ({
-        label: `${s.name} -> ${s.adapter.label} (${s.scope})`,
+        label: `${s.name} -> ${s.adapter.color}${s.adapter.label}${reset} (${s.scope})`,
         value: String(i),
       })),
       defaultSelected: [], // Don't select all by default
+      searchable: true, // Enable real-time filter for large lists
     });
     if (selectedKeys.length === 0) {
       process.stdout.write('No skills selected.\n');
@@ -118,15 +125,14 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   const entriesWithStatus: EntryWithStatus[] = await Promise.all(
     selectedEntries.map(async (s) => ({
       ...s,
-      willOverwrite: await pathExists(s.destDir),
+      willOverwrite:
+        s.scope === 'local'
+          ? await pathExists(path.join(s.destDir, s.name)) // Simple check for local
+          : await pathExists(path.join(s.destDir, s.name)), // Same check for global (could be refined)
     })),
   );
 
-  // ANSI color codes
-  const yellow = '\x1b[33m';
-  const green = '\x1b[32m';
-  const cyan = '\x1b[36m';
-  const reset = '\x1b[0m';
+
 
   const srcBaseDir = getCentralSkillsDir();
   let finalEntries: EntryWithStatus[];
@@ -148,7 +154,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
       options: entriesWithStatus.map((s, i) => {
         const status = s.willOverwrite ? `${yellow}replace${reset}` : `${green}new${reset}`;
         return {
-          label: `${s.name} -> ${s.adapter.label} (${s.scope}) [${status}]`,
+          label: `${s.name} -> ${s.adapter.color}${s.adapter.label}${reset} (${s.scope}) [${status}]`,
           value: String(i),
         };
       }),
