@@ -1,12 +1,238 @@
 import select from '@inquirer/select';
-import checkbox from '@inquirer/checkbox';
 import confirm from '@inquirer/confirm';
-import search from '@inquirer/search';
+import {
+  createPrompt,
+  useState,
+  useKeypress,
+  usePrefix,
+  usePagination,
+  useEffect,
+  useMemo,
+  isDownKey,
+  isEnterKey,
+  isSpaceKey,
+  isUpKey,
+  Separator,
+  makeTheme,
+  type Theme,
+} from '@inquirer/core';
+import figures from '@inquirer/figures';
+import { ANSI } from './ansi.js';
 
 export type SelectOption<T extends string> = {
   label: string;
   value: T;
 };
+
+type SearchCheckboxTheme = {
+  icon: {
+    checked: string;
+    unchecked: string;
+    cursor: string;
+  };
+  style: {
+    disabled: (text: string) => string;
+    searchTerm: (text: string) => string;
+    description: (text: string) => string;
+    highlight: (text: string) => string;
+    keysHelpTip: (keys: [key: string, action: string][]) => string | undefined;
+  };
+};
+
+const searchCheckboxTheme: SearchCheckboxTheme = {
+  icon: {
+    checked: `${ANSI.green}${figures.radioOn}${ANSI.reset}`,
+    unchecked: figures.radioOff,
+    cursor: figures.pointer,
+  },
+  style: {
+    disabled: (text: string) => `${ANSI.dim}- ${text}${ANSI.reset}`,
+    searchTerm: (text: string) => `${ANSI.cyan}${text}${ANSI.reset}`,
+    description: (text: string) => `${ANSI.cyan}${text}${ANSI.reset}`,
+    highlight: (text: string) => `${ANSI.cyan}${text}${ANSI.reset}`,
+    keysHelpTip: (keys: [string, string][]) =>
+      keys
+        .map(([key, action]) => `${ANSI.bold}${key}${ANSI.reset} ${ANSI.dim}${action}${ANSI.reset}`)
+        .join(`${ANSI.dim} • ${ANSI.reset}`),
+  },
+};
+
+type Choice<Value> = {
+  value: Value;
+  name?: string;
+  description?: string;
+  short?: string;
+  disabled?: boolean | string;
+  checked?: boolean;
+};
+
+function isSelectable<Value>(item: Choice<Value> | Separator): item is Choice<Value> {
+  return !Separator.isSeparator(item) && !item.disabled;
+}
+
+const searchCheckbox = createPrompt(
+  <Value extends string>(
+    config: {
+      message: string;
+      source: (term: string | undefined) => Promise<readonly (Choice<Value> | Separator)[]>;
+      pageSize?: number;
+      defaultSelected?: Value[];
+      theme?: Theme<SearchCheckboxTheme>;
+    },
+    done: (value: Value[]) => void,
+  ) => {
+    const { pageSize = 15, defaultSelected = [] } = config;
+    const theme = makeTheme(searchCheckboxTheme, config.theme);
+    const [status, setStatus] = useState<'loading' | 'idle' | 'done'>('loading');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [searchResults, setSearchResults] = useState<readonly (Choice<Value> | Separator)[]>([]);
+    const [selectedValues, setSelectedValues] = useState<Set<Value>>(new Set(defaultSelected));
+    const [searchError, setSearchError] = useState<string>();
+
+    const prefix = usePrefix({ status, theme });
+
+    const fetchResults = async (term: string) => {
+      try {
+        setStatus('loading');
+        const results = await config.source(term);
+        setSearchResults(results);
+        setStatus('idle');
+      } catch (error) {
+        setSearchError(error instanceof Error ? error.message : String(error));
+        setStatus('idle');
+      }
+    };
+
+    useEffect(() => {
+      fetchResults(searchTerm);
+    }, [searchTerm]);
+
+    const filteredChoices = useMemo(
+      () => searchResults.filter((item): item is Choice<Value> => !Separator.isSeparator(item)),
+      [searchResults],
+    );
+
+    const bounds = useMemo(() => {
+      const first = searchResults.findIndex(isSelectable);
+      const last = searchResults.findLastIndex(isSelectable);
+      return { first, last };
+    }, [searchResults]);
+
+    const [active = bounds.first, setActive] = useState<number>();
+
+    useKeypress(async (key, rl) => {
+      if (isEnterKey(key)) {
+        setStatus('done');
+        done(Array.from(selectedValues));
+      } else if (isSpaceKey(key)) {
+        const choice = searchResults[active];
+        if (choice && !Separator.isSeparator(choice) && !choice.disabled) {
+          const newValue = new Set(selectedValues);
+          if (newValue.has(choice.value)) {
+            newValue.delete(choice.value);
+          } else {
+            newValue.add(choice.value);
+          }
+          setSelectedValues(newValue);
+        }
+      } else if (key.ctrl && key.name === 'a') {
+        const allSelectable = searchResults.filter(isSelectable);
+        const allSelected = allSelectable.every((c) => selectedValues.has(c.value));
+        const newValue = new Set(selectedValues);
+        if (allSelected) {
+          allSelectable.forEach((c) => newValue.delete(c.value));
+        } else {
+          allSelectable.forEach((c) => newValue.add(c.value));
+        }
+        setSelectedValues(newValue);
+      } else if (key.ctrl && key.name === 'r') {
+        const allSelectable = searchResults.filter(isSelectable);
+        const newValue = new Set(selectedValues);
+        allSelectable.forEach((c) => {
+          if (newValue.has(c.value)) {
+            newValue.delete(c.value);
+          } else {
+            newValue.add(c.value);
+          }
+        });
+        setSelectedValues(newValue);
+      } else if (status !== 'loading' && (isUpKey(key) || isDownKey(key))) {
+        rl.clearLine(0);
+        if (
+          (isUpKey(key) && active !== bounds.first) ||
+          (isDownKey(key) && active !== bounds.last)
+        ) {
+          const offset = isUpKey(key) ? -1 : 1;
+          let next = active;
+          do {
+            next = (next + offset + searchResults.length) % searchResults.length;
+          } while (Separator.isSeparator(searchResults[next]) || (searchResults[next] as Choice<Value>).disabled);
+          setActive(next);
+        }
+      } else {
+        // Only update search term if it's likely a character input (not a control key)
+        if (!key.ctrl && !key.meta && key.name !== 'escape' && key.name !== 'tab') {
+          setSearchTerm(rl.line);
+        }
+      }
+    });
+
+    const message = theme.style.message(config.message, status);
+    const searchIndicator = searchTerm ? theme.style.searchTerm(` [searching: "${searchTerm}"]`) : '';
+
+    const page = usePagination({
+      items: searchResults,
+      active,
+      renderItem({ item, isActive }) {
+        if (Separator.isSeparator(item)) {
+          return ` ${item.separator}`;
+        }
+
+        const isSelected = selectedValues.has(item.value);
+        const checkbox = isSelected ? theme.icon.checked : theme.icon.unchecked;
+        const color = isActive ? theme.style.highlight : (x: string) => x;
+        const cursor = isActive ? theme.icon.cursor : ' ';
+
+        if (item.disabled) {
+          const disabledLabel = typeof item.disabled === 'string' ? item.disabled : '(disabled)';
+          return theme.style.disabled(`${item.name} ${disabledLabel}`);
+        }
+
+        return color(`${cursor}${checkbox} ${item.name ?? item.value}`);
+      },
+      pageSize,
+      loop: false,
+    });
+
+    const helpLine = theme.style.keysHelpTip([
+      ['↑↓', 'navigate'],
+      ['space', 'toggle'],
+      [`${selectedValues.size} selected`, ''],
+      ['^a', 'all'],
+      ['^r', 'invert'],
+      ['⏎', 'submit'],
+    ]);
+
+    const header = [prefix, message, searchIndicator].filter(Boolean).join(' ').trimEnd();
+
+    if (status === 'done') {
+      const selectedNames = filteredChoices
+        .filter((c) => selectedValues.has(c.value))
+        .map((c) => c.short ?? c.name ?? c.value);
+      return [prefix, message, theme.style.answer(selectedNames.join(', '))].join(' ');
+    }
+
+    return [
+      header,
+      searchError ? theme.style.error(searchError) : page,
+      ' ',
+      helpLine,
+    ]
+      .filter(Boolean)
+      .join('\n')
+      .trimEnd();
+  },
+);
 
 export async function promptSelect<T extends string>(params: {
   message: string;
@@ -96,92 +322,23 @@ export async function promptMultiSelect<T extends string>(params: {
   }
   if (options.length === 0) return [];
 
-  const selectedSet =
-    defaultSelected === 'all' ? new Set(options.map((o) => o.value)) : new Set(defaultSelected ?? []);
+  const initialValues = defaultSelected === 'all' ? options.map((o) => o.value) : (defaultSelected ?? []);
 
   try {
-    const answers = await checkbox({
+    const answers = await searchCheckbox({
       message,
-      choices: options.map((o) => ({ name: o.label, value: o.value, checked: selectedSet.has(o.value) })),
-      pageSize: Math.min(20, options.length),
-    });
-    return answers;
-  } catch (err) {
-    // If user pressed Ctrl+C, exit immediately
-    if (err && typeof err === 'object' && 'name' in err && err.name === 'ExitPromptError') {
-      process.exit(0);
-    }
-    throw err;
-  }
-}
-
-/**
- * Searchable multi-select: first filter by search, then select from filtered results.
- * Useful when there are many options.
- */
-export async function promptSearchableMultiSelect<T extends string>(params: {
-  message: string;
-  searchMessage?: string;
-  options: SelectOption<T>[];
-  defaultSelected?: T[] | 'all';
-}): Promise<T[]> {
-  const { message, searchMessage, options, defaultSelected } = params;
-  if (!process.stdin.isTTY) {
-    throw new Error('Interactive prompt requires a TTY');
-  }
-  if (options.length === 0) return [];
-
-  // If few options, skip search and go straight to checkbox
-  if (options.length <= 15) {
-    return promptMultiSelect({ message, options, defaultSelected });
-  }
-
-  // Show search prompt first to filter options
-  process.stdout.write(`\n${options.length} items available. Type to filter, Enter to proceed.\n`);
-
-  const selectedSet =
-    defaultSelected === 'all' ? new Set(options.map((o) => o.value)) : new Set(defaultSelected ?? []);
-
-  try {
-    // Allow user to search and filter
-    const filtered = await search<T[]>({
-      message: searchMessage ?? 'Filter (or press Enter for all):',
+      defaultSelected: initialValues,
       source: async (input) => {
         const term = (input ?? '').toLowerCase().trim();
         if (!term) {
-          // Show first page when no input
-          return options.slice(0, 20).map((o) => ({
-            name: o.label,
-            value: [o.value],
-            description: `${options.length} total`,
-          }));
+          return options.map((o) => ({ name: o.label, value: o.value }));
         }
-        const matches = options.filter((o) =>
-          o.label.toLowerCase().includes(term) || o.value.toLowerCase().includes(term)
-        );
-        if (matches.length === 0) {
-          return [{ name: '(no matches)', value: [] as T[], disabled: true }];
-        }
-        // Return "Select all X matches" + individual matches
-        return [
-          { name: `Select all ${matches.length} matches`, value: matches.map((o) => o.value) },
-          ...matches.slice(0, 30).map((o) => ({ name: o.label, value: [o.value] })),
-        ];
+        return options
+          .filter((o) => o.label.toLowerCase().includes(term) || o.value.toLowerCase().includes(term))
+          .map((o) => ({ name: o.label, value: o.value }));
       },
     });
-
-    if (filtered.length === 0) {
-      return [];
-    }
-
-    // If user selected a batch, return those
-    if (filtered.length > 1) {
-      return filtered;
-    }
-
-    // Single selection - show checkbox for that subset
-    const singleValue = filtered[0]!;
-    return [singleValue];
+    return answers as T[];
   } catch (err) {
     if (err && typeof err === 'object' && 'name' in err && err.name === 'ExitPromptError') {
       process.exit(0);
