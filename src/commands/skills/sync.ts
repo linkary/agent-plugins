@@ -102,7 +102,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
         label: `${s.name} -> ${s.adapter.label} (${s.scope})`,
         value: String(i),
       })),
-      defaultSelected: 'all',
+      defaultSelected: [], // Don't select all by default
     });
     if (selectedKeys.length === 0) {
       process.stdout.write('No skills selected.\n');

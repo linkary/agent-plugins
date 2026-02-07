@@ -31,6 +31,7 @@
   "dependencies": {
     "@inquirer/checkbox": "^5.0.4",
     "@inquirer/confirm": "^6.0.4",
+    "@inquirer/search": "^4.1.0",
     "@inquirer/select": "^5.0.4"
   }
 }
