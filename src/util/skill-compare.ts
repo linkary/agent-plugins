@@ -13,6 +13,36 @@ export type SkillCompareResult = {
   similarity: number;
 };
 
+export type SkillStatus = 'new' | 'identical' | 'update';
+
+export type SkillStatusResult = {
+  status: SkillStatus;
+  srcHash: string;
+  destHash?: string;
+};
+
+/**
+ * Detect the status of a skill relative to a destination directory.
+ * - 'new': destination doesn't exist
+ * - 'identical': hashes match (no change needed)
+ * - 'update': destination exists but content differs
+ */
+export async function detectSkillStatus(
+  srcDir: string,
+  destDir: string,
+): Promise<SkillStatusResult> {
+  const srcHash = await computeDirHash(srcDir, { ignoreNames: ['.git'] });
+
+  if (!(await pathExists(destDir))) {
+    return { status: 'new', srcHash };
+  }
+
+  const destHash = await computeDirHash(destDir, { ignoreNames: ['.git'] });
+  const status = srcHash === destHash ? 'identical' : 'update';
+
+  return { status, srcHash, destHash };
+}
+
 /**
  * Compare two skills to determine if they are the same.
  * Currently compares by directory hash. Can be extended to use more sophisticated
@@ -50,3 +80,4 @@ export async function compareSkills(srcDirA: string, srcDirB: string): Promise<S
 export function skillNamesMatch(nameA: string, nameB: string): boolean {
   return nameA.toLowerCase() === nameB.toLowerCase();
 }
+

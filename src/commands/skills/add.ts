@@ -7,6 +7,7 @@ import { loadRegistry, saveRegistry } from '../../core/registry.js';
 import { ensureDir, listDirNames, pathExists, removeDir } from '../../util/fs-utils.js';
 import { copyDir } from '../../util/copy-dir.js';
 import { promptMultiSelect } from '../../util/prompt.js';
+import { detectSkillStatus, type SkillStatus } from '../../util/skill-compare.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
@@ -124,39 +125,47 @@ export async function cmdSkillsAdd(positionals: string[], flags: ParsedFlags, _c
           return 1;
         }
 
-        // Check status for each skill (new vs replace)
-        type SkillInfo = { name: string; srcDir: string; willReplace: boolean };
+        // Check status for each skill using hash comparison
+        type SkillInfo = { name: string; srcDir: string; status: SkillStatus };
         const skillsInfo: SkillInfo[] = await Promise.all(
-          skillDirs.map(async (name) => ({
-            name,
-            srcDir: path.join(searchDir, name),
-            willReplace: await pathExists(getCentralSkillPath(name)),
-          })),
+          skillDirs.map(async (name) => {
+            const srcDir = path.join(searchDir, name);
+            const destDir = getCentralSkillPath(name);
+            const { status } = await detectSkillStatus(srcDir, destDir);
+            return { name, srcDir, status };
+          }),
         );
 
         // ANSI colors
         const green = '\x1b[32m';
         const yellow = '\x1b[33m';
+        const dim = '\x1b[2m';
         const reset = '\x1b[0m';
 
-        const newCount = skillsInfo.filter((s) => !s.willReplace).length;
-        const replaceCount = skillsInfo.filter((s) => s.willReplace).length;
+        const newCount = skillsInfo.filter((s) => s.status === 'new').length;
+        const updateCount = skillsInfo.filter((s) => s.status === 'update').length;
+        const identicalCount = skillsInfo.filter((s) => s.status === 'identical').length;
 
         process.stdout.write(
-          `\nFound ${skillsInfo.length} skill(s): ${green}${newCount} new${reset}, ${yellow}${replaceCount} replace${reset}\n`,
+          `\nFound ${skillsInfo.length} skill(s): ${green}${newCount} new${reset}, ${yellow}${updateCount} update${reset}, ${dim}${identicalCount} identical${reset}\n`,
         );
 
         if (interactive) {
-          // Default: select only new items
+          // Default: select new and update items, skip identical
           const defaultSelected = skillsInfo
-            .filter((s) => !s.willReplace)
+            .filter((s) => s.status !== 'identical')
             .map((s) => s.name);
 
           const selected = await promptMultiSelect({
             message: 'Select skills to add:',
             options: skillsInfo.map((s) => {
-              const status = s.willReplace ? `${yellow}replace${reset}` : `${green}new${reset}`;
-              return { label: `${s.name} [${status}]`, value: s.name };
+              const statusLabel =
+                s.status === 'new'
+                  ? `${green}new${reset}`
+                  : s.status === 'update'
+                    ? `${yellow}update${reset}`
+                    : `${dim}identical${reset}`;
+              return { label: `${s.name} [${statusLabel}]`, value: s.name };
             }),
             defaultSelected,
           });
@@ -169,8 +178,8 @@ export async function cmdSkillsAdd(positionals: string[], flags: ParsedFlags, _c
             .filter((s) => selected.includes(s.name))
             .map((s) => ({ name: s.name, srcDir: s.srcDir }));
         } else {
-          // Non-interactive: add only new skills by default (use --force for all)
-          const toAdd = force ? skillsInfo : skillsInfo.filter((s) => !s.willReplace);
+          // Non-interactive: add only new and update skills by default (skip identical)
+          const toAdd = force ? skillsInfo : skillsInfo.filter((s) => s.status !== 'identical');
           skillsToCopy = toAdd.map((s) => ({ name: s.name, srcDir: s.srcDir }));
         }
       }
@@ -211,7 +220,30 @@ export async function cmdSkillsAdd(positionals: string[], flags: ParsedFlags, _c
         process.stdout.write(`Added: ${name}\n`);
       }
 
-      if (!dryRun) {
+      // Save repo record for tracking
+      if (!dryRun && skillsToCopy.length > 0) {
+        const { normalizeRepoUrl } = await import('../../core/registry.js');
+        const repoKey = normalizeRepoUrl(source);
+        const existingRepo = registry.repos?.[repoKey];
+        
+        const addedSkillNames = skillsToCopy.map((s) => s.name);
+        
+        if (existingRepo) {
+          // Merge skill lists (avoid duplicates)
+          const merged = new Set([...existingRepo.skills, ...addedSkillNames]);
+          existingRepo.skills = [...merged];
+          existingRepo.updatedAt = now;
+          if (refFlag) existingRepo.ref = refFlag;
+        } else {
+          registry.repos![repoKey] = {
+            url: source,
+            ref: refFlag,
+            skills: addedSkillNames,
+            addedAt: now,
+            updatedAt: now,
+          };
+        }
+        
         await saveRegistry(registry);
       }
 
