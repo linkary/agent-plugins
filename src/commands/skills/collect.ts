@@ -109,34 +109,189 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
     selectedSkills = allSkills;
   }
 
-  // Phase 3: Show unified preview
-  const destBaseDir = getCentralSkillsDir();
-  process.stdout.write(`\nCollect ${selectedSkills.length} skill(s):\n`);
+  // Phase 3: Detect status for each skill
+  // Status definitions:
+  // - isDuplicate: name appeared in previous source (deduplicated)
+  // - status: 'new' (no dest), 'identical' (hashes match), 'conflict' (hashes differ), 'overwrite' (force mode)
+  type CollectStatus = 'new' | 'identical' | 'conflict' | 'overwrite';
+  type SkillWithStatus = SkillEntry & {
+    status: CollectStatus;
+    isDuplicate: boolean;
+    srcHash: string;
+    destHash?: string;
+  };
+
+  const seenSkillNames = new Set<string>();
+  const skillsWithStatus: SkillWithStatus[] = [];
+
+  process.stdout.write('Analyzing skills...\n');
+
   for (const s of selectedSkills) {
-    process.stdout.write(`  ${s.name} (${s.adapter.label}): ${s.srcDir} -> ${destBaseDir}/${s.name}\n`);
+    const lowerName = s.name.toLowerCase();
+    const isDuplicate = seenSkillNames.has(lowerName);
+    seenSkillNames.add(lowerName);
+
+    // Calculate hashes
+    const srcHash = await computeDirHash(s.srcDir, { ignoreNames: ['.git'] });
+    let destHash: string | undefined;
+    let status: CollectStatus = 'new';
+
+    if (await pathExists(s.destDir)) {
+      destHash = await computeDirHash(s.destDir, { ignoreNames: ['.git'] });
+      status = destHash === srcHash ? 'identical' : 'conflict';
+    }
+
+    skillsWithStatus.push({ ...s, status, isDuplicate, srcHash, destHash });
   }
 
-  // Phase 4: Unified confirmation
-  if (!dryRun && !force && interactive) {
-    const confirmed = await promptConfirm({ message: 'Proceed with collection?', default: true });
-    if (!confirmed) {
+  // ANSI color codes
+  const yellow = '\x1b[33m';
+  const green = '\x1b[32m';
+  const red = '\x1b[31m';
+  const dim = '\x1b[2m';
+  const reset = '\x1b[0m';
+  const gray = '\x1b[90m'; // Bright black for identical
+
+  const destBaseDir = getCentralSkillsDir();
+  let finalSkills: SkillWithStatus[];
+
+  // Count by status
+  const newCount = skillsWithStatus.filter((s) => s.status === 'new' && !s.isDuplicate).length;
+  const conflictCount = skillsWithStatus.filter((s) => s.status === 'conflict').length;
+  const identicalCount = skillsWithStatus.filter((s) => s.status === 'identical').length;
+  const dedupCount = skillsWithStatus.filter((s) => s.isDuplicate).length;
+
+  if (interactive && !force) {
+    process.stdout.write(
+      `\nPreview: ${green}${newCount} new${reset}, ${red}${conflictCount} conflict${reset}, ${gray}${identicalCount} identical${reset}` +
+        (dedupCount > 0 ? `, ${dim}${dedupCount} duplicatess${reset}` : '') +
+        '\n',
+    );
+
+    // Default: select 'new' and 'conflict' (skip identical and duplicates)
+    const defaultSelected = skillsWithStatus
+      .map((s, i) =>
+        !s.isDuplicate && (s.status === 'new' || s.status === 'conflict') ? String(i) : null,
+      )
+      .filter((v): v is string => v !== null);
+
+    const selectedKeys = await promptMultiSelect({
+      message: `Confirm skills to collect (target: ${destBaseDir}):`,
+      options: skillsWithStatus.map((s, i) => {
+        // Build status label
+        const labels: string[] = [];
+        if (s.isDuplicate) labels.push(`${dim}dup${reset}`);
+        else if (s.status === 'new') labels.push(`${green}new${reset}`);
+        else if (s.status === 'identical') labels.push(`${gray}identical${reset}`);
+        else if (s.status === 'conflict') labels.push(`${red}conflict${reset}`);
+        
+        const statusLabel = labels.join(', ');
+        return {
+          label: `${s.name} (${s.adapter.label}) [${statusLabel}]`,
+          value: String(i),
+        };
+      }),
+      defaultSelected,
+    });
+
+    if (selectedKeys.length === 0) {
       process.stdout.write('Cancelled.\n');
       return 0;
     }
-  }
+    finalSkills = selectedKeys.map((i) => skillsWithStatus[Number(i)]!);
+  } else {
+    // Non-interactive: exclude identical matches and duplicates
+    // If strict processing is needed, maybe include identical? user usually wants updates or new stuff
+    const toCollect = skillsWithStatus.filter((s) => !s.isDuplicate && s.status !== 'identical');
 
-  // Phase 5: Execute collection
+    process.stdout.write(`\nCollect ${toCollect.length} skill(s) to ${destBaseDir}:\n`);
+    for (const s of toCollect) {
+      const statusLabel = s.status === 'conflict' ? `${red}conflict${reset}` : `${green}new${reset}`;
+      process.stdout.write(`  ${s.name} (${s.adapter.label}) [${statusLabel}]\n`);
+    }
+    const skipped = skillsWithStatus.length - toCollect.length;
+    if (skipped > 0) {
+      process.stdout.write(`  ${dim}(${skipped} skipped: identical or duplicates)${reset}\n`);
+    }
+    finalSkills = toCollect;
+  }
+  // Reassign for execution phase
+  const skillsToExecute = finalSkills;
+
+  // Phase 5: Execution with Batch Conflict Resolution
   if (!dryRun) await ensureCentralStore();
 
   const registry = await loadRegistry();
   const syncState = await loadSyncState();
   const centralSkills = await listDirNames(getCentralSkillsDir());
 
-  let conflictMode: 'ask' | 'overwrite' | 'backup' | 'keep' | 'skip' = force ? 'overwrite' : 'ask';
+  // Detect which of the *selected* skills (finalSkills) have conflicts
+  // We already calculated hashes in Phase 3, but let's re-verify or use that info.
+  // Actually, we can just use the status we computed if we pass it through.
+  // But wait, finalSkills was mapped from skillsWithStatus, so it HAS the status and hashes!
+  const conflicts = skillsWithStatus.filter((s) => finalSkills.includes(s) && s.status === 'conflict');
+  
+  // Resolution strategy map (skill name -> action)
+  const resolutions = new Map<string, 'overwrite' | 'backup' | 'keep' | 'skip'>();
+  
+  // Automatic resolution for non-conflicts
+  for (const s of finalSkills) {
+    if (s.status !== 'conflict') {
+      resolutions.set(s.name, 'overwrite'); // New or identical, just overwrite/copy
+    }
+  }
 
-  for (const skill of selectedSkills) {
-    const { name, srcDir, destDir, adapter, scope, projectRoot } = skill;
+  // Handle conflicts
+  if (conflicts.length > 0 && interactive) { // conflictMode is not used here, interactive is key
+    process.stdout.write(`\n${red}Conflicts detected for ${conflicts.length} skill(s).${reset}\n`);
+    
+    // Batch Prompt
+    const batchAction = await promptChoice({
+      message: 'How would you like to resolve these conflicts?',
+      options: [
+        { key: 'o', label: 'Overwrite local (use source version)' },
+        { key: 's', label: 'Skip all conflicts (keep local)' },
+        { key: 'b', label: 'Backup local & overwrite' },
+        { key: 'i', label: 'Inspect/Select individually' },
+        { key: 'c', label: 'Cancel operation' },
+      ],
+    });
 
+    if (batchAction === 'c') {
+      process.stdout.write('Operation cancelled.\n');
+      return 0;
+    }
+    
+    if (batchAction === 'o') {
+      conflicts.forEach(c => resolutions.set(c.name, 'overwrite'));
+    } else if (batchAction === 's') {
+      conflicts.forEach(c => resolutions.set(c.name, 'skip'));
+    } else if (batchAction === 'b') {
+      conflicts.forEach(c => resolutions.set(c.name, 'backup'));
+    } else if (batchAction === 'i') {
+      // Individual selection
+      for (const c of conflicts) {
+        const action = await promptChoice({
+          message: `Resolve conflict for ${c.name}:`,
+          options: [
+            { key: 'o', label: 'Overwrite' },
+            { key: 'b', label: 'Backup & overwrite' },
+            { key: 'k', label: 'Keep both (rename incoming)' },
+            { key: 's', label: 'Skip' },
+          ],
+        });
+        resolutions.set(c.name, action as any);
+      }
+    }
+  } else if (force) {
+    conflicts.forEach(c => resolutions.set(c.name, 'overwrite'));
+  }
+
+  // Execute based on resolutions
+  for (const skill of finalSkills) {
+    const { name, srcDir, destDir, adapter, scope, projectRoot, srcHash, destHash } = skill;
+    
+    // Safety check if source disappeared
     if (!(await pathExists(srcDir))) {
       process.stderr.write(`Missing source skill: ${name}\n`);
       continue;
@@ -150,120 +305,55 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
     const context = syncState.contexts[contextId] ?? { skills: {} as Record<string, { hash: string; syncedAt: string }> };
     syncState.contexts[contextId] = context;
 
-    const srcHash = await computeDirHash(srcDir, { ignoreNames: ['.git'] });
-    const destExists = await pathExists(destDir);
+    // For 'keep both', we rename INCOMING (source) to a new name in dest?
+    // "Keep both (rename incoming)"
+    let targetDest = destDir;
+    let targetName = name;
+    
+    const action = resolutions.get(name) ?? 'skip';
 
-    if (!destExists) {
-      if (dryRun) {
-        process.stdout.write(`[dry-run] collect ${name} -> ${destDir}\n`);
-        continue;
-      }
-      await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
-      const now = new Date().toISOString();
-      registry.skills[name] = registry.skills[name] ?? {
-        name,
-        addedAt: now,
-        updatedAt: now,
-        source: { type: 'collected', from: { target: adapter.id, scope, path: srcDir } },
-      };
-      registry.skills[name]!.updatedAt = now;
-      context.skills[name] = { hash: srcHash, syncedAt: now };
-      process.stdout.write(`Collected: ${name}\n`);
-      centralSkills.push(name);
-      continue;
-    }
-
-    const destHash = await computeDirHash(destDir, { ignoreNames: ['.git'] });
-    if (destHash === srcHash) {
-      process.stdout.write(`Up-to-date: ${name}\n`);
-      continue;
-    }
-
-    let mode = conflictMode;
-    if (mode === 'ask') {
-      if (!interactive) {
-        process.stderr.write(`Conflict detected for ${name}. Re-run with --force or in an interactive terminal.\n`);
-        return 1;
-      }
-      const choice = await promptChoice({
-        message: `Conflict collecting ${name} into central store.`,
-        options: [
-          { key: 'o', label: 'Overwrite central' },
-          { key: 'b', label: 'Backup central & overwrite' },
-          { key: 'k', label: 'Keep both (rename incoming)' },
-          { key: 's', label: 'Skip' },
-          { key: 'O', label: 'Overwrite all' },
-          { key: 'B', label: 'Backup all' },
-          { key: 'K', label: 'Keep both all' },
-          { key: 'S', label: 'Skip all' },
-          { key: 'q', label: 'Quit' },
-        ],
-      });
-      if (choice === 'q') return 1;
-      if (choice === 'O') conflictMode = 'overwrite';
-      if (choice === 'B') conflictMode = 'backup';
-      if (choice === 'K') conflictMode = 'keep';
-      if (choice === 'S') conflictMode = 'skip';
-      mode =
-        choice === 'o' || choice === 'O'
-          ? 'overwrite'
-          : choice === 'b' || choice === 'B'
-            ? 'backup'
-            : choice === 'k' || choice === 'K'
-              ? 'keep'
-              : 'skip';
-    }
-
-    if (mode === 'skip') {
+    if (action === 'skip') {
       process.stdout.write(`Skipped: ${name}\n`);
       continue;
     }
-
-    if (mode === 'keep') {
-      const incomingName = await uniqueCentralName(`${name}-from-${adapter.id}-${timestampId()}`, centralSkills);
-      const incomingDest = getCentralSkillPath(incomingName);
-      if (dryRun) {
-        process.stdout.write(`[dry-run] collect ${name} -> ${incomingDest}\n`);
-        continue;
-      }
-      await copyDir(srcDir, incomingDest, { ignoreNames: ['.git'] });
-      const now = new Date().toISOString();
-      registry.skills[incomingName] = {
-        name: incomingName,
-        addedAt: now,
-        updatedAt: now,
-        source: { type: 'collected', from: { target: adapter.id, scope, path: srcDir } },
-      };
-      process.stdout.write(`Collected as: ${incomingName}\n`);
-      centralSkills.push(incomingName);
-      continue;
-    }
-
-    // overwrite or backup
+    
     if (dryRun) {
-      process.stdout.write(`[dry-run] ${mode} ${name} -> ${destDir}\n`);
-      continue;
     }
 
-    if (mode === 'backup') {
-      const backupDir = getCentralSkillPath(`${name}.bak-${timestampId()}`);
+    if (action === 'keep') {
+       // Find unique name
+       let counter = 1;
+       while (await pathExists(targetDest)) {
+         targetName = `${name}_new${counter}`;
+         targetDest = path.join(destBaseDir, targetName);
+         counter++;
+       }
+       process.stdout.write(`Renaming incoming to ${targetName}\n`);
+    }
+
+    if (action === 'backup') {
+      const backupDir = `${destDir}.bak-${Date.now()}`;
       await ensureDir(path.dirname(backupDir));
       await fsRenameOrCopy(destDir, backupDir);
-    } else {
+    } else if (action === 'overwrite' && await pathExists(destDir)) {
       await removeDir(destDir);
     }
 
-    await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
+    await copyDir(srcDir, targetDest, { ignoreNames: ['.git'] });
+    
+    // Update registry/state
     const now = new Date().toISOString();
-    registry.skills[name] = registry.skills[name] ?? {
-      name,
+    registry.skills[targetName] = registry.skills[targetName] ?? {
+      name: targetName,
       addedAt: now,
       updatedAt: now,
       source: { type: 'collected', from: { target: adapter.id, scope, path: srcDir } },
     };
-    registry.skills[name]!.updatedAt = now;
+    registry.skills[targetName]!.updatedAt = now;
     context.skills[name] = { hash: srcHash, syncedAt: now };
-    process.stdout.write(`Collected: ${name}\n`);
+    
+    process.stdout.write(`Collected: ${targetName}\n`);
+    if (!centralSkills.includes(targetName)) centralSkills.push(targetName);
   }
 
   if (!dryRun) {

@@ -2,7 +2,7 @@ import path from 'node:path';
 
 export type Scope = 'local' | 'global';
 
-export type TargetId = 'cursor' | 'gemini' | 'codex' | 'claude-code' | 'antigravity';
+export type TargetId = 'cursor' | 'gemini' | 'codex' | 'claude-code' | 'antigravity' | 'openskills';
 
 export type ResolveParams = {
   scope: Scope;
@@ -67,6 +67,15 @@ const adapters: TargetAdapter[] = [
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
         ? path.join(homeDir, '.gemini', 'antigravity', 'global_skills')
+        : path.join(projectRoot, '.agent', 'skills'),
+  },
+  {
+    id: 'openskills',
+    label: 'Openskills',
+    aliases: ['openskills'],
+    resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global'
+        ? path.join(homeDir, '.agent', 'skills')
         : path.join(projectRoot, '.agent', 'skills'),
   },
 ];

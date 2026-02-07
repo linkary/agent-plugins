@@ -7,10 +7,10 @@ describe('adapters', () => {
   const projectRoot = '/Users/test/myproject';
 
   describe('getAdapters', () => {
-    it('should return all 5 adapters', () => {
+    it('should return all 6 adapters', () => {
       const adapters = getAdapters();
-      expect(adapters.length).toBe(5);
-      expect(adapters.map((a) => a.id)).toEqual(['cursor', 'gemini', 'codex', 'claude-code', 'antigravity']);
+      expect(adapters.length).toBe(6);
+      expect(adapters.map((a) => a.id)).toEqual(['cursor', 'gemini', 'codex', 'claude-code', 'antigravity', 'openskills']);
     });
 
     it('should return a copy of adapters array', () => {
@@ -34,6 +34,7 @@ describe('adapters', () => {
       expect(resolveAdapter('claudecode')?.id).toBe('claude-code');
       expect(resolveAdapter('gemini-cli')?.id).toBe('gemini');
       expect(resolveAdapter('anti-gravity')?.id).toBe('antigravity');
+      expect(resolveAdapter('openskills')?.id).toBe('openskills');
     });
 
     it('should be case-insensitive', () => {
@@ -110,6 +111,20 @@ describe('adapters', () => {
       it('should resolve global path to ~/.gemini/antigravity/global_skills', () => {
         const dir = adapter.resolveSkillsDir({ scope: 'global', projectRoot, homeDir });
         expect(dir).toBe(path.join(homeDir, '.gemini', 'antigravity', 'global_skills'));
+      });
+
+      it('should resolve local path to .agent/skills', () => {
+        const dir = adapter.resolveSkillsDir({ scope: 'local', projectRoot, homeDir });
+        expect(dir).toBe(path.join(projectRoot, '.agent', 'skills'));
+      });
+    });
+
+    describe('openskills', () => {
+      const adapter = resolveAdapter('openskills')!;
+
+      it('should resolve global path to ~/.agent/skills', () => {
+        const dir = adapter.resolveSkillsDir({ scope: 'global', projectRoot, homeDir });
+        expect(dir).toBe(path.join(homeDir, '.agent', 'skills'));
       });
 
       it('should resolve local path to .agent/skills', () => {

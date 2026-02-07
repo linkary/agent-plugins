@@ -113,35 +113,73 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
     selectedEntries = allEntries;
   }
 
-  // Phase 3: Show unified preview
-  const srcBaseDir = getCentralSkillsDir();
-  process.stdout.write(`\nSync ${selectedEntries.length} skill(s):\n`);
-  for (const s of selectedEntries) {
-    process.stdout.write(`  ${s.name}: ${srcBaseDir}/${s.name} -> ${s.destDir}\n`);
-  }
+  // Phase 3: Check overwrite status and show multi-select preview
+  type EntryWithStatus = SyncEntry & { willOverwrite: boolean };
+  const entriesWithStatus: EntryWithStatus[] = await Promise.all(
+    selectedEntries.map(async (s) => ({
+      ...s,
+      willOverwrite: await pathExists(s.destDir),
+    })),
+  );
 
-  // Phase 4: Unified confirmation
-  if (!dryRun && !force && interactive) {
-    const confirmed = await promptConfirm({ message: 'Proceed with sync?', default: true });
-    if (!confirmed) {
+  // ANSI color codes
+  const yellow = '\x1b[33m';
+  const green = '\x1b[32m';
+  const cyan = '\x1b[36m';
+  const reset = '\x1b[0m';
+
+  const srcBaseDir = getCentralSkillsDir();
+  let finalEntries: EntryWithStatus[];
+
+  if (interactive && !force) {
+    const mergeCount = entriesWithStatus.filter((s) => s.willOverwrite).length;
+    const newCount = entriesWithStatus.length - mergeCount;
+    process.stdout.write(
+      `\nPreview: ${green}${newCount} new${reset}, ${cyan}${mergeCount} merge${reset}\n`,
+    );
+
+    const selectedKeys = await promptMultiSelect({
+      message: `Confirm skills to sync (source: ${srcBaseDir}):`,
+      options: entriesWithStatus.map((s, i) => {
+        const status = s.willOverwrite ? `${cyan}merge${reset}` : `${green}new${reset}`;
+        return {
+          label: `${s.name} -> ${s.adapter.label} (${s.scope}) [${status}]`,
+          value: String(i),
+        };
+      }),
+      defaultSelected: 'all',
+    });
+
+    if (selectedKeys.length === 0) {
       process.stdout.write('Cancelled.\n');
       return 0;
     }
+    finalEntries = selectedKeys.map((i) => entriesWithStatus[Number(i)]!);
+  } else {
+    // Non-interactive: show preview
+    process.stdout.write(`\nSync ${entriesWithStatus.length} skill(s) from ${srcBaseDir}:\n`);
+    for (const s of entriesWithStatus) {
+      const status = s.willOverwrite ? `${cyan}merge${reset}` : `${green}new${reset}`;
+      process.stdout.write(`  ${s.name} -> ${s.adapter.label} (${s.scope}) [${status}]\n`);
+    }
+    finalEntries = entriesWithStatus;
   }
+
+  const entriesToExecute = finalEntries;
 
   // Phase 5: Execute sync
   const syncState = await loadSyncState();
   let conflictMode: 'ask' | 'overwrite' | 'backup' | 'skip' = force ? 'overwrite' : 'ask';
 
   // Ensure all destination directories exist
-  const destDirs = new Set(selectedEntries.map((e) => path.dirname(e.destDir)));
+  const destDirs = new Set(entriesToExecute.map((e) => path.dirname(e.destDir)));
   if (!dryRun) {
     for (const dir of destDirs) {
       await ensureDir(dir);
     }
   }
 
-  for (const entry of selectedEntries) {
+  for (const entry of entriesToExecute) {
     const { name, srcDir, destDir, adapter, scope, projectRoot } = entry;
 
     if (!(await pathExists(srcDir))) {
