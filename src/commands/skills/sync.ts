@@ -6,7 +6,7 @@ import fs from 'node:fs/promises';
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { computeDirHash } from '../../util/hash-dir.js';
 import { findProjectRoot } from '../../util/project-root.js';
-import { promptChoice, promptConfirm, promptMultiSelect } from '../../util/prompt.js';
+import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import { getAdapters, type Scope, type TargetAdapter } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { getCentralSkillsDir, getHomeDir } from '../../util/apg-paths.js';
@@ -132,17 +132,13 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
     })),
   );
 
-
-
   const srcBaseDir = getCentralSkillsDir();
   let finalEntries: EntryWithStatus[];
 
   if (interactive && !force) {
     const replaceCount = entriesWithStatus.filter((s) => s.willOverwrite).length;
     const newCount = entriesWithStatus.length - replaceCount;
-    process.stdout.write(
-      `\nPreview: ${green}${newCount} new${reset}, ${yellow}${replaceCount} replace${reset}\n`,
-    );
+    process.stdout.write(`\nPreview: ${green}${newCount} new${reset}, ${yellow}${replaceCount} replace${reset}\n`);
 
     // Default: select only 'new' items (exclude 'replace')
     const defaultSelected = entriesWithStatus
@@ -256,12 +252,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
       if (choice === 'O') conflictMode = 'overwrite';
       if (choice === 'B') conflictMode = 'backup';
       if (choice === 'S') conflictMode = 'skip';
-      mode =
-        choice === 'o' || choice === 'O'
-          ? 'overwrite'
-          : choice === 'b' || choice === 'B'
-            ? 'backup'
-            : 'skip';
+      mode = choice === 'o' || choice === 'O' ? 'overwrite' : choice === 'b' || choice === 'B' ? 'backup' : 'skip';
     }
 
     if (mode === 'skip') {

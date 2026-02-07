@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { ANSI } from '../util/ansi.js';
 
 export type Scope = 'local' | 'global';
 
@@ -9,22 +10,6 @@ export type ResolveParams = {
   projectRoot: string;
   homeDir: string;
 };
-
-/** ANSI color codes for terminal output */
-export const ANSI = {
-  reset: '\x1b[0m',
-  dim: '\x1b[2m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  magenta: '\x1b[35m',
-  cyan: '\x1b[36m',
-  brightCyan: '\x1b[96m',
-  brightGreen: '\x1b[92m',
-  brightYellow: '\x1b[93m',
-  brightBlue: '\x1b[94m',
-  brightMagenta: '\x1b[95m',
-} as const;
 
 export type TargetAdapter = {
   id: TargetId;
@@ -47,9 +32,7 @@ const adapters: TargetAdapter[] = [
     color: ANSI.brightMagenta,
     aliases: ['cursor'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global'
-        ? path.join(homeDir, '.cursor', 'skills')
-        : path.join(projectRoot, '.cursor', 'skills'),
+      scope === 'global' ? path.join(homeDir, '.cursor', 'skills') : path.join(projectRoot, '.cursor', 'skills'),
   },
   {
     id: 'gemini',
@@ -57,9 +40,7 @@ const adapters: TargetAdapter[] = [
     color: ANSI.magenta,
     aliases: ['gemini', 'gemini-cli'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global'
-        ? path.join(homeDir, '.gemini', 'skills')
-        : path.join(projectRoot, '.gemini', 'skills'),
+      scope === 'global' ? path.join(homeDir, '.gemini', 'skills') : path.join(projectRoot, '.gemini', 'skills'),
   },
   {
     id: 'codex',
@@ -67,9 +48,7 @@ const adapters: TargetAdapter[] = [
     color: ANSI.green,
     aliases: ['codex'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global'
-        ? path.join(getCodexHomeDir(homeDir), 'skills')
-        : path.join(projectRoot, '.codex', 'skills'),
+      scope === 'global' ? path.join(getCodexHomeDir(homeDir), 'skills') : path.join(projectRoot, '.codex', 'skills'),
   },
   {
     id: 'claude-code',
@@ -77,9 +56,7 @@ const adapters: TargetAdapter[] = [
     color: ANSI.yellow,
     aliases: ['claude', 'claude-code', 'claudecode'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global'
-        ? path.join(homeDir, '.claude', 'skills')
-        : path.join(projectRoot, '.claude', 'skills'),
+      scope === 'global' ? path.join(homeDir, '.claude', 'skills') : path.join(projectRoot, '.claude', 'skills'),
   },
   {
     id: 'antigravity',
@@ -97,9 +74,7 @@ const adapters: TargetAdapter[] = [
     color: ANSI.brightCyan,
     aliases: ['openskills'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global'
-        ? path.join(homeDir, '.agent', 'skills')
-        : path.join(projectRoot, '.agent', 'skills'),
+      scope === 'global' ? path.join(homeDir, '.agent', 'skills') : path.join(projectRoot, '.agent', 'skills'),
   },
 ];
 
