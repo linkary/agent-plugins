@@ -84,46 +84,67 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
       }
 
       // Check each tracked skill for updates
-      const updatesAvailable: { name: string; srcDir: string }[] = [];
+      type SkillUpdateInfo = { name: string; srcDir: string; status: 'update' | 'identical' | 'missing' };
+      const skillsInfo: SkillUpdateInfo[] = [];
 
       for (const skillName of repo.skills) {
         const srcDir = path.join(searchDir, skillName);
         if (!(await pathExists(srcDir)) || !(await isSkillDir(srcDir))) {
-          process.stderr.write(`Skill not found in repo: ${skillName}\n`);
+          skillsInfo.push({ name: skillName, srcDir, status: 'missing' });
           continue;
         }
 
         const destDir = getCentralSkillPath(skillName);
         const { status } = await detectSkillStatus(srcDir, destDir);
-
-        if (status === 'update') {
-          updatesAvailable.push({ name: skillName, srcDir });
-        } else if (status === 'identical') {
-          process.stdout.write(`${dim}Up-to-date: ${skillName}${reset}\n`);
-        }
+        // detectSkillStatus returns 'new' for missing dest, treat as 'update' for our purposes
+        skillsInfo.push({ 
+          name: skillName, 
+          srcDir, 
+          status: status === 'new' ? 'update' : status as 'update' | 'identical',
+        });
       }
 
-      if (updatesAvailable.length === 0) {
-        process.stdout.write('All skills up-to-date.\n');
-        continue;
-      }
+      const updateCount = skillsInfo.filter((s) => s.status === 'update').length;
+      const identicalCount = skillsInfo.filter((s) => s.status === 'identical').length;
 
-      // Select which to update
-      let toUpdate = updatesAvailable;
+      process.stdout.write(
+        `\nFound ${skillsInfo.length} skill(s): ${yellow}${updateCount} update${reset}, ${dim}${identicalCount} identical${reset}\n`,
+      );
+
+      // Let user select which to update (interactive mode)
+      let toUpdate: SkillUpdateInfo[];
       if (interactive && !all) {
-        process.stdout.write(`\n${yellow}${updatesAvailable.length} update(s) available${reset}\n`);
+        // Default: select only update items
+        const defaultSelected = skillsInfo
+          .filter((s) => s.status === 'update')
+          .map((s) => s.name);
+
         const selected = await promptMultiSelect({
           message: 'Select skills to update:',
-          options: updatesAvailable.map((s) => ({ label: s.name, value: s.name })),
-          defaultSelected: 'all',
+          options: skillsInfo
+            .filter((s) => s.status !== 'missing')
+            .map((s) => {
+              const statusLabel = s.status === 'update'
+                ? `${yellow}update${reset}`
+                : `${dim}identical${reset}`;
+              return { label: `${s.name} [${statusLabel}]`, value: s.name };
+            }),
+          defaultSelected,
         });
         if (selected.length === 0) {
           process.stdout.write('Skipped.\n');
           continue;
         }
-        toUpdate = updatesAvailable.filter((s) => selected.includes(s.name));
+        toUpdate = skillsInfo.filter((s) => selected.includes(s.name) && s.status !== 'missing');
+      } else {
+        // Non-interactive or --all: update only skills with changes
+        toUpdate = skillsInfo.filter((s) => s.status === 'update');
       }
 
+      if (toUpdate.length === 0) {
+        process.stdout.write('All skills up-to-date.\n');
+        continue;
+      }
       // Apply updates
       for (const { name, srcDir } of toUpdate) {
         const destDir = getCentralSkillPath(name);
