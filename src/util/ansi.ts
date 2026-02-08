@@ -23,4 +23,9 @@ export const ANSI = {
   brightMagenta: '\x1b[95m',
   brightCyan: '\x1b[96m',
   brightWhite: '\x1b[97m',
+
+  // Extended (256-color)
+  orange: '\x1b[38;5;208m',
+  pink: '\x1b[38;5;205m',
+  teal: '\x1b[38;5;30m',
 } as const;

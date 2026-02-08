@@ -3,7 +3,7 @@ import { ANSI } from '../util/ansi.js';
 
 export type Scope = 'local' | 'global';
 
-export type TargetId = 'cursor' | 'gemini' | 'codex' | 'claude-code' | 'antigravity' | 'openskills';
+export type TargetId = 'cursor' | 'gemini' | 'codex' | 'claude-code' | 'antigravity' | 'openskills' | 'agents';
 
 export type ResolveParams = {
   scope: Scope;
@@ -75,6 +75,14 @@ const adapters: TargetAdapter[] = [
     aliases: ['openskills'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.agent', 'skills') : path.join(projectRoot, '.agent', 'skills'),
+  },
+  {
+    id: 'agents',
+    label: 'Agentskills (Vercel Labs)',
+    color: ANSI.orange,
+    aliases: ['agents'],
+    resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.agents', 'skills') : path.join(projectRoot, '.agents', 'skills'),
   },
 ];
 
