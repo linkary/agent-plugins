@@ -103,15 +103,17 @@ export function MultiSelect<T extends string>(props: MultiSelectProps<T>) {
       return;
     }
 
-    // 其他字符输入作为搜索
-    if (!key.ctrl && !key.meta && !key.escape && !key.tab && input) {
-      setSearchTerm((prev) => prev + input);
+    // Backspace / Delete: 删除搜索词末尾字符
+    // macOS 的 Backspace 键发送 \x7f，Ink 映射为 key.delete 而非 key.backspace
+    if (key.backspace || key.delete) {
+      setSearchTerm((prev) => prev.slice(0, -1));
       setCursor(0);
       return;
     }
 
-    if (key.backspace) {
-      setSearchTerm((prev) => prev.slice(0, -1));
+    // 其他字符输入作为搜索
+    if (!key.ctrl && !key.meta && !key.escape && !key.tab && input) {
+      setSearchTerm((prev) => prev + input);
       setCursor(0);
       return;
     }
