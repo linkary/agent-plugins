@@ -4,7 +4,6 @@ import { parseOptions } from '../util/options.js';
 import { cmdSkillsAdd } from '../commands/skills/add.js';
 import { cmdSkillsCollect } from '../commands/skills/collect.js';
 import { cmdSkillsList } from '../commands/skills/list.js';
-import { cmdSkillsManage } from '../commands/skills/manage.js';
 import { cmdSkillsRemove } from '../commands/skills/rm.js';
 import { cmdSkillsSync } from '../commands/skills/sync.js';
 import { cmdSkillsUpdate } from '../commands/skills/update.js';
@@ -47,8 +46,6 @@ export async function runCli(argv: string[], ctx: CliRunContext): Promise<number
       return await cmdSkillsRemove(positionals, flags, ctx);
     case 'update':
       return await cmdSkillsUpdate(positionals, flags, ctx);
-    case 'manage':
-      return await cmdSkillsManage(positionals, flags, ctx);
     case 'sync':
       return await cmdSkillsSync(positionals, flags, ctx);
     case 'collect':

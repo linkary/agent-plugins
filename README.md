@@ -5,7 +5,7 @@ A CLI tool for centralized management and cross-tool synchronization of **LLM Ag
 ## Core Conventions
 
 - Central skills directory (default): `$HOME/.agent-plugins/skills/<skill-name>/`
-- `add/rm/update/manage` commands operate on central skills by default.
+- `add/rm/update` commands operate on central skills by default.
 - `sync`: Central → Target tool (one-way copy, supports conflict resolution).
 - `collect`: Target tool → Central (collects skills scattered across different tools, supports conflict resolution).
 
@@ -30,7 +30,7 @@ After publishing to npm, two command entry points will be provided:
 
 ## Interactive Experience
 
-Interactive selection (`sync/collect/manage` and conflict resolution) defaults to using `inquirer` list/multiselect components. It falls back to basic `readline` interaction if dependencies are unavailable.
+Interactive selection (`sync/collect/rm` and conflict resolution) defaults to using `inquirer` list/multiselect components. It falls back to basic `readline` interaction if dependencies are unavailable.
 
 ## Command Overview
 
@@ -45,16 +45,13 @@ ap skills add <git-url|local-path> [--name <skill>] [--ref <ref>] [--force]
 ap skills update [<skill>...] [--all] [--dry-run] [--force]
 
 # Sync: Central -> Target Tool
-ap skills sync [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|all> [--scope local|global] [--dry-run] [--force]
+ap skills sync [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|openskills|agents|all> [--scope local|global] [--dry-run] [--force]
 
 # Collect: Target Tool -> Central
-ap skills collect [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|all> [--scope local|global] [--all] [--dry-run] [--force]
+ap skills collect [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|openskills|agents|all> [--scope local|global] [--all] [--dry-run] [--force]
 
-# Remove central skill (default) or remove skill from target (with --target)
-ap skills rm <skill>... [--target <...>] [--scope local|global] [--dry-run]
-
-# Visual Management (Interactive)
-ap skills manage
+# Remove skills (interactive mode when no args given)
+ap skills rm [<skill>...] [--target <...>] [--scope local|global] [--dry-run]
 ```
 
 Notes:
@@ -70,7 +67,7 @@ ap s a /path/to/skill --name my-skill
 
 ## Sync Targets and Default Paths (macOS)
 
-`--scope local` defaults to the git root as the project root (uses current directory if git root is not found).
+`--scope global` is the default. `--scope local` defaults to the git root as the project root (uses current directory if git root is not found).
 
 - Cursor
   - local: `<project>/.cursor/skills/`
@@ -87,6 +84,12 @@ ap s a /path/to/skill --name my-skill
 - Google Antigravity
   - local: `<project>/.agent/skills/`
   - global: `~/.gemini/antigravity/global_skills/`
+- Openskills
+  - local: `<project>/.agent/skills/`
+  - global: `~/.agent/skills/`
+- Agents (Vercel Labs)
+  - local: `<project>/.agents/skills/`
+  - global: `~/.agents/skills/`
 
 ## Configuration and State Files
 

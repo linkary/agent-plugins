@@ -76,9 +76,9 @@ export function parseOptions(argv: string[]): { positionals: string[]; flags: Pa
     positionals.push(token);
   }
 
-  // Normalize scope shortcuts: -g → scope=global, -l → scope=local
-  if (flags.g === true) flags.scope = 'global';
-  if (flags.l === true) flags.scope = 'local';
+  // Normalize scope shortcuts: --global/-g → scope=global, --local/-l → scope=local
+  if (flags.global === true || flags.g === true) flags.scope = 'global';
+  if (flags.local === true || flags.l === true) flags.scope = 'local';
 
   return { positionals, flags };
 }

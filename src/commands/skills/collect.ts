@@ -1,25 +1,26 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import { loadConfig } from '../../core/config.js';
 import { loadRegistry, saveRegistry } from '../../core/registry.js';
 import { ensureCentralStore, getCentralSkillPath } from '../../core/skill-store.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
-import { type Scope, getAdapters } from '../../targets/adapters.js';
+import { type Scope, getAdapters, getColoredLabel, type TargetAdapter } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { getCentralSkillsDir, getHomeDir } from '../../util/apg-paths.js';
+import { ANSI } from '../../util/ansi.js';
+import { resolveTargetContext } from '../../util/scope.js';
 import { copyDir } from '../../util/copy-dir.js';
+import { fsRenameOrCopy } from '../../util/sync-utils.js';
 import { ensureDir, listDirNames, pathExists, removeDir } from '../../util/fs-utils.js';
 import { computeDirHash } from '../../util/hash-dir.js';
 import type { ParsedFlags } from '../../util/options.js';
 import { promptChoice, promptConfirm, promptMultiSelect } from '../../util/prompt.js';
-import { findProjectRoot } from '../../util/project-root.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
 type SkillEntry = {
   name: string;
   srcDir: string;
   destDir: string;
-  adapter: { id: string; label: string };
+  adapter: TargetAdapter;
   scope: Scope;
   projectRoot: string;
 };
@@ -35,7 +36,6 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
   const scopeFlag = typeof flags.scope === 'string' ? flags.scope : undefined;
 
   const cwdFlag = typeof flags.cwd === 'string' ? flags.cwd : undefined;
-  const startCwd = cwdFlag ? path.resolve(cwdFlag) : ctx.cwd;
 
   const adapters = getAdapters();
   const selectedAdapters = await selectTargetAdapters({
@@ -54,13 +54,17 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
   const allSkills: SkillEntry[] = [];
   for (const adapter of selectedAdapters) {
     const targetConfig = config.targets[adapter.id];
-    const scope = resolveScope(scopeFlag, targetConfig?.defaultScope);
-    const projectRoot = scope === 'local' ? await findProjectRoot(startCwd) : startCwd;
+    const { scope, projectRoot, homeDir } = await resolveTargetContext({
+      scopeFlag,
+      cwdFlag,
+      defaultScope: targetConfig?.defaultScope,
+      currentCwd: ctx.cwd,
+    });
     const sourceSkillsDir = adapter.resolveSkillsDir({ scope, projectRoot, homeDir });
 
     const available = await listDirNames(sourceSkillsDir);
     if (available.length === 0) {
-      process.stdout.write(`(no skills found in ${adapter.label} ${scope})\n`);
+      process.stdout.write(`(no skills found in ${getColoredLabel(adapter)} ${scope})\n`);
       continue;
     }
 
@@ -74,7 +78,7 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
         name,
         srcDir: path.join(sourceSkillsDir, name),
         destDir: getCentralSkillPath(name),
-        adapter: { id: adapter.id, label: adapter.label },
+        adapter,
         scope,
         projectRoot,
       });
@@ -95,7 +99,7 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
     const selectedKeys = await promptMultiSelect({
       message: 'Select skills to collect:',
       options: allSkills.map((s, i) => ({
-        label: `${s.name} (${s.adapter.label})`,
+        label: `${s.name} (${getColoredLabel(s.adapter)})`,
         value: String(i),
       })),
       defaultSelected: 'all',
@@ -144,14 +148,6 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
     skillsWithStatus.push({ ...s, status, isDuplicate, srcHash, destHash });
   }
 
-  // ANSI color codes
-  const yellow = '\x1b[33m';
-  const green = '\x1b[32m';
-  const red = '\x1b[31m';
-  const dim = '\x1b[2m';
-  const reset = '\x1b[0m';
-  const gray = '\x1b[90m'; // Bright black for identical
-
   const destBaseDir = getCentralSkillsDir();
   let finalSkills: SkillWithStatus[];
 
@@ -163,8 +159,8 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
 
   if (interactive && !force) {
     process.stdout.write(
-      `\nPreview: ${green}${newCount} new${reset}, ${red}${conflictCount} conflict${reset}, ${gray}${identicalCount} identical${reset}` +
-        (dedupCount > 0 ? `, ${dim}${dedupCount} duplicatess${reset}` : '') +
+      `\nPreview: ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.red}${conflictCount} conflict${ANSI.reset}, ${ANSI.gray}${identicalCount} identical${ANSI.reset}` +
+        (dedupCount > 0 ? `, ${ANSI.dim}${dedupCount} duplicates${ANSI.reset}` : '') +
         '\n',
     );
 
@@ -180,14 +176,14 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
       options: skillsWithStatus.map((s, i) => {
         // Build status label
         const labels: string[] = [];
-        if (s.isDuplicate) labels.push(`${dim}dup${reset}`);
-        else if (s.status === 'new') labels.push(`${green}new${reset}`);
-        else if (s.status === 'identical') labels.push(`${gray}identical${reset}`);
-        else if (s.status === 'conflict') labels.push(`${red}conflict${reset}`);
+        if (s.isDuplicate) labels.push(`${ANSI.dim}dup${ANSI.reset}`);
+        else if (s.status === 'new') labels.push(`${ANSI.green}new${ANSI.reset}`);
+        else if (s.status === 'identical') labels.push(`${ANSI.gray}identical${ANSI.reset}`);
+        else if (s.status === 'conflict') labels.push(`${ANSI.red}conflict${ANSI.reset}`);
         
         const statusLabel = labels.join(', ');
         return {
-          label: `${s.name} (${s.adapter.label}) [${statusLabel}]`,
+          label: `${s.name} (${getColoredLabel(s.adapter)}) [${statusLabel}]`,
           value: String(i),
         };
       }),
@@ -206,12 +202,12 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
 
     process.stdout.write(`\nCollect ${toCollect.length} skill(s) to ${destBaseDir}:\n`);
     for (const s of toCollect) {
-      const statusLabel = s.status === 'conflict' ? `${red}conflict${reset}` : `${green}new${reset}`;
-      process.stdout.write(`  ${s.name} (${s.adapter.label}) [${statusLabel}]\n`);
+      const statusLabel = s.status === 'conflict' ? `${ANSI.red}conflict${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
+      process.stdout.write(`  ${s.name} (${getColoredLabel(s.adapter)}) [${statusLabel}]\n`);
     }
     const skipped = skillsWithStatus.length - toCollect.length;
     if (skipped > 0) {
-      process.stdout.write(`  ${dim}(${skipped} skipped: identical or duplicates)${reset}\n`);
+      process.stdout.write(`  ${ANSI.dim}(${skipped} skipped: identical or duplicates)${ANSI.reset}\n`);
     }
     finalSkills = toCollect;
   }
@@ -243,7 +239,7 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
 
   // Handle conflicts
   if (conflicts.length > 0 && interactive) { // conflictMode is not used here, interactive is key
-    process.stdout.write(`\n${red}Conflicts detected for ${conflicts.length} skill(s).${reset}\n`);
+    process.stdout.write(`\n${ANSI.red}Conflicts detected for ${conflicts.length} skill(s).${ANSI.reset}\n`);
     
     // Batch Prompt
     const batchAction = await promptChoice({
@@ -280,11 +276,23 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
             { key: 's', label: 'Skip' },
           ],
         });
-        resolutions.set(c.name, action as any);
+        const keyToAction: Record<string, 'overwrite' | 'backup' | 'keep' | 'skip'> = {
+          o: 'overwrite',
+          b: 'backup',
+          k: 'keep',
+          s: 'skip',
+        };
+        resolutions.set(c.name, keyToAction[action] ?? 'skip');
       }
     }
   } else if (force) {
     conflicts.forEach(c => resolutions.set(c.name, 'overwrite'));
+  } else if (conflicts.length > 0) {
+    // 非交互环境且未指定 --force，冲突时报错退出
+    process.stderr.write(
+      `${conflicts.length} conflict(s) detected. Re-run with --force or in an interactive terminal.\n`,
+    );
+    return 1;
   }
 
   // Execute based on resolutions
@@ -318,6 +326,9 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
     }
     
     if (dryRun) {
+      const actionLabel = action === 'keep' ? `keep-both as ${targetName}` : action;
+      process.stdout.write(`[dry-run] ${actionLabel} ${name} -> ${targetDest}\n`);
+      continue;
     }
 
     if (action === 'keep') {
@@ -362,36 +373,4 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
   }
 
   return 0;
-}
-
-function resolveScope(scopeFlag: string | undefined, defaultScope: Scope | undefined): Scope {
-  if (scopeFlag === 'global') return 'global';
-  if (scopeFlag === 'local') return 'local';
-  return defaultScope === 'global' ? 'global' : 'local';
-}
-
-async function fsRenameOrCopy(src: string, dest: string): Promise<void> {
-  try {
-    await fs.rename(src, dest);
-  } catch {
-    await copyDir(src, dest, { ignoreNames: ['.git'] });
-    await removeDir(src);
-  }
-}
-
-async function uniqueCentralName(base: string, existing: string[]): Promise<string> {
-  const set = new Set(existing);
-  if (!set.has(base)) return base;
-  const suffix = Math.random().toString(16).slice(2, 8);
-  const next = `${base}-${suffix}`;
-  if (!set.has(next)) return next;
-  return `${base}-${Date.now()}`;
-}
-
-function timestampId(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(
-    d.getSeconds(),
-  )}`;
 }

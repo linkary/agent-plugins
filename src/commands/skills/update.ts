@@ -1,26 +1,16 @@
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import os from 'node:os';
-import { spawn } from 'node:child_process';
-import { loadRegistry, saveRegistry, normalizeRepoUrl, type RepoRecord } from '../../core/registry.js';
-import { getCentralSkillPath, listCentralSkills } from '../../core/skill-store.js';
-import { ensureDir, listDirNames, pathExists, removeDir } from '../../util/fs-utils.js';
+import { loadRegistry, saveRegistry, normalizeRepoUrl } from '../../core/registry.js';
+import { getCentralSkillPath } from '../../core/skill-store.js';
+import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { copyDir } from '../../util/copy-dir.js';
 import { detectSkillStatus } from '../../util/skill-compare.js';
 import { promptMultiSelect } from '../../util/prompt.js';
+import { runGit, isSkillDir } from '../../util/git-utils.js';
+import { ANSI } from '../../util/ansi.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
-
-async function runGit(args: string[], opts: { cwd?: string }): Promise<number> {
-  return await new Promise((resolve, reject) => {
-    const child = spawn('git', args, { cwd: opts.cwd, stdio: 'inherit' });
-    child.on('error', reject);
-    child.on('close', (code) => resolve(code ?? 1));
-  });
-}
-
-function isSkillDir(dir: string): Promise<boolean> {
-  return pathExists(path.join(dir, 'SKILL.md'));
-}
 
 export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags, _ctx: CliRunContext) {
   const dryRun = flags['dry-run'] === true;
@@ -44,131 +34,153 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
     return 0;
   }
 
-  // ANSI colors
-  const green = '\x1b[32m';
-  const yellow = '\x1b[33m';
-  const dim = '\x1b[2m';
-  const reset = '\x1b[0m';
-
   let totalUpdated = 0;
+  const tempDirs: string[] = [];
 
-  for (const repoKey of repoKeys) {
-    const repo = repos[repoKey]!;
-    process.stdout.write(`\nChecking repo: ${repo.url}...\n`);
+  type PendingUpdate = {
+    skillName: string;
+    srcDir: string;
+    repoKey: string;
+    status: 'update' | 'identical' | 'missing';
+    repoUrl: string;
+  };
 
-    // Clone to temp dir
-    const tmpDir = path.join(os.tmpdir(), `apd-update-${Math.random().toString(36).slice(2, 8)}`);
-    await ensureDir(tmpDir);
-    const cloneDest = path.join(tmpDir, 'repo');
+  const allUpdates: PendingUpdate[] = [];
 
-    try {
-      const code = await runGit(['clone', '--depth', '1', repo.url, cloneDest], {});
+  try {
+    process.stdout.write(`Checking ${repoKeys.length} repo(s)...\n`);
+
+    // Serial processing to avoid network/disk contention (can be parallelized if needed)
+    for (const repoKey of repoKeys) {
+      const repo = repos[repoKey]!;
+      // process.stdout.write(`  Checking ${repo.url}...\n`);
+
+      const tmpDir = path.join(os.tmpdir(), `apd-update-${Math.random().toString(36).slice(2, 8)}`);
+      tempDirs.push(tmpDir); // Track for cleanup
+      await ensureDir(tmpDir);
+      const cloneDest = path.join(tmpDir, 'repo');
+
+      const code = await runGit(['clone', '--depth', '1', repo.url, cloneDest], { stdio: 'ignore' });
       if (code !== 0) {
-        process.stderr.write(`Failed to clone ${repo.url}\n`);
+        process.stderr.write(`${ANSI.red}Failed to clone ${repo.url}${ANSI.reset}\n`);
         continue;
       }
 
       if (repo.ref) {
-        await runGit(['-C', cloneDest, 'fetch', '--depth', '1', 'origin', repo.ref], {});
-        await runGit(['-C', cloneDest, 'checkout', repo.ref], {});
+        await runGit(['-C', cloneDest, 'fetch', '--depth', '1', 'origin', repo.ref], { stdio: 'ignore' });
+        await runGit(['-C', cloneDest, 'checkout', repo.ref], { stdio: 'ignore' });
       }
 
-      // Find skills directory
       let searchDir = cloneDest;
       const skillsSubdir = path.join(cloneDest, 'skills');
       if (await pathExists(skillsSubdir)) {
-        const stat = await import('node:fs/promises').then(fs => fs.stat(skillsSubdir));
+        const stat = await fs.stat(skillsSubdir);
         if (stat.isDirectory()) {
           searchDir = skillsSubdir;
         }
       }
 
-      // Check each tracked skill for updates
-      type SkillUpdateInfo = { name: string; srcDir: string; status: 'update' | 'identical' | 'missing' };
-      const skillsInfo: SkillUpdateInfo[] = [];
-
       for (const skillName of repo.skills) {
         const srcDir = path.join(searchDir, skillName);
         if (!(await pathExists(srcDir)) || !(await isSkillDir(srcDir))) {
-          skillsInfo.push({ name: skillName, srcDir, status: 'missing' });
+          allUpdates.push({ skillName, srcDir, repoKey, status: 'missing', repoUrl: repo.url });
           continue;
         }
 
         const destDir = getCentralSkillPath(skillName);
         const { status } = await detectSkillStatus(srcDir, destDir);
-        // detectSkillStatus returns 'new' for missing dest, treat as 'update' for our purposes
-        skillsInfo.push({ 
-          name: skillName, 
-          srcDir, 
+        allUpdates.push({
+          skillName,
+          srcDir,
+          repoKey,
           status: status === 'new' ? 'update' : status as 'update' | 'identical',
+          repoUrl: repo.url,
         });
       }
+    }
 
-      const updateCount = skillsInfo.filter((s) => s.status === 'update').length;
-      const identicalCount = skillsInfo.filter((s) => s.status === 'identical').length;
+    // Filter updates
+    const updatesAvailable = allUpdates.filter((u) => u.status === 'update');
+    const identicalCount = allUpdates.filter((u) => u.status === 'identical').length;
+    const missingCount = allUpdates.filter((u) => u.status === 'missing').length;
 
-      process.stdout.write(
-        `\nFound ${skillsInfo.length} skill(s): ${yellow}${updateCount} update${reset}, ${dim}${identicalCount} identical${reset}\n`,
-      );
+    process.stdout.write(
+      `Found ${allUpdates.length} scanned: ${ANSI.yellow}${updatesAvailable.length} update${ANSI.reset}, ${ANSI.dim}${identicalCount} identical${ANSI.reset}` +
+        (missingCount > 0 ? `, ${ANSI.red}${missingCount} missing${ANSI.reset}` : '') +
+        '\n',
+    );
 
-      // Let user select which to update (interactive mode)
-      let toUpdate: SkillUpdateInfo[];
-      if (interactive && !all) {
-        // Default: select only update items
-        const defaultSelected = skillsInfo
-          .filter((s) => s.status === 'update')
-          .map((s) => s.name);
+    if (updatesAvailable.length === 0) {
+      process.stdout.write('All skills up-to-date.\n');
+      return 0;
+    }
 
-        const selected = await promptMultiSelect({
-          message: 'Select skills to update:',
-          options: skillsInfo
-            .filter((s) => s.status !== 'missing')
-            .map((s) => {
-              const statusLabel = s.status === 'update'
-                ? `${yellow}update${reset}`
-                : `${dim}identical${reset}`;
-              return { label: `${s.name} [${statusLabel}]`, value: s.name };
-            }),
-          defaultSelected,
-        });
-        if (selected.length === 0) {
-          process.stdout.write('Skipped.\n');
-          continue;
-        }
-        toUpdate = skillsInfo.filter((s) => selected.includes(s.name) && s.status !== 'missing');
-      } else {
-        // Non-interactive or --all: update only skills with changes
-        toUpdate = skillsInfo.filter((s) => s.status === 'update');
+    let toUpdate: PendingUpdate[] = [];
+    if (interactive && !all) {
+      const selectedIndices = await promptMultiSelect({
+        message: 'Select skills to update:',
+        options: updatesAvailable.map((u, i) => ({
+          label: `${u.skillName} (${ANSI.dim}${u.repoUrl}${ANSI.reset})`,
+          value: String(i),
+        })),
+        defaultSelected: 'all',
+      });
+
+      if (selectedIndices.length === 0) {
+        process.stdout.write('Skipped.\n');
+        return 0;
       }
+      toUpdate = selectedIndices.map(i => updatesAvailable[Number(i)]!);
+    } else {
+      toUpdate = updatesAvailable;
+    }
 
-      if (toUpdate.length === 0) {
-        process.stdout.write('All skills up-to-date.\n');
+    // Execute updates
+    const affectedRepos = new Set<string>();
+    
+    for (const update of toUpdate) {
+      const { skillName, srcDir, repoKey } = update;
+      const destDir = getCentralSkillPath(skillName);
+      
+      if (dryRun) {
+        process.stdout.write(`[dry-run] update ${skillName}\n`);
+        totalUpdated++;
         continue;
       }
-      // Apply updates
-      for (const { name, srcDir } of toUpdate) {
-        const destDir = getCentralSkillPath(name);
-        if (dryRun) {
-          process.stdout.write(`[dry-run] update ${name}\n`);
-          totalUpdated++;
-          continue;
-        }
-        await removeDir(destDir);
-        await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
-        if (registry.skills[name]) {
-          registry.skills[name]!.updatedAt = new Date().toISOString();
-        }
-        process.stdout.write(`${green}Updated: ${name}${reset}\n`);
-        totalUpdated++;
-      }
 
-      repo.updatedAt = new Date().toISOString();
-    } finally {
-      await removeDir(tmpDir);
+      await removeDir(destDir);
+      await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
+      
+      if (registry.skills[skillName]) {
+        registry.skills[skillName]!.updatedAt = new Date().toISOString();
+      }
+      
+      affectedRepos.add(repoKey);
+      process.stdout.write(`${ANSI.green}Updated: ${skillName}${ANSI.reset}\n`);
+      totalUpdated++;
+    }
+
+    // Update timestamps for repos that had updates (or maybe all scanned repos?)
+    // Traditionally we update timestamp if we successfully checked it.
+    // But logic before was: if we updated a skill, we update repo timestamp.
+    // Let's stick to updating timestamp if we successfully synced.
+    
+    // Actually, if we CHECKED and it was identical, we should also probably update the repo timestamp to show we checked.
+    // But let's follow the previous logic roughly: update if we changed something.
+    for (const key of affectedRepos) {
+      if (registry.repos?.[key]) {
+        registry.repos[key]!.updatedAt = new Date().toISOString();
+      }
+    }
+
+  } finally {
+    // Cleanup all temp dirs
+    for (const dir of tempDirs) {
+      await removeDir(dir);
     }
   }
 
-  if (!dryRun) await saveRegistry(registry);
+  if (!dryRun && totalUpdated > 0) await saveRegistry(registry);
   process.stdout.write(`\n${totalUpdated} skill(s) updated.\n`);
   return 0;
 }

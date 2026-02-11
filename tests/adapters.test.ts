@@ -7,10 +7,10 @@ describe('adapters', () => {
   const projectRoot = '/Users/test/myproject';
 
   describe('getAdapters', () => {
-    it('should return all 6 adapters', () => {
+    it('should return all 7 adapters', () => {
       const adapters = getAdapters();
-      expect(adapters.length).toBe(6);
-      expect(adapters.map((a) => a.id)).toEqual(['cursor', 'gemini', 'codex', 'claude-code', 'antigravity', 'openskills']);
+      expect(adapters.length).toBe(7);
+      expect(adapters.map((a) => a.id)).toEqual(['cursor', 'gemini', 'codex', 'claude-code', 'antigravity', 'openskills', 'agents']);
     });
 
     it('should return a copy of adapters array', () => {
@@ -130,6 +130,20 @@ describe('adapters', () => {
       it('should resolve local path to .agent/skills', () => {
         const dir = adapter.resolveSkillsDir({ scope: 'local', projectRoot, homeDir });
         expect(dir).toBe(path.join(projectRoot, '.agent', 'skills'));
+      });
+    });
+
+    describe('agents', () => {
+      const adapter = resolveAdapter('agents')!;
+
+      it('should resolve global path to ~/.agents/skills', () => {
+        const dir = adapter.resolveSkillsDir({ scope: 'global', projectRoot, homeDir });
+        expect(dir).toBe(path.join(homeDir, '.agents', 'skills'));
+      });
+
+      it('should resolve local path to .agents/skills', () => {
+        const dir = adapter.resolveSkillsDir({ scope: 'local', projectRoot, homeDir });
+        expect(dir).toBe(path.join(projectRoot, '.agents', 'skills'));
       });
     });
   });

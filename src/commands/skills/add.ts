@@ -1,51 +1,16 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
-import { spawn } from 'node:child_process';
 import { ensureCentralStore, getCentralSkillPath } from '../../core/skill-store.js';
 import { loadRegistry, saveRegistry } from '../../core/registry.js';
 import { ensureDir, listDirNames, pathExists, removeDir } from '../../util/fs-utils.js';
 import { copyDir } from '../../util/copy-dir.js';
 import { promptMultiSelect } from '../../util/prompt.js';
 import { detectSkillStatus, type SkillStatus } from '../../util/skill-compare.js';
+import { isProbablyGitUrl, isGitHubShorthand, expandGitHubShorthand, guessNameFromGitUrl, runGit, isSkillDir } from '../../util/git-utils.js';
+import { ANSI } from '../../util/ansi.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
-
-function isProbablyGitUrl(input: string): boolean {
-  return (
-    input.startsWith('git@') ||
-    input.startsWith('ssh://') ||
-    input.startsWith('https://') ||
-    input.startsWith('http://') ||
-    input.endsWith('.git')
-  );
-}
-
-function isGitHubShorthand(input: string): boolean {
-  // Matches owner/repo pattern (no protocol, no extra slashes)
-  return /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(input) && !input.includes(':');
-}
-
-function expandGitHubShorthand(input: string): string {
-  return `https://github.com/${input}`;
-}
-
-function guessNameFromGitUrl(url: string): string {
-  const last = url.replace(/\/+$/, '').split(/[/:]/).pop() ?? 'skill';
-  return last.endsWith('.git') ? last.slice(0, -4) : last;
-}
-
-async function runGit(args: string[], opts: { cwd?: string }): Promise<number> {
-  return await new Promise((resolve, reject) => {
-    const child = spawn('git', args, { cwd: opts.cwd, stdio: 'inherit' });
-    child.on('error', reject);
-    child.on('close', (code) => resolve(code ?? 1));
-  });
-}
-
-async function isSkillDir(dir: string): Promise<boolean> {
-  return await pathExists(path.join(dir, 'SKILL.md'));
-}
 
 export async function cmdSkillsAdd(positionals: string[], flags: ParsedFlags, _ctx: CliRunContext) {
   let source = positionals[0];
@@ -136,18 +101,12 @@ export async function cmdSkillsAdd(positionals: string[], flags: ParsedFlags, _c
           }),
         );
 
-        // ANSI colors
-        const green = '\x1b[32m';
-        const yellow = '\x1b[33m';
-        const dim = '\x1b[2m';
-        const reset = '\x1b[0m';
-
         const newCount = skillsInfo.filter((s) => s.status === 'new').length;
         const updateCount = skillsInfo.filter((s) => s.status === 'update').length;
         const identicalCount = skillsInfo.filter((s) => s.status === 'identical').length;
 
         process.stdout.write(
-          `\nFound ${skillsInfo.length} skill(s): ${green}${newCount} new${reset}, ${yellow}${updateCount} update${reset}, ${dim}${identicalCount} identical${reset}\n`,
+          `\nFound ${skillsInfo.length} skill(s): ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.yellow}${updateCount} update${ANSI.reset}, ${ANSI.dim}${identicalCount} identical${ANSI.reset}\n`,
         );
 
         if (interactive) {
@@ -161,10 +120,10 @@ export async function cmdSkillsAdd(positionals: string[], flags: ParsedFlags, _c
             options: skillsInfo.map((s) => {
               const statusLabel =
                 s.status === 'new'
-                  ? `${green}new${reset}`
+                  ? `${ANSI.green}new${ANSI.reset}`
                   : s.status === 'update'
-                    ? `${yellow}update${reset}`
-                    : `${dim}identical${reset}`;
+                    ? `${ANSI.yellow}update${ANSI.reset}`
+                    : `${ANSI.dim}identical${ANSI.reset}`;
               return { label: `${s.name} [${statusLabel}]`, value: s.name };
             }),
             defaultSelected,

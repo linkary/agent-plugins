@@ -50,6 +50,7 @@ export function normalizeRepoUrl(url: string): string {
   return url
     .replace(/^https?:\/\//, '')
     .replace(/^git@/, '')
+    .replace(/:(?!\/)/, '/') // git@github.com:user/repo -> github.com/user/repo
     .replace(/\.git$/, '')
     .replace(/\/$/, '')
     .toLowerCase();

@@ -16,11 +16,13 @@ function defaultConfig(): ConfigV1 {
   return {
     version: 1,
     targets: {
-      cursor: { defaultScope: 'local', include: ['*'] },
-      gemini: { defaultScope: 'local', include: ['*'] },
-      codex: { defaultScope: 'local', include: ['*'] },
-      'claude-code': { defaultScope: 'local', include: ['*'] },
-      antigravity: { defaultScope: 'local', include: ['*'] },
+      cursor: { defaultScope: 'global', include: ['*'] },
+      gemini: { defaultScope: 'global', include: ['*'] },
+      codex: { defaultScope: 'global', include: ['*'] },
+      'claude-code': { defaultScope: 'global', include: ['*'] },
+      antigravity: { defaultScope: 'global', include: ['*'] },
+      openskills: { defaultScope: 'global', include: ['*'] },
+      agents: { defaultScope: 'global', include: ['*'] },
     },
   };
 }

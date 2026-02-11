@@ -17,7 +17,7 @@ describe('registry repo tracking', () => {
     });
 
     it('should normalize git@ URLs', () => {
-      expect(normalizeRepoUrl('git@github.com:anthropics/skills.git')).toBe('github.com:anthropics/skills');
+      expect(normalizeRepoUrl('git@github.com:anthropics/skills.git')).toBe('github.com/anthropics/skills');
     });
 
     it('should remove trailing .git', () => {

@@ -2,14 +2,9 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { listCentralSkills, getCentralSkillPath } from '../../core/skill-store.js';
 import { loadRegistry } from '../../core/registry.js';
+import { ANSI } from '../../util/ansi.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
-
-// ANSI colors
-const dim = '\x1b[2m';
-const cyan = '\x1b[36m';
-const yellow = '\x1b[33m';
-const reset = '\x1b[0m';
 
 async function readSkillDescription(skillPath: string): Promise<string | undefined> {
   try {
@@ -70,7 +65,7 @@ export async function cmdSkillsList(_positionals: string[], flags: ParsedFlags, 
     const skillPath = getCentralSkillPath(name);
     
     // Basic output: name
-    let line = `${cyan}${name}${reset}`;
+    let line = `${ANSI.cyan}${name}${ANSI.reset}`;
     
     // Add source info
     if (record?.source) {
@@ -78,18 +73,18 @@ export async function cmdSkillsList(_positionals: string[], flags: ParsedFlags, 
         const repoShort = record.source.url
           .replace(/^https?:\/\/github\.com\//, '')
           .replace(/\.git$/, '');
-        line += ` ${dim}(${repoShort})${reset}`;
+        line += ` ${ANSI.dim}(${repoShort})${ANSI.reset}`;
       } else if (record.source.type === 'local') {
-        line += ` ${dim}(local)${reset}`;
+        line += ` ${ANSI.dim}(local)${ANSI.reset}`;
       } else if (record.source.type === 'collected') {
-        line += ` ${dim}(from ${record.source.from.target})${reset}`;
+        line += ` ${ANSI.dim}(from ${record.source.from.target})${ANSI.reset}`;
       }
     }
     
     // Add time
     const time = formatRelativeTime(record?.updatedAt ?? record?.addedAt);
     if (time) {
-      line += ` ${yellow}${time}${reset}`;
+      line += ` ${ANSI.yellow}${time}${ANSI.reset}`;
     }
     
     process.stdout.write(line + '\n');
@@ -98,12 +93,12 @@ export async function cmdSkillsList(_positionals: string[], flags: ParsedFlags, 
     if (verbose) {
       const desc = await readSkillDescription(skillPath);
       if (desc) {
-        process.stdout.write(`  ${dim}${desc}${reset}\n`);
+        process.stdout.write(`  ${ANSI.dim}${desc}${ANSI.reset}\n`);
       }
     }
   }
   
-  process.stdout.write(`\n${dim}${skills.length} skill(s)${reset}\n`);
+  process.stdout.write(`\n${ANSI.dim}${skills.length} skill(s)${ANSI.reset}\n`);
   return 0;
 }
 

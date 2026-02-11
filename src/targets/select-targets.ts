@@ -1,6 +1,7 @@
-import { resolveAdapter, type TargetAdapter } from './adapters.js';
+import { getColoredLabel, resolveAdapter, type TargetAdapter } from './adapters.js';
 import type { ParsedFlags } from '../util/options.js';
 import { promptMultiSelect, promptSelect } from '../util/prompt.js';
+import { ANSI } from '../util/ansi.js';
 
 export type TargetSelectionMode = 'single' | 'multi';
 
@@ -59,7 +60,7 @@ export async function selectTargetAdapters(params: {
   if (mode === 'single') {
     const id = await promptSelect({
       message: promptMessage,
-      options: adapters.map((a) => ({ label: a.label, value: a.id })),
+      options: adapters.map((a) => ({ label: getColoredLabel(a), value: a.id })),
     });
     const adapter = adapters.find((a) => a.id === id);
     if (!adapter) {
@@ -72,7 +73,7 @@ export async function selectTargetAdapters(params: {
   // Multi mode: show list with all pre-selected
   const ids = await promptMultiSelect({
     message: promptMessage,
-    options: adapters.map((a) => ({ label: a.label, value: a.id })),
+    options: adapters.map((a) => ({ label: getColoredLabel(a), value: a.id })),
     defaultSelected: [],
   });
   if (ids.length === 0) {

@@ -90,6 +90,10 @@ export function getAdapters(): TargetAdapter[] {
   return adapters.slice();
 }
 
+export function getColoredLabel(adapter: TargetAdapter): string {
+  return `${adapter.color}${adapter.label}${ANSI.reset}`;
+}
+
 export function resolveAdapter(input: string): TargetAdapter | null {
   const normalized = input.trim().toLowerCase();
   for (const adapter of adapters) {

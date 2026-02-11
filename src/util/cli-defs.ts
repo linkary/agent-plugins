@@ -29,14 +29,15 @@ export const CLI_OPTIONS = {
   version: { short: 'V', desc: 'Show version' },
   'dry-run': { short: 'd', desc: 'Preview changes without applying' },
   force: { short: 'f', desc: 'Overwrite on conflicts' },
-  target: { short: 't', arg: '<tools>', desc: 'Target tools (cursor|gemini|codex|claude-code|antigravity|all)' },
-  scope: { arg: '<scope>', desc: 'Scope: global (--scope=global) or local (--scope=local, default)' },
-  g: { desc: 'Shortcut for --scope=global' },
-  l: { desc: 'Shortcut for --scope=local' },
+  target: { short: 't', arg: '<tools>', desc: 'Target tools (cursor|gemini|codex|claude-code|antigravity|openskills|agents|all)' },
+  scope: { arg: '<scope>', desc: 'Scope: global (default) or local' },
+  global: { short: 'g', desc: 'Alias for --scope=global' },
+  local: { short: 'l', desc: 'Alias for --scope=local' },
   name: { short: 'n', arg: '<name>', desc: 'Override skill name' },
   ref: { arg: '<ref>', desc: 'Git ref (branch/tag/commit)' },
   cwd: { short: 'C', arg: '<dir>', desc: 'Override project directory for local scope' },
   all: { short: 'a', desc: 'Apply to all skills' },
+  verbose: { short: 'v', desc: 'Show detailed output' },
 } as const;
 
 /** Subcommands under `skills` */
@@ -49,9 +50,9 @@ export const SUBCOMMANDS = {
   },
   rm: {
     desc: 'Remove skill(s)',
-    args: '<skill...>',
+    args: '[skill...]',
     aliases: ['remove', 'del', 'delete'],
-    options: ['target', 'scope', 'dry-run'],
+    options: ['target', 'scope', 'global', 'local', 'cwd', 'dry-run'],
   },
   update: {
     desc: 'Update skill(s) from original source',
@@ -74,12 +75,7 @@ export const SUBCOMMANDS = {
   list: {
     desc: 'List central skills',
     aliases: ['ls'],
-    options: [],
-  },
-  manage: {
-    desc: 'Interactive skill management',
-    aliases: ['man', 'm'],
-    options: [],
+    options: ['verbose'],
   },
 } as const satisfies Record<string, SubcommandDef>;
 

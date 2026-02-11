@@ -2,17 +2,18 @@ import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 import path from 'node:path';
 import { listCentralSkills, getCentralSkillPath } from '../../core/skill-store.js';
-import fs from 'node:fs/promises';
+import { ANSI } from '../../util/ansi.js';
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { computeDirHash } from '../../util/hash-dir.js';
-import { findProjectRoot } from '../../util/project-root.js';
 import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
-import { getAdapters, type Scope, type TargetAdapter } from '../../targets/adapters.js';
+import { getAdapters, getColoredLabel, type Scope, type TargetAdapter } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { getCentralSkillsDir, getHomeDir } from '../../util/apg-paths.js';
+import { resolveTargetContext } from '../../util/scope.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
 import { loadConfig } from '../../core/config.js';
 import { copyDir } from '../../util/copy-dir.js';
+import { fsRenameOrCopy, timestampId } from '../../util/sync-utils.js';
 
 type SyncEntry = {
   name: string;
@@ -34,7 +35,6 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   const scopeFlag = typeof flags.scope === 'string' ? flags.scope : undefined;
 
   const cwdFlag = typeof flags.cwd === 'string' ? flags.cwd : undefined;
-  const startCwd = cwdFlag ? path.resolve(cwdFlag) : ctx.cwd;
 
   const adapters = getAdapters();
   const selectedAdapters = await selectTargetAdapters({
@@ -59,8 +59,12 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   const allEntries: SyncEntry[] = [];
   for (const adapter of selectedAdapters) {
     const targetConfig = config.targets[adapter.id];
-    const scope = resolveScope(scopeFlag, targetConfig?.defaultScope);
-    const projectRoot = scope === 'local' ? await findProjectRoot(startCwd) : startCwd;
+    const { scope, projectRoot, homeDir } = await resolveTargetContext({
+      scopeFlag,
+      cwdFlag,
+      defaultScope: targetConfig?.defaultScope,
+      currentCwd: ctx.cwd,
+    });
     const destSkillsDir = adapter.resolveSkillsDir({ scope, projectRoot, homeDir });
 
     // Determine which skills to sync for this target
@@ -92,12 +96,6 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   }
 
   // Phase 2: Show unified selection list
-  // ANSI color codes
-  const yellow = '\x1b[33m';
-  const green = '\x1b[32m';
-  const cyan = '\x1b[36m';
-  const reset = '\x1b[0m';
-
   let selectedEntries: SyncEntry[];
   if (positionals.length > 0) {
     selectedEntries = allEntries;
@@ -105,7 +103,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
     const selectedKeys = await promptMultiSelect({
       message: 'Select skills to sync:',
       options: allEntries.map((s, i) => ({
-        label: `${s.name} -> ${s.adapter.color}${s.adapter.label}${reset} (${s.scope})`,
+        label: `${s.name} -> ${getColoredLabel(s.adapter)} (${s.scope})`,
         value: String(i),
       })),
       defaultSelected: [], // Don't select all by default
@@ -125,10 +123,8 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   const entriesWithStatus: EntryWithStatus[] = await Promise.all(
     selectedEntries.map(async (s) => ({
       ...s,
-      willOverwrite:
-        s.scope === 'local'
-          ? await pathExists(path.join(s.destDir, s.name)) // Simple check for local
-          : await pathExists(path.join(s.destDir, s.name)), // Same check for global (could be refined)
+      // destDir 已包含 skill name，直接检查目标是否存在
+      willOverwrite: await pathExists(s.destDir),
     })),
   );
 
@@ -138,7 +134,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   if (interactive && !force) {
     const replaceCount = entriesWithStatus.filter((s) => s.willOverwrite).length;
     const newCount = entriesWithStatus.length - replaceCount;
-    process.stdout.write(`\nPreview: ${green}${newCount} new${reset}, ${yellow}${replaceCount} replace${reset}\n`);
+    process.stdout.write(`\nPreview: ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.yellow}${replaceCount} replace${ANSI.reset}\n`);
 
     // Default: select only 'new' items (exclude 'replace')
     const defaultSelected = entriesWithStatus
@@ -148,9 +144,9 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
     const selectedKeys = await promptMultiSelect({
       message: `Confirm skills to sync (source: ${srcBaseDir}):`,
       options: entriesWithStatus.map((s, i) => {
-        const status = s.willOverwrite ? `${yellow}replace${reset}` : `${green}new${reset}`;
+        const status = s.willOverwrite ? `${ANSI.yellow}replace${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
         return {
-          label: `${s.name} -> ${s.adapter.color}${s.adapter.label}${reset} (${s.scope}) [${status}]`,
+          label: `${s.name} -> ${getColoredLabel(s.adapter)} (${s.scope}) [${status}]`,
           value: String(i),
         };
       }),
@@ -166,15 +162,15 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
     // Non-interactive: show preview
     process.stdout.write(`\nSync ${entriesWithStatus.length} skill(s) from ${srcBaseDir}:\n`);
     for (const s of entriesWithStatus) {
-      const status = s.willOverwrite ? `${yellow}replace${reset}` : `${green}new${reset}`;
-      process.stdout.write(`  ${s.name} -> ${s.adapter.label} (${s.scope}) [${status}]\n`);
+      const status = s.willOverwrite ? `${ANSI.yellow}replace${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
+      process.stdout.write(`  ${s.name} -> ${getColoredLabel(s.adapter)} (${s.scope}) [${status}]\n`);
     }
     finalEntries = entriesWithStatus;
   }
 
   const entriesToExecute = finalEntries;
 
-  // Phase 5: Execute sync
+  // Phase 4: Execute sync
   const syncState = await loadSyncState();
   let conflictMode: 'ask' | 'overwrite' | 'backup' | 'skip' = force ? 'overwrite' : 'ask';
 
@@ -213,14 +209,14 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
       }
       await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
       context.skills[name] = { hash: srcHash, syncedAt: new Date().toISOString() };
-      process.stdout.write(`Synced: ${name} -> ${adapter.label}\n`);
+      process.stdout.write(`Synced: ${name} -> ${getColoredLabel(adapter)}\n`);
       continue;
     }
 
     const destHash = await computeDirHash(destDir, { ignoreNames: ['.git'] });
     if (destHash === srcHash) {
       context.skills[name] = { hash: srcHash, syncedAt: context.skills[name]?.syncedAt ?? new Date().toISOString() };
-      process.stdout.write(`Up-to-date: ${name} (${adapter.label})\n`);
+      process.stdout.write(`Up-to-date: ${name} (${getColoredLabel(adapter)})\n`);
       continue;
     }
 
@@ -237,7 +233,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
         return 1;
       }
       const choice = await promptChoice({
-        message: `Conflict for ${name} in ${adapter.label} (${scope}).`,
+        message: `Conflict for ${name} in ${getColoredLabel(adapter)} (${scope}).`,
         options: [
           { key: 'o', label: 'Overwrite' },
           { key: 'b', label: 'Backup & overwrite' },
@@ -274,33 +270,10 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
 
     await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
     context.skills[name] = { hash: srcHash, syncedAt: new Date().toISOString() };
-    process.stdout.write(`Synced: ${name} -> ${adapter.label}\n`);
+    process.stdout.write(`Synced: ${name} -> ${getColoredLabel(adapter)}\n`);
   }
 
   if (!dryRun) await saveSyncState(syncState);
 
   return 0;
-}
-
-function resolveScope(scopeFlag: string | undefined, defaultScope: Scope | undefined): Scope {
-  if (scopeFlag === 'global') return 'global';
-  if (scopeFlag === 'local') return 'local';
-  return defaultScope === 'global' ? 'global' : 'local';
-}
-
-async function fsRenameOrCopy(src: string, dest: string): Promise<void> {
-  try {
-    await fs.rename(src, dest);
-  } catch {
-    await copyDir(src, dest, { ignoreNames: ['.git'] });
-    await removeDir(src);
-  }
-}
-
-function timestampId(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(
-    d.getSeconds(),
-  )}`;
 }

@@ -5,7 +5,7 @@
 ## 核心约定
 
 - Central skills 目录（默认）：`$HOME/.agent-plugins/skills/<skill-name>/`
-- `add/rm/update/manage` 默认管理的是 central skills
+- `add/rm/update` 默认管理的是 central skills
 - `sync`：central → 目标工具（单向复制，支持冲突处理）
 - `collect`：目标工具 → central（用于把分散在各处的 skills 收集回来，支持冲突处理）
 
@@ -30,7 +30,7 @@ node dist/cli.cjs --help
 
 ## 交互体验
 
-交互式选择（`sync/collect/manage` 以及冲突处理）默认使用 `inquirer` 的列表/多选组件；在依赖不可用时会回退到基础 `readline` 交互。
+交互式选择（`sync/collect/rm` 以及冲突处理）默认使用 `inquirer` 的列表/多选组件；在依赖不可用时会回退到基础 `readline` 交互。
 
 ## 命令概览
 
@@ -45,16 +45,13 @@ ap skills add <git-url|local-path> [--name <skill>] [--ref <ref>] [--force]
 ap skills update [<skill>...] [--all] [--dry-run] [--force]
 
 # 同步 central -> 目标工具
-ap skills sync [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|all> [--scope local|global] [--dry-run] [--force]
+ap skills sync [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|openskills|agents|all> [--scope local|global] [--dry-run] [--force]
 
 # 从目标工具收集 -> central
-ap skills collect [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|all> [--scope local|global] [--all] [--dry-run] [--force]
+ap skills collect [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|openskills|agents|all> [--scope local|global] [--all] [--dry-run] [--force]
 
-# 删除 central skill（默认）或删除目标端 skill（加 --target）
-ap skills rm <skill>... [--target <...>] [--scope local|global] [--dry-run]
-
-# 可视化管理（交互式）
-ap skills manage
+# 删除 skill（无参数时进入交互模式）
+ap skills rm [<skill>...] [--target <...>] [--scope local|global] [--dry-run]
 ```
 
 说明：
@@ -70,7 +67,7 @@ ap s a /path/to/skill --name my-skill
 
 ## 同步目标与默认路径（macOS）
 
-`--scope local` 默认以 git root 为项目根目录（找不到 git root 则使用当前目录）。
+`--scope global` 是默认值。`--scope local` 默认以 git root 为项目根目录（找不到 git root 则使用当前目录）。
 
 - Cursor
   - local：`<project>/.cursor/skills/`
@@ -87,6 +84,12 @@ ap s a /path/to/skill --name my-skill
 - Google Antigravity
   - local：`<project>/.agent/skills/`
   - global：`~/.gemini/antigravity/global_skills/`
+- Openskills
+  - local：`<project>/.agent/skills/`
+  - global：`~/.agent/skills/`
+- Agents (Vercel Labs)
+  - local：`<project>/.agents/skills/`
+  - global：`~/.agents/skills/`
 
 ## 配置与状态文件
 
