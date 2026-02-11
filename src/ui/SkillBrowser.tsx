@@ -159,12 +159,18 @@ export function SkillBrowser(props: SkillBrowserProps) {
       setCursor(Math.max(0, filtered.length - 1));
     }
 
-    // 翻页
-    if (key.pageUp || (key.ctrl && input === 'u')) {
+    // 翻页（f/b 全页，d/u 半页）
+    if (key.pageDown || input === 'f') {
+      setCursor((prev) => Math.min(filtered.length - 1, prev + pageSize));
+    }
+    if (key.pageUp || input === 'b') {
       setCursor((prev) => Math.max(0, prev - pageSize));
     }
-    if (key.pageDown || (key.ctrl && input === 'd')) {
-      setCursor((prev) => Math.min(filtered.length - 1, prev + pageSize));
+    if (input === 'd') {
+      setCursor((prev) => Math.min(filtered.length - 1, prev + Math.floor(pageSize / 2)));
+    }
+    if (input === 'u') {
+      setCursor((prev) => Math.max(0, prev - Math.floor(pageSize / 2)));
     }
   });
 
@@ -261,7 +267,7 @@ export function SkillBrowser(props: SkillBrowserProps) {
       {/* 帮助行 */}
       <Box>
         <Text dimColor>
-          {'  '}↑↓/jk navigate  g/G top/end  PgUp/PgDn page  / search  ⏎ open  q quit
+          {'  '}↑↓/jk navigate  f/b page  d/u half  g/G top/end  / search  ⏎ open  q quit
         </Text>
       </Box>
     </Box>

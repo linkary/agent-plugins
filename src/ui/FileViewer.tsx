@@ -169,12 +169,18 @@ export function FileViewer(props: FileViewerProps) {
       setScrollOffset((prev) => Math.min(maxScroll, prev + 1));
     }
 
-    // 翻页
-    if (key.pageUp || (key.ctrl && input === 'u')) {
+    // 翻页（f/b 全页，d/u 半页）
+    if (key.pageDown || input === 'f' || input === ' ') {
+      setScrollOffset((prev) => Math.min(maxScroll, prev + viewHeight));
+    }
+    if (key.pageUp || input === 'b') {
       setScrollOffset((prev) => Math.max(0, prev - viewHeight));
     }
-    if (key.pageDown || (key.ctrl && input === 'd') || input === ' ') {
-      setScrollOffset((prev) => Math.min(maxScroll, prev + viewHeight));
+    if (input === 'd') {
+      setScrollOffset((prev) => Math.min(maxScroll, prev + Math.floor(viewHeight / 2)));
+    }
+    if (input === 'u') {
+      setScrollOffset((prev) => Math.max(0, prev - Math.floor(viewHeight / 2)));
     }
 
     // 跳转首尾
@@ -250,7 +256,7 @@ export function FileViewer(props: FileViewerProps) {
       {/* 帮助行 */}
       <Box>
         <Text dimColor>
-          {'  '}↑↓/jk scroll  g/G top/end  PgUp/PgDn/Space page  q/Esc/← back
+          {'  '}↑↓/jk scroll  f/b page  d/u half  g/G top/end  q/Esc back
         </Text>
       </Box>
     </Box>
