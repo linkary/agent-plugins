@@ -45,7 +45,7 @@ export const SUBCOMMANDS = {
   add: {
     desc: 'Add skill from git URL or local path',
     args: '<source>',
-    aliases: ['a'],
+    aliases: ['a', 'install', 'i'],
     options: ['name', 'ref', 'force', 'dry-run'],
   },
   rm: {
@@ -80,7 +80,7 @@ export const SUBCOMMANDS = {
   show: {
     desc: 'Browse and inspect skills',
     args: '[skill]',
-    aliases: ['info', 'i'],
+    aliases: ['info', 's'],
     options: ['target', 'scope', 'global', 'local', 'cwd'],
   },
 } as const satisfies Record<string, SubcommandDef>;

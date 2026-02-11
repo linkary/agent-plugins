@@ -2,13 +2,13 @@ const ALIASES = {
   // Root commands
   skills: ['skills', 'skill', 'sk', 's'],
   // Actions
-  add: ['add', 'a'],
+  add: ['add', 'a', 'install', 'i'],
   rm: ['rm', 'remove', 'del', 'delete'],
   update: ['update', 'up', 'u'],
   sync: ['sync', 'sy'],
   collect: ['collect', 'col', 'c'],
   list: ['list', 'ls'],
-  show: ['show', 'info', 'i'],
+  show: ['show', 'info', 's'],
   help: ['help', 'h'],
   // Legacy (deprecated): `agent skills ...`
   agent: ['agent'],
