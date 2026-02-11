@@ -2,14 +2,15 @@
   "name": "agent-plugins",
   "version": "0.1.0",
   "description": "LLM skills manager and sync tool (ap)",
-  "main": "dist/cli.cjs",
+  "type": "module",
+  "main": "dist/cli.mjs",
   "bin": {
-    "ap": "bin/ap.js",
+    "apm": "bin/ap.js",
     "agent-plugins": "bin/ap.js",
-    "apd": "bin/ap-dev.js"
+    "ap": "bin/ap-dev.js"
   },
   "scripts": {
-    "build": "bun build src/cli.ts --target node --format cjs --outfile dist/cli.cjs",
+    "build": "bun build src/cli.ts --target node --format esm --outfile dist/cli.mjs --external @shikijs/cli --external shiki",
     "dev": "bun run src/cli.ts",
     "prepack": "bun run build",
     "test": "bun test"
@@ -22,17 +23,17 @@
   "author": "",
   "license": "ISC",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "devDependencies": {
     "@types/bun": "^1.3.8",
-    "@types/node": "^25.2.0"
+    "@types/node": "^25.2.0",
+    "@types/react": "^19.1.0"
   },
   "dependencies": {
-    "@inquirer/confirm": "^6.0.4",
-    "@inquirer/core": "^11.1.1",
-    "@inquirer/figures": "^2.0.3",
-    "@inquirer/select": "^5.0.4",
-    "@inquirer/type": "^4.0.3"
+    "@shikijs/cli": "^3.22.0",
+    "ink": "^6.6.0",
+    "react": "^19.1.0",
+    "react-devtools-core": "^6.1.2"
   }
 }

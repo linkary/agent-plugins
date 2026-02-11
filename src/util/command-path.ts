@@ -5,10 +5,10 @@ const ALIASES = {
   add: ['add', 'a'],
   rm: ['rm', 'remove', 'del', 'delete'],
   update: ['update', 'up', 'u'],
-  manage: ['manage', 'man', 'm'],
   sync: ['sync', 'sy'],
   collect: ['collect', 'col', 'c'],
   list: ['list', 'ls'],
+  show: ['show', 'info', 'i'],
   help: ['help', 'h'],
   // Legacy (deprecated): `agent skills ...`
   agent: ['agent'],
@@ -43,7 +43,7 @@ export function resolveCommandPath(argv: string[]): {
 
     const actionToken = argv[2];
     const actionResolved = actionToken
-      ? resolveToken(actionToken, ['add', 'rm', 'update', 'manage', 'sync', 'collect', 'list', 'help'])
+      ? resolveToken(actionToken, ['add', 'rm', 'update', 'sync', 'collect', 'list', 'show', 'help'])
       : 'help';
 
     if (!actionResolved) {
@@ -66,7 +66,7 @@ export function resolveCommandPath(argv: string[]): {
 
   const actionToken = argv[1];
   const actionResolved = actionToken
-    ? resolveToken(actionToken, ['add', 'rm', 'update', 'manage', 'sync', 'collect', 'list', 'help'])
+    ? resolveToken(actionToken, ['add', 'rm', 'update', 'sync', 'collect', 'list', 'show', 'help'])
     : 'help';
 
   if (!actionResolved) {

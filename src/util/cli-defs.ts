@@ -77,6 +77,12 @@ export const SUBCOMMANDS = {
     aliases: ['ls'],
     options: ['verbose'],
   },
+  show: {
+    desc: 'Browse and inspect skills',
+    args: '[skill]',
+    aliases: ['info', 'i'],
+    options: ['target', 'scope', 'global', 'local', 'cwd'],
+  },
 } as const satisfies Record<string, SubcommandDef>;
 
 /** Root command aliases */

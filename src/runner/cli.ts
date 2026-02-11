@@ -7,6 +7,7 @@ import { cmdSkillsList } from '../commands/skills/list.js';
 import { cmdSkillsRemove } from '../commands/skills/rm.js';
 import { cmdSkillsSync } from '../commands/skills/sync.js';
 import { cmdSkillsUpdate } from '../commands/skills/update.js';
+import { cmdSkillsShow } from '../commands/skills/show.js';
 import { PKG_NAME, PKG_VERSION } from '../meta.js';
 
 export type CliRunContext = {
@@ -52,6 +53,8 @@ export async function runCli(argv: string[], ctx: CliRunContext): Promise<number
       return await cmdSkillsCollect(positionals, flags, ctx);
     case 'list':
       return await cmdSkillsList(positionals, flags, ctx);
+    case 'show':
+      return await cmdSkillsShow(positionals, flags, ctx);
     case 'help':
     default:
       process.stdout.write(formatHelp());
