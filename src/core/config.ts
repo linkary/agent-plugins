@@ -6,6 +6,7 @@ export type TargetConfigV1 = {
   defaultScope?: Scope;
   include?: string[]; // skill names; supports ['*']
   includeCommands?: string[]; // command names; supports ['*']
+  includeMcp?: string[]; // MCP server names; supports ['*']
 };
 
 export type ConfigV1 = {

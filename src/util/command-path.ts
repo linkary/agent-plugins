@@ -2,6 +2,7 @@ const ALIASES = {
   // Root commands
   skills: ['skills', 'skill', 'sk', 's'],
   commands: ['commands', 'command', 'cmd', 'c'],
+  mcp: ['mcp', 'm'],
   // Actions (共用于 skills 和 commands)
   add: ['add', 'a', 'install', 'i'],
   rm: ['rm', 'remove', 'del', 'delete'],
@@ -25,7 +26,7 @@ function resolveToken(token: string, allowed: readonly Canonical[]): Canonical |
   return null;
 }
 
-const ROOT_GROUPS = ['skills', 'commands'] as const satisfies readonly Canonical[];
+const ROOT_GROUPS = ['skills', 'commands', 'mcp'] as const satisfies readonly Canonical[];
 const ACTIONS = ['add', 'rm', 'update', 'sync', 'collect', 'list', 'show', 'help'] as const satisfies readonly Canonical[];
 
 export function resolveCommandPath(argv: string[]): {

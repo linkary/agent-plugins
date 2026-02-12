@@ -29,16 +29,28 @@ export type CommandRecord = {
   source: SkillSource;
 };
 
+export type McpSource =
+  | { type: 'manual' }
+  | { type: 'collected'; from: { target: string; scope: string } };
+
+export type McpRecord = {
+  name: string;
+  addedAt: string;
+  updatedAt: string;
+  source: McpSource;
+};
+
 export type RegistryFileV1 = {
   version: 1;
   skills: Record<string, SkillRecord>;
   commands?: Record<string, CommandRecord>;
+  mcp?: Record<string, McpRecord>;
   repos?: Record<string, RepoRecord>;
   commandRepos?: Record<string, RepoRecord>;
 };
 
 function createEmptyRegistry(): RegistryFileV1 {
-  return { version: 1, skills: {}, commands: {}, repos: {}, commandRepos: {} };
+  return { version: 1, skills: {}, commands: {}, mcp: {}, repos: {}, commandRepos: {} };
 }
 
 export async function loadRegistry(): Promise<RegistryFileV1> {
@@ -49,6 +61,7 @@ export async function loadRegistry(): Promise<RegistryFileV1> {
   // 确保可选字段存在
   if (!parsed.repos) parsed.repos = {};
   if (!parsed.commands) parsed.commands = {};
+  if (!parsed.mcp) parsed.mcp = {};
   if (!parsed.commandRepos) parsed.commandRepos = {};
   return parsed;
 }

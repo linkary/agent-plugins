@@ -34,7 +34,8 @@
     "@shikijs/cli": "^3.22.0",
     "ink": "^6.6.0",
     "react": "^19.1.0",
-    "react-devtools-core": "^6.1.2"
+    "react-devtools-core": "^6.1.2",
+    "smol-toml": "^1.6.0"
   },
   "directories": {
     "test": "tests"

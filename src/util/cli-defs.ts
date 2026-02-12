@@ -130,6 +130,51 @@ export const COMMAND_SUBCOMMANDS = {
   },
 } as const satisfies Record<string, SubcommandDef>;
 
+/** Subcommands under `mcp` */
+export const MCP_SUBCOMMANDS = {
+  add: {
+    desc: 'Add MCP server definition to central store',
+    args: '[name]',
+    aliases: ['a'],
+    options: ['name', 'force', 'dry-run'],
+  },
+  rm: {
+    desc: 'Remove MCP server(s)',
+    args: '[server...]',
+    aliases: ['remove', 'del', 'delete'],
+    options: ['dry-run'],
+  },
+  update: {
+    desc: 'Update MCP server(s) from original source',
+    args: '[server...]',
+    aliases: ['up', 'u'],
+    options: ['all', 'dry-run'],
+  },
+  sync: {
+    desc: 'Sync central MCP servers → target tool configs',
+    args: '[server...]',
+    aliases: ['sy'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+  },
+  collect: {
+    desc: 'Collect MCP servers from target tool configs → central',
+    args: '[server...]',
+    aliases: ['col', 'c'],
+    options: ['target', 'scope', 'all', 'force', 'dry-run'],
+  },
+  list: {
+    desc: 'List central MCP servers',
+    aliases: ['ls'],
+    options: ['verbose'],
+  },
+  show: {
+    desc: 'Display MCP server definition details',
+    args: '[server]',
+    aliases: ['info', 's'],
+    options: [],
+  },
+} as const satisfies Record<string, SubcommandDef>;
+
 /** Root command aliases */
 export const ROOT_ALIASES: Record<string, string> = {
   skills: 'skills',
@@ -140,6 +185,8 @@ export const ROOT_ALIASES: Record<string, string> = {
   command: 'commands',
   cmd: 'commands',
   c: 'commands',
+  mcp: 'mcp',
+  m: 'mcp',
 };
 
 /** Build a map from short flag → long option name */

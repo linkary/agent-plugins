@@ -30,3 +30,7 @@ export function getSyncStatePath(): string {
 export function getCentralCommandsDir(): string {
   return path.join(getApgHomeDir(), 'commands');
 }
+
+export function getCentralMcpDir(): string {
+  return path.join(getApgHomeDir(), 'mcp');
+}

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { ANSI } from '../util/ansi.js';
+import type { McpConfigSpec } from '../core/mcp-types.js';
 
 export type Scope = 'local' | 'global';
 
@@ -18,6 +19,8 @@ export type TargetAdapter = {
   aliases: string[];
   resolveSkillsDir(params: ResolveParams): string;
   resolveCommandsDir(params: ResolveParams): string;
+  /** 返回 MCP 配置文件规格；null 表示该工具不支持 MCP */
+  resolveMcpConfig?(params: ResolveParams): McpConfigSpec | null;
 };
 
 function getCodexHomeDir(homeDir: string): string {
@@ -36,6 +39,12 @@ const adapters: TargetAdapter[] = [
       scope === 'global' ? path.join(homeDir, '.cursor', 'skills') : path.join(projectRoot, '.cursor', 'skills'),
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.cursor', 'commands') : path.join(projectRoot, '.cursor', 'commands'),
+    resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
+      configPath:
+        scope === 'global' ? path.join(homeDir, '.cursor', 'mcp.json') : path.join(projectRoot, '.cursor', 'mcp.json'),
+      format: 'json',
+      serversKey: 'mcpServers',
+    }),
   },
   {
     id: 'gemini',
@@ -48,6 +57,14 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(homeDir, '.gemini', 'commands')
         : path.join(projectRoot, '.gemini', 'commands'),
+    resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
+      configPath:
+        scope === 'global'
+          ? path.join(homeDir, '.gemini', 'settings.json')
+          : path.join(projectRoot, '.gemini', 'settings.json'),
+      format: 'json',
+      serversKey: 'mcpServers',
+    }),
   },
   {
     id: 'codex',
@@ -60,6 +77,11 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(getCodexHomeDir(homeDir), 'commands')
         : path.join(projectRoot, '.codex', 'commands'),
+    // Codex 仅支持 global 级别的 MCP 配置 (config.toml)
+    resolveMcpConfig: ({ scope, homeDir }) =>
+      scope === 'global'
+        ? { configPath: path.join(getCodexHomeDir(homeDir), 'config.toml'), format: 'toml', serversKey: 'mcp_servers' }
+        : null,
   },
   {
     id: 'claude-code',
@@ -72,6 +94,14 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(homeDir, '.claude', 'commands')
         : path.join(projectRoot, '.claude', 'commands'),
+    resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
+      configPath:
+        scope === 'global'
+          ? path.join(homeDir, '.claude.json')
+          : path.join(projectRoot, '.mcp.json'),
+      format: 'json',
+      serversKey: 'mcpServers',
+    }),
   },
   {
     id: 'antigravity',
@@ -86,6 +116,11 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(homeDir, '.gemini', 'antigravity', 'global_commands')
         : path.join(projectRoot, '.agent', 'commands'),
+    // Antigravity 仅支持 global 级别的 MCP 配置 (~/.gemini/antigravity/mcp_config.json)
+    resolveMcpConfig: ({ scope, homeDir }) =>
+      scope === 'global'
+        ? { configPath: path.join(homeDir, '.gemini', 'antigravity', 'mcp_config.json'), format: 'json', serversKey: 'mcpServers' }
+        : null,
   },
   {
     id: 'openskills',
