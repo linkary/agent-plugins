@@ -5,7 +5,7 @@ import { ensureCentralStore, getCentralSkillPath } from '../../core/skill-store.
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
 import { type Scope, getAdapters, getColoredLabel, type TargetAdapter } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
-import { getCentralSkillsDir, getHomeDir } from '../../util/apg-paths.js';
+import { getCentralSkillsDir } from '../../util/apg-paths.js';
 import { ANSI } from '../../util/ansi.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { copyDir } from '../../util/copy-dir.js';
@@ -13,7 +13,7 @@ import { fsRenameOrCopy } from '../../util/sync-utils.js';
 import { ensureDir, listDirNames, pathExists, removeDir } from '../../util/fs-utils.js';
 import { computeDirHash } from '../../util/hash-dir.js';
 import type { ParsedFlags } from '../../util/options.js';
-import { promptChoice, promptConfirm, promptMultiSelect } from '../../util/prompt.js';
+import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
 type SkillEntry = {
@@ -25,11 +25,7 @@ type SkillEntry = {
   projectRoot: string;
 };
 
-export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFlags, _ctx: CliRunContext) {
-  const positionals = _positionals;
-  const flags = _flags;
-  const ctx = _ctx;
-
+export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags, ctx: CliRunContext) {
   const dryRun = flags['dry-run'] === true;
   const force = flags.force === true || flags.overwrite === true;
   const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
@@ -48,7 +44,6 @@ export async function cmdSkillsCollect(_positionals: string[], _flags: ParsedFla
   if (selectedAdapters.length === 0) return 1;
 
   const config = await loadConfig();
-  const homeDir = getHomeDir();
 
   // Phase 1: Gather all available skills from all selected targets
   const allSkills: SkillEntry[] = [];
