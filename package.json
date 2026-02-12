@@ -1,13 +1,13 @@
 {
   "name": "agent-plugins",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "LLM skills & commands manager and sync tool (ap)",
   "type": "module",
   "main": "dist/cli.mjs",
   "bin": {
-    "apm": "bin/ap.js",
+    "ap": "bin/ap.js",
     "agent-plugins": "bin/ap.js",
-    "ap": "bin/ap-dev.js"
+    "apd": "bin/ap-dev.js"
   },
   "scripts": {
     "build": "bun build src/cli.ts --target node --format esm --outfile dist/cli.mjs --external @shikijs/cli --external shiki",
@@ -35,5 +35,16 @@
     "ink": "^6.6.0",
     "react": "^19.1.0",
     "react-devtools-core": "^6.1.2"
-  }
+  },
+  "directories": {
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/linkary/agent-plugins.git"
+  },
+  "bugs": {
+    "url": "https://github.com/linkary/agent-plugins/issues"
+  },
+  "homepage": "https://github.com/linkary/agent-plugins#readme"
 }
