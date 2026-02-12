@@ -4,12 +4,12 @@
  */
 import React from 'react';
 import { runInk } from '../ui/render.js';
-import { Select, type SelectOption } from '../ui/Select.js';
-import { MultiSelect, type MultiSelectOption } from '../ui/MultiSelect.js';
-import { Confirm } from '../ui/Confirm.js';
-import { Choice } from '../ui/Choice.js';
+import { Select, type SelectOption } from '../ui/select.js';
+import { MultiSelect, type MultiSelectOption } from '../ui/multi-select.js';
+import { Confirm } from '../ui/confirm.js';
+import { Choice } from '../ui/choice.js';
 
-export type { SelectOption } from '../ui/Select.js';
+export type { SelectOption } from '../ui/select.js';
 
 // ─── promptSelect ───────────────────────────────────────────────────────
 

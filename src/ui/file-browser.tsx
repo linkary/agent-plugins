@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { Box, Text, useInput, useStdout } from 'ink';
-import { FileViewer } from './FileViewer.js';
+import { FileViewer } from './file-viewer.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 

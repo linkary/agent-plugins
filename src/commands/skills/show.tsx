@@ -6,8 +6,8 @@ import { listCentralSkills, getCentralSkillPath } from '../../core/skill-store.j
 import { getAdapters } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { gatherTargetSkills } from './manage-utils.js';
-import { SkillBrowser, type SkillEntry } from '../../ui/SkillBrowser.js';
-import { FileBrowser } from '../../ui/FileBrowser.js';
+import { SkillBrowser, type SkillEntry } from '../../ui/skill-browser.js';
+import { FileBrowser } from '../../ui/file-browser.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 

@@ -1,7 +1,7 @@
 {
   "name": "agent-plugins",
-  "version": "0.1.0",
-  "description": "LLM skills manager and sync tool (ap)",
+  "version": "0.2.0",
+  "description": "LLM skills & commands manager and sync tool (ap)",
   "type": "module",
   "main": "dist/cli.mjs",
   "bin": {
