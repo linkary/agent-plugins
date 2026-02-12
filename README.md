@@ -3,8 +3,8 @@
 A CLI tool for centralized management and cross-tool synchronization of **LLM Agent Skills** and **Commands**.
 
 <div align="center">
-  <a href="https://github.com/linkary/agent-plugins/raw/refs/heads/main/assets/intro.mp4">
-    <img src="https://github.com/linkary/agent-plugins/raw/refs/heads/main/assets/intro.gif" alt="agent-plugins demo" width="800" />
+  <a href="assets/intro.mp4">
+    <img src="assets/intro.gif" alt="agent-plugins demo" width="800" />
   </a>
   <br />
   <sub>Click to watch in full quality</sub>
@@ -104,9 +104,9 @@ ap commands rm [<command>...] [--target <...>] [--scope local|global] [--dry-run
 
 Root groups support abbreviations:
 
-| Full | Aliases |
-|---|---|
-| `skills` | `skill`, `sk`, `s` |
+| Full       | Aliases               |
+| ---------- | --------------------- |
+| `skills`   | `skill`, `sk`, `s`    |
 | `commands` | `command`, `cmd`, `c` |
 
 Subcommands also support abbreviations (parsed by position):
@@ -130,27 +130,27 @@ Supported targets: `cursor`, `gemini`, `codex`, `claude-code`, `antigravity`, `o
 
 ### Skills Paths
 
-| Target | local | global |
-|---|---|---|
-| Cursor | `<project>/.cursor/skills/` | `~/.cursor/skills/` |
-| Gemini CLI | `<project>/.gemini/skills/` | `~/.gemini/skills/` |
-| Codex | `<project>/.codex/skills/` | `$CODEX_HOME/skills/` |
-| Claude Code | `<project>/.claude/skills/` | `~/.claude/skills/` |
-| Antigravity | `<project>/.agent/skills/` | `~/.gemini/antigravity/global_skills/` |
-| Openskills | `<project>/.agent/skills/` | `~/.agent/skills/` |
-| Agents (Vercel Labs) | `<project>/.agents/skills/` | `~/.agents/skills/` |
+| Target               | local                       | global                                 |
+| -------------------- | --------------------------- | -------------------------------------- |
+| Cursor               | `<project>/.cursor/skills/` | `~/.cursor/skills/`                    |
+| Gemini CLI           | `<project>/.gemini/skills/` | `~/.gemini/skills/`                    |
+| Codex                | `<project>/.codex/skills/`  | `$CODEX_HOME/skills/`                  |
+| Claude Code          | `<project>/.claude/skills/` | `~/.claude/skills/`                    |
+| Antigravity          | `<project>/.agent/skills/`  | `~/.gemini/antigravity/global_skills/` |
+| Openskills           | `<project>/.agent/skills/`  | `~/.agent/skills/`                     |
+| Agents (Vercel Labs) | `<project>/.agents/skills/` | `~/.agents/skills/`                    |
 
 ### Commands Paths
 
-| Target | local | global |
-|---|---|---|
-| Cursor | `<project>/.cursor/commands/` | `~/.cursor/commands/` |
-| Gemini CLI | `<project>/.gemini/commands/` | `~/.gemini/commands/` |
-| Codex | `<project>/.codex/commands/` | `$CODEX_HOME/commands/` |
-| Claude Code | `<project>/.claude/commands/` | `~/.claude/commands/` |
-| Antigravity | `<project>/.agent/commands/` | `~/.gemini/antigravity/global_commands/` |
-| Openskills | `<project>/.agent/commands/` | `~/.agent/commands/` |
-| Agents (Vercel Labs) | `<project>/.agents/commands/` | `~/.agents/commands/` |
+| Target               | local                         | global                                   |
+| -------------------- | ----------------------------- | ---------------------------------------- |
+| Cursor               | `<project>/.cursor/commands/` | `~/.cursor/commands/`                    |
+| Gemini CLI           | `<project>/.gemini/commands/` | `~/.gemini/commands/`                    |
+| Codex                | `<project>/.codex/commands/`  | `$CODEX_HOME/commands/`                  |
+| Claude Code          | `<project>/.claude/commands/` | `~/.claude/commands/`                    |
+| Antigravity          | `<project>/.agent/commands/`  | `~/.gemini/antigravity/global_commands/` |
+| Openskills           | `<project>/.agent/commands/`  | `~/.agent/commands/`                     |
+| Agents (Vercel Labs) | `<project>/.agents/commands/` | `~/.agents/commands/`                    |
 
 ## Configuration and State Files
 
