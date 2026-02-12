@@ -8,6 +8,13 @@ import { cmdSkillsRemove } from '../commands/skills/rm.js';
 import { cmdSkillsSync } from '../commands/skills/sync.js';
 import { cmdSkillsUpdate } from '../commands/skills/update.js';
 import { cmdSkillsShow } from '../commands/skills/show.js';
+import { cmdCommandsAdd } from '../commands/commands/add.js';
+import { cmdCommandsCollect } from '../commands/commands/collect.js';
+import { cmdCommandsList } from '../commands/commands/list.js';
+import { cmdCommandsRemove } from '../commands/commands/rm.js';
+import { cmdCommandsSync } from '../commands/commands/sync.js';
+import { cmdCommandsUpdate } from '../commands/commands/update.js';
+import { cmdCommandsShow } from '../commands/commands/show.js';
 import { PKG_NAME, PKG_VERSION } from '../meta.js';
 
 export type CliRunContext = {
@@ -31,15 +38,29 @@ export async function runCli(argv: string[], ctx: CliRunContext): Promise<number
     return 1;
   }
 
-  if (path[0] !== 'skills') {
-    process.stderr.write('Only `skills` commands are supported currently.\n\n');
-    process.stdout.write(formatHelp());
-    return 1;
-  }
-
   const { positionals, flags } = parseOptions(rest);
+  const group = path[0];
   const cmd = path[1] ?? 'help';
 
+  if (group === 'skills') {
+    return await dispatchSkills(cmd, positionals, flags, ctx);
+  }
+
+  if (group === 'commands') {
+    return await dispatchCommands(cmd, positionals, flags, ctx);
+  }
+
+  process.stderr.write(`Unknown group: ${group}\n\n`);
+  process.stdout.write(formatHelp());
+  return 1;
+}
+
+async function dispatchSkills(
+  cmd: string,
+  positionals: string[],
+  flags: Record<string, string | boolean>,
+  ctx: CliRunContext,
+): Promise<number> {
   switch (cmd) {
     case 'add':
       return await cmdSkillsAdd(positionals, flags, ctx);
@@ -57,7 +78,35 @@ export async function runCli(argv: string[], ctx: CliRunContext): Promise<number
       return await cmdSkillsShow(positionals, flags, ctx);
     case 'help':
     default:
-      process.stdout.write(formatHelp());
+      process.stdout.write(formatHelp('skills'));
+      return cmd === 'help' ? 0 : 1;
+  }
+}
+
+async function dispatchCommands(
+  cmd: string,
+  positionals: string[],
+  flags: Record<string, string | boolean>,
+  ctx: CliRunContext,
+): Promise<number> {
+  switch (cmd) {
+    case 'add':
+      return await cmdCommandsAdd(positionals, flags, ctx);
+    case 'rm':
+      return await cmdCommandsRemove(positionals, flags, ctx);
+    case 'update':
+      return await cmdCommandsUpdate(positionals, flags, ctx);
+    case 'sync':
+      return await cmdCommandsSync(positionals, flags, ctx);
+    case 'collect':
+      return await cmdCommandsCollect(positionals, flags, ctx);
+    case 'list':
+      return await cmdCommandsList(positionals, flags, ctx);
+    case 'show':
+      return await cmdCommandsShow(positionals, flags, ctx);
+    case 'help':
+    default:
+      process.stdout.write(formatHelp('commands'));
       return cmd === 'help' ? 0 : 1;
   }
 }

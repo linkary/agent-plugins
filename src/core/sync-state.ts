@@ -1,12 +1,15 @@
 import { getSyncStatePath } from '../util/apg-paths.js';
 import { pathExists, readJsonFile, writeJsonFileAtomic } from '../util/fs-utils.js';
 
+export type SyncedItemRecord = { hash: string; syncedAt: string };
+
 export type SyncStateV1 = {
   version: 1;
   contexts: Record<
     string,
     {
-      skills: Record<string, { hash: string; syncedAt: string }>;
+      skills: Record<string, SyncedItemRecord>;
+      commands?: Record<string, SyncedItemRecord>;
     }
   >;
 };

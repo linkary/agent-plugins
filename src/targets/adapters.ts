@@ -17,6 +17,7 @@ export type TargetAdapter = {
   color: string; // ANSI color code for this adapter
   aliases: string[];
   resolveSkillsDir(params: ResolveParams): string;
+  resolveCommandsDir(params: ResolveParams): string;
 };
 
 function getCodexHomeDir(homeDir: string): string {
@@ -33,6 +34,8 @@ const adapters: TargetAdapter[] = [
     aliases: ['cursor'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.cursor', 'skills') : path.join(projectRoot, '.cursor', 'skills'),
+    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.cursor', 'commands') : path.join(projectRoot, '.cursor', 'commands'),
   },
   {
     id: 'gemini',
@@ -41,6 +44,10 @@ const adapters: TargetAdapter[] = [
     aliases: ['gemini', 'gemini-cli'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.gemini', 'skills') : path.join(projectRoot, '.gemini', 'skills'),
+    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global'
+        ? path.join(homeDir, '.gemini', 'commands')
+        : path.join(projectRoot, '.gemini', 'commands'),
   },
   {
     id: 'codex',
@@ -49,6 +56,10 @@ const adapters: TargetAdapter[] = [
     aliases: ['codex'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(getCodexHomeDir(homeDir), 'skills') : path.join(projectRoot, '.codex', 'skills'),
+    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global'
+        ? path.join(getCodexHomeDir(homeDir), 'commands')
+        : path.join(projectRoot, '.codex', 'commands'),
   },
   {
     id: 'claude-code',
@@ -57,6 +68,10 @@ const adapters: TargetAdapter[] = [
     aliases: ['claude', 'claude-code', 'claudecode'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.claude', 'skills') : path.join(projectRoot, '.claude', 'skills'),
+    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global'
+        ? path.join(homeDir, '.claude', 'commands')
+        : path.join(projectRoot, '.claude', 'commands'),
   },
   {
     id: 'antigravity',
@@ -67,6 +82,10 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(homeDir, '.gemini', 'antigravity', 'global_skills')
         : path.join(projectRoot, '.agent', 'skills'),
+    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global'
+        ? path.join(homeDir, '.gemini', 'antigravity', 'global_commands')
+        : path.join(projectRoot, '.agent', 'commands'),
   },
   {
     id: 'openskills',
@@ -75,6 +94,10 @@ const adapters: TargetAdapter[] = [
     aliases: ['openskills'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.agent', 'skills') : path.join(projectRoot, '.agent', 'skills'),
+    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global'
+        ? path.join(homeDir, '.agent', 'commands')
+        : path.join(projectRoot, '.agent', 'commands'),
   },
   {
     id: 'agents',
@@ -83,6 +106,10 @@ const adapters: TargetAdapter[] = [
     aliases: ['agents'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.agents', 'skills') : path.join(projectRoot, '.agents', 'skills'),
+    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global'
+        ? path.join(homeDir, '.agents', 'commands')
+        : path.join(projectRoot, '.agents', 'commands'),
   },
 ];
 

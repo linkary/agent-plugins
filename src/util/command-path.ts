@@ -1,7 +1,8 @@
 const ALIASES = {
   // Root commands
   skills: ['skills', 'skill', 'sk', 's'],
-  // Actions
+  commands: ['commands', 'command', 'cmd', 'c'],
+  // Actions (共用于 skills 和 commands)
   add: ['add', 'a', 'install', 'i'],
   rm: ['rm', 'remove', 'del', 'delete'],
   update: ['update', 'up', 'u'],
@@ -24,6 +25,9 @@ function resolveToken(token: string, allowed: readonly Canonical[]): Canonical |
   return null;
 }
 
+const ROOT_GROUPS = ['skills', 'commands'] as const satisfies readonly Canonical[];
+const ACTIONS = ['add', 'rm', 'update', 'sync', 'collect', 'list', 'show', 'help'] as const satisfies readonly Canonical[];
+
 export function resolveCommandPath(argv: string[]): {
   path: Canonical[];
   rest: string[];
@@ -32,7 +36,7 @@ export function resolveCommandPath(argv: string[]): {
   // Legacy syntax: `agent skills <action> ...`
   if (argv[0] && resolveToken(argv[0], ['agent']) === 'agent') {
     const second = argv[1];
-    const secondResolved = second ? resolveToken(second, ['skills']) : null;
+    const secondResolved = second ? resolveToken(second, ROOT_GROUPS) : null;
     if (!secondResolved) {
       return {
         path: ['agent'],
@@ -42,32 +46,28 @@ export function resolveCommandPath(argv: string[]): {
     }
 
     const actionToken = argv[2];
-    const actionResolved = actionToken
-      ? resolveToken(actionToken, ['add', 'rm', 'update', 'sync', 'collect', 'list', 'show', 'help'])
-      : 'help';
+    const actionResolved = actionToken ? resolveToken(actionToken, ACTIONS) : 'help';
 
     if (!actionResolved) {
       return {
-        path: ['skills'],
+        path: [secondResolved],
         rest: argv.slice(2),
-        error: `Unknown action for skills: ${actionToken}`,
+        error: `Unknown action for ${secondResolved}: ${actionToken}`,
       };
     }
 
-    return { path: ['skills', actionResolved], rest: argv.slice(3), error: null };
+    return { path: [secondResolved, actionResolved], rest: argv.slice(3), error: null };
   }
 
-  // New syntax: `skills <action> ...`
+  // New syntax: `skills <action> ...` or `commands <action> ...`
   const root = argv[0];
-  const rootResolved = root ? resolveToken(root, ['skills']) : null;
+  const rootResolved = root ? resolveToken(root, ROOT_GROUPS) : null;
   if (!rootResolved) {
     return { path: [], rest: argv, error: `Unknown command: ${root ?? '(none)'}` };
   }
 
   const actionToken = argv[1];
-  const actionResolved = actionToken
-    ? resolveToken(actionToken, ['add', 'rm', 'update', 'sync', 'collect', 'list', 'show', 'help'])
-    : 'help';
+  const actionResolved = actionToken ? resolveToken(actionToken, ACTIONS) : 'help';
 
   if (!actionResolved) {
     return {

@@ -21,14 +21,24 @@ export type RepoRecord = {
   updatedAt: string;
 };
 
+export type CommandRecord = {
+  name: string;
+  form: 'directory' | 'file';
+  addedAt: string;
+  updatedAt: string;
+  source: SkillSource;
+};
+
 export type RegistryFileV1 = {
   version: 1;
   skills: Record<string, SkillRecord>;
+  commands?: Record<string, CommandRecord>;
   repos?: Record<string, RepoRecord>;
+  commandRepos?: Record<string, RepoRecord>;
 };
 
 function createEmptyRegistry(): RegistryFileV1 {
-  return { version: 1, skills: {}, repos: {} };
+  return { version: 1, skills: {}, commands: {}, repos: {}, commandRepos: {} };
 }
 
 export async function loadRegistry(): Promise<RegistryFileV1> {
@@ -36,8 +46,10 @@ export async function loadRegistry(): Promise<RegistryFileV1> {
   if (!(await pathExists(registryPath))) return createEmptyRegistry();
   const parsed = await readJsonFile<RegistryFileV1>(registryPath);
   if (parsed.version !== 1 || !parsed.skills) return createEmptyRegistry();
-  // Ensure repos exists
+  // 确保可选字段存在
   if (!parsed.repos) parsed.repos = {};
+  if (!parsed.commands) parsed.commands = {};
+  if (!parsed.commandRepos) parsed.commandRepos = {};
   return parsed;
 }
 
@@ -72,6 +84,24 @@ export function removeSkillFromRepo(registry: RegistryFileV1, skillName: string)
       repo.skills.splice(idx, 1);
       if (repo.skills.length === 0) {
         delete registry.repos[key];
+        return true;
+      }
+      return false;
+    }
+  }
+  return false;
+}
+
+/** Remove a command from its command-repo record; returns true if repo record was deleted */
+export function removeCommandFromRepo(registry: RegistryFileV1, commandName: string): boolean {
+  if (!registry.commandRepos) return false;
+
+  for (const [key, repo] of Object.entries(registry.commandRepos)) {
+    const idx = repo.skills.indexOf(commandName);
+    if (idx !== -1) {
+      repo.skills.splice(idx, 1);
+      if (repo.skills.length === 0) {
+        delete registry.commandRepos[key];
         return true;
       }
       return false;

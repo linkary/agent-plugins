@@ -5,6 +5,7 @@ import type { Scope, TargetId } from '../targets/adapters.js';
 export type TargetConfigV1 = {
   defaultScope?: Scope;
   include?: string[]; // skill names; supports ['*']
+  includeCommands?: string[]; // command names; supports ['*']
 };
 
 export type ConfigV1 = {

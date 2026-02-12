@@ -4,6 +4,7 @@ import { readSkillDescription, formatRelativeTime, formatSourceShort } from '../
 import { findSyncedCopies, type SyncedCopy } from '../commands/skills/manage-utils.js';
 import { loadConfig } from '../core/config.js';
 import type { SkillRecord } from '../core/registry.js';
+import type { ConfigV1 } from '../core/config.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -13,6 +14,12 @@ export type SkillEntry = {
   record?: SkillRecord;
 };
 
+export type SyncedDisplay = {
+  adapterId: string;
+  adapterLabel: string;
+  scope: string;
+};
+
 type SkillBrowserProps = {
   skills: SkillEntry[];
   currentCwd: string;
@@ -20,6 +27,12 @@ type SkillBrowserProps = {
   initialSkillName?: string;
   onSelect: (skill: SkillEntry) => void;
   onExit: () => void;
+  /** 可选：自定义描述读取（用于 commands 等非 skill 条目） */
+  readDescription?: (path: string, name: string) => Promise<string | undefined>;
+  /** 可选：自定义同步目标查询（用于 commands 等） */
+  findSynced?: (params: { skillNames: string[]; config: ConfigV1; currentCwd: string }) => Promise<SyncedDisplay[]>;
+  /** 列表标题，默认 "Skills" */
+  listLabel?: string;
 };
 
 type MetaInfo = {
@@ -28,7 +41,7 @@ type MetaInfo = {
   addedAt: string;
   updatedAt: string;
   path: string;
-  syncedTo: SyncedCopy[];
+  syncedTo: SyncedDisplay[];
 };
 
 // ─── Component ──────────────────────────────────────────────────────────
@@ -37,7 +50,8 @@ const POINTER = '>';
 const MIN_INFO_WIDTH = 30;
 
 export function SkillBrowser(props: SkillBrowserProps) {
-  const { skills, currentCwd, initialSkillName, onSelect, onExit } = props;
+  const { skills, currentCwd, initialSkillName, onSelect, onExit, readDescription, findSynced, listLabel = 'Skills' } =
+    props;
   const { stdout } = useStdout();
   const termWidth = stdout?.columns ?? 80;
   const termHeight = stdout?.rows ?? 24;
@@ -81,9 +95,14 @@ export function SkillBrowser(props: SkillBrowserProps) {
 
     (async () => {
       const config = await loadConfig();
+      const readDesc = readDescription ?? ((path) => readSkillDescription(path));
+      const findSyncedFn =
+        findSynced ??
+        (async (p) =>
+          (await findSyncedCopies(p)).map((c) => ({ adapterId: c.adapterId, adapterLabel: c.adapterLabel, scope: c.scope })));
       const [desc, syncedCopies] = await Promise.all([
-        readSkillDescription(skill.path),
-        findSyncedCopies({ skillNames: [skill.name], config, currentCwd }),
+        readDesc(skill.path, skill.name),
+        findSyncedFn({ skillNames: [skill.name], config, currentCwd }),
       ]);
 
       if (cancelled) return;
@@ -203,7 +222,7 @@ export function SkillBrowser(props: SkillBrowserProps) {
           borderColor="gray"
           paddingX={1}
         >
-          <Text bold color="cyan">Skills ({filtered.length})</Text>
+          <Text bold color="cyan">{listLabel} ({filtered.length})</Text>
           {visible.map((skill, i) => {
             const realIndex = pageStart + i;
             const isActive = realIndex === safeCursor;

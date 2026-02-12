@@ -26,3 +26,7 @@ export function getConfigPath(): string {
 export function getSyncStatePath(): string {
   return path.join(getApgHomeDir(), 'sync-state.json');
 }
+
+export function getCentralCommandsDir(): string {
+  return path.join(getApgHomeDir(), 'commands');
+}
