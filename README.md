@@ -2,6 +2,14 @@
 
 A CLI tool for centralized management and cross-tool synchronization of **LLM Agent Skills** and **Commands**.
 
+<div align="center">
+  <a href="https://github.com/linkary/agent-plugins/raw/refs/heads/main/assets/intro.mp4">
+    <img src="https://github.com/linkary/agent-plugins/raw/refs/heads/main/assets/intro.gif" alt="agent-plugins demo" width="800" />
+  </a>
+  <br />
+  <sub>Click to watch in full quality</sub>
+</div>
+
 ## Core Conventions
 
 - Central skills directory (default): `$HOME/.agent-plugins/skills/<skill-name>/`
