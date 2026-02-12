@@ -2,6 +2,14 @@
 
 一个用于 **LLM Agent Skills** 和 **Commands** 的集中管理与跨工具同步的 CLI。
 
+<div align="center">
+  <a href="assets/intro.mp4">
+    <img src="assets/intro.gif" alt="agent-plugins demo" width="800" />
+  </a>
+  <br />
+  <sub>点击查看完整视频</sub>
+</div>
+
 ## 核心约定
 
 - Central skills 目录（默认）：`$HOME/.agent-plugins/skills/<skill-name>/`
@@ -96,9 +104,9 @@ ap commands rm [<command>...] [--target <...>] [--scope local|global] [--dry-run
 
 根命令组支持简写：
 
-| 全称 | 别名 |
-|---|---|
-| `skills` | `skill`, `sk`, `s` |
+| 全称       | 别名                  |
+| ---------- | --------------------- |
+| `skills`   | `skill`, `sk`, `s`    |
 | `commands` | `command`, `cmd`, `c` |
 
 子命令也支持简写（按位置解析）：
@@ -122,27 +130,27 @@ ap c show         # commands show
 
 ### Skills 路径
 
-| 目标 | local | global |
-|---|---|---|
-| Cursor | `<project>/.cursor/skills/` | `~/.cursor/skills/` |
-| Gemini CLI | `<project>/.gemini/skills/` | `~/.gemini/skills/` |
-| Codex | `<project>/.codex/skills/` | `$CODEX_HOME/skills/` |
-| Claude Code | `<project>/.claude/skills/` | `~/.claude/skills/` |
-| Antigravity | `<project>/.agent/skills/` | `~/.gemini/antigravity/global_skills/` |
-| Openskills | `<project>/.agent/skills/` | `~/.agent/skills/` |
-| Agents (Vercel Labs) | `<project>/.agents/skills/` | `~/.agents/skills/` |
+| 目标                 | local                       | global                                 |
+| -------------------- | --------------------------- | -------------------------------------- |
+| Cursor               | `<project>/.cursor/skills/` | `~/.cursor/skills/`                    |
+| Gemini CLI           | `<project>/.gemini/skills/` | `~/.gemini/skills/`                    |
+| Codex                | `<project>/.codex/skills/`  | `$CODEX_HOME/skills/`                  |
+| Claude Code          | `<project>/.claude/skills/` | `~/.claude/skills/`                    |
+| Antigravity          | `<project>/.agent/skills/`  | `~/.gemini/antigravity/global_skills/` |
+| Openskills           | `<project>/.agent/skills/`  | `~/.agent/skills/`                     |
+| Agents (Vercel Labs) | `<project>/.agents/skills/` | `~/.agents/skills/`                    |
 
 ### Commands 路径
 
-| 目标 | local | global |
-|---|---|---|
-| Cursor | `<project>/.cursor/commands/` | `~/.cursor/commands/` |
-| Gemini CLI | `<project>/.gemini/commands/` | `~/.gemini/commands/` |
-| Codex | `<project>/.codex/commands/` | `$CODEX_HOME/commands/` |
-| Claude Code | `<project>/.claude/commands/` | `~/.claude/commands/` |
-| Antigravity | `<project>/.agent/commands/` | `~/.gemini/antigravity/global_commands/` |
-| Openskills | `<project>/.agent/commands/` | `~/.agent/commands/` |
-| Agents (Vercel Labs) | `<project>/.agents/commands/` | `~/.agents/commands/` |
+| 目标                 | local                         | global                                   |
+| -------------------- | ----------------------------- | ---------------------------------------- |
+| Cursor               | `<project>/.cursor/commands/` | `~/.cursor/commands/`                    |
+| Gemini CLI           | `<project>/.gemini/commands/` | `~/.gemini/commands/`                    |
+| Codex                | `<project>/.codex/commands/`  | `$CODEX_HOME/commands/`                  |
+| Claude Code          | `<project>/.claude/commands/` | `~/.claude/commands/`                    |
+| Antigravity          | `<project>/.agent/commands/`  | `~/.gemini/antigravity/global_commands/` |
+| Openskills           | `<project>/.agent/commands/`  | `~/.agent/commands/`                     |
+| Agents (Vercel Labs) | `<project>/.agents/commands/` | `~/.agents/commands/`                    |
 
 ## 配置与状态文件
 
