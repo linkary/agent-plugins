@@ -1,26 +1,28 @@
 # agent-plugins (ap)
 
-一个用于 **LLM Agent Skills** 的集中管理与跨工具同步的 CLI。
+一个用于 **LLM Agent Skills** 和 **Commands** 的集中管理与跨工具同步的 CLI。
 
 ## 核心约定
 
 - Central skills 目录（默认）：`$HOME/.agent-plugins/skills/<skill-name>/`
-- `add/rm/update` 默认管理的是 central skills
-- `sync`：central → 目标工具（单向复制，支持冲突处理）
-- `collect`：目标工具 → central（用于把分散在各处的 skills 收集回来，支持冲突处理）
+- Central commands 目录（默认）：`$HOME/.agent-plugins/commands/<command-name>/`
+- `add/rm/update` 默认管理的是 central 中的条目
+- `sync`：central -> 目标工具（单向复制，支持冲突处理）
+- `collect`：目标工具 -> central（用于把分散在各处的条目收集回来，支持冲突处理）
+- Commands 支持两种形式：**file-form**（单个 `.md` 文件）和 **directory-form**（包含多个文件的目录）
 
 可通过环境变量覆盖默认目录：
 
 - `APG_HOME` 或 `AGENT_PLUGINS_HOME`：覆盖 `~/.agent-plugins`
-- `CODEX_HOME`：覆盖 Codex 的 `~/.codex`（影响 Codex global skills 路径）
+- `CODEX_HOME`：覆盖 Codex 的 `~/.codex`（影响 Codex global 路径）
 
 ## 安装与构建
 
-本项目使用 Bun 开发/构建，但产物可在 Node.js 下运行：
+本项目使用 Bun 开发/构建，但产物可在 Node.js（>= 20）下运行：
 
 ```bash
 bun run build
-node dist/cli.cjs --help
+node dist/cli.mjs --help
 ```
 
 发布到 npm 后会提供两个命令入口：
@@ -30,74 +32,126 @@ node dist/cli.cjs --help
 
 ## 交互体验
 
-交互式选择（`sync/collect/rm` 以及冲突处理）默认使用 `inquirer` 的列表/多选组件；在依赖不可用时会回退到基础 `readline` 交互。
+交互功能（选择、冲突处理、浏览）使用基于 ink 的 TUI：
+
+- **SkillBrowser / CommandBrowser**：左右双面板视图，左侧为可导航列表，右侧为元信息面板。支持搜索（`/`）、vim 风格导航（`j/k/f/b/d/u/g/G`）以及回车打开。
+- **FileBrowser**：目录级导航，用于 directory-form 条目。
+- **FileViewer**：支持语法高亮和滚动的文件查看器。
 
 ## 命令概览
+
+`skills` 和 `commands` 共用相同的子命令结构。
+
+### Skills
 
 ```bash
 # 列出 central skills
 ap skills list
 
-# 添加 skill（git 或本地目录）
+# 浏览与查看 skills（交互式 TUI）
+ap skills show
+
+# 添加 skill（git 或本地路径）
 ap skills add <git-url|local-path> [--name <skill>] [--ref <ref>] [--force]
 
 # 更新 skill（根据 add 时记录的来源）
 ap skills update [<skill>...] [--all] [--dry-run] [--force]
 
 # 同步 central -> 目标工具
-ap skills sync [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|openskills|agents|all> [--scope local|global] [--dry-run] [--force]
+ap skills sync [<skill>...] --target <target> [--scope local|global] [--dry-run] [--force]
 
 # 从目标工具收集 -> central
-ap skills collect [<skill>...] --target <cursor|gemini|codex|claude-code|antigravity|openskills|agents|all> [--scope local|global] [--all] [--dry-run] [--force]
+ap skills collect [<skill>...] --target <target> [--scope local|global] [--all] [--dry-run] [--force]
 
 # 删除 skill（无参数时进入交互模式）
 ap skills rm [<skill>...] [--target <...>] [--scope local|global] [--dry-run]
 ```
 
-说明：
-
-- `--target` 支持 `all`、逗号分隔（如 `--target cursor,codex`）或重复传入（如 `--target cursor --target codex`）
-
-子命令支持简写（按位置解析）：
+### Commands
 
 ```bash
-ap s ls
-ap s a /path/to/skill --name my-skill
+# 列出 central commands
+ap commands list
+
+# 浏览与查看 commands（交互式 TUI）
+ap commands show
+
+# 添加 command（git 或本地路径）
+ap commands add <git-url|local-path> [--name <cmd>] [--ref <ref>] [--force]
+
+# 更新 command
+ap commands update [<command>...] [--all] [--dry-run] [--force]
+
+# 同步 central -> 目标工具
+ap commands sync [<command>...] --target <target> [--scope local|global] [--dry-run] [--force]
+
+# 从目标工具收集 -> central
+ap commands collect [<command>...] --target <target> [--scope local|global] [--all] [--dry-run] [--force]
+
+# 删除 command
+ap commands rm [<command>...] [--target <...>] [--scope local|global] [--dry-run]
 ```
+
+### 别名
+
+根命令组支持简写：
+
+| 全称 | 别名 |
+|---|---|
+| `skills` | `skill`, `sk`, `s` |
+| `commands` | `command`, `cmd`, `c` |
+
+子命令也支持简写（按位置解析）：
+
+```bash
+ap s ls           # skills list
+ap s a /path      # skills add
+ap c ls           # commands list
+ap c show         # commands show
+```
+
+### 目标
+
+`--target` 支持 `all`、逗号分隔（如 `--target cursor,codex`）或重复传入（如 `--target cursor --target codex`）。
+
+支持的目标：`cursor`、`gemini`、`codex`、`claude-code`、`antigravity`、`openskills`、`agents`。
 
 ## 同步目标与默认路径（macOS）
 
 `--scope global` 是默认值。`--scope local` 默认以 git root 为项目根目录（找不到 git root 则使用当前目录）。
 
-- Cursor
-  - local：`<project>/.cursor/skills/`
-  - global：`~/.cursor/skills/`
-- Gemini CLI
-  - local：`<project>/.gemini/skills/`
-  - global：`~/.gemini/skills/`
-- Codex
-  - local：`<project>/.codex/skills/`
-  - global：`$CODEX_HOME/skills/`（默认 `~/.codex/skills/`）
-- Claude Code
-  - local：`<project>/.claude/skills/`
-  - global：`~/.claude/skills/`
-- Google Antigravity
-  - local：`<project>/.agent/skills/`
-  - global：`~/.gemini/antigravity/global_skills/`
-- Openskills
-  - local：`<project>/.agent/skills/`
-  - global：`~/.agent/skills/`
-- Agents (Vercel Labs)
-  - local：`<project>/.agents/skills/`
-  - global：`~/.agents/skills/`
+### Skills 路径
+
+| 目标 | local | global |
+|---|---|---|
+| Cursor | `<project>/.cursor/skills/` | `~/.cursor/skills/` |
+| Gemini CLI | `<project>/.gemini/skills/` | `~/.gemini/skills/` |
+| Codex | `<project>/.codex/skills/` | `$CODEX_HOME/skills/` |
+| Claude Code | `<project>/.claude/skills/` | `~/.claude/skills/` |
+| Antigravity | `<project>/.agent/skills/` | `~/.gemini/antigravity/global_skills/` |
+| Openskills | `<project>/.agent/skills/` | `~/.agent/skills/` |
+| Agents (Vercel Labs) | `<project>/.agents/skills/` | `~/.agents/skills/` |
+
+### Commands 路径
+
+| 目标 | local | global |
+|---|---|---|
+| Cursor | `<project>/.cursor/commands/` | `~/.cursor/commands/` |
+| Gemini CLI | `<project>/.gemini/commands/` | `~/.gemini/commands/` |
+| Codex | `<project>/.codex/commands/` | `$CODEX_HOME/commands/` |
+| Claude Code | `<project>/.claude/commands/` | `~/.claude/commands/` |
+| Antigravity | `<project>/.agent/commands/` | `~/.gemini/antigravity/global_commands/` |
+| Openskills | `<project>/.agent/commands/` | `~/.agent/commands/` |
+| Agents (Vercel Labs) | `<project>/.agents/commands/` | `~/.agents/commands/` |
 
 ## 配置与状态文件
 
 - 配置：`$APG_HOME/config.json`
   - 每个 target 的 `defaultScope`（local/global）
   - 每个 target 的 `include`（要同步的 skills；支持 `["*"]` 表示全部）
+  - 每个 target 的 `includeCommands`（要同步的 commands；支持 `["*"]` 表示全部）
 - 状态：`$APG_HOME/sync-state.json`
-  - 记录每个 target/scope（以及 local 的 projectRoot）上次对齐的 hash，用于判断“目标端是否被手动修改过”并优化冲突处理
+  - 记录每个 target/scope（以及 local 的 projectRoot）上次对齐的 hash，用于判断"目标端是否被手动修改过"并优化冲突处理
 
 ## 冲突策略
 
