@@ -15,6 +15,13 @@ import { cmdCommandsRemove } from '../commands/commands/rm.js';
 import { cmdCommandsSync } from '../commands/commands/sync.js';
 import { cmdCommandsUpdate } from '../commands/commands/update.js';
 import { cmdCommandsShow } from '../commands/commands/show.js';
+import { cmdMcpAdd } from '../commands/mcp/add.js';
+import { cmdMcpCollect } from '../commands/mcp/collect.js';
+import { cmdMcpList } from '../commands/mcp/list.js';
+import { cmdMcpRemove } from '../commands/mcp/rm.js';
+import { cmdMcpSync } from '../commands/mcp/sync.js';
+import { cmdMcpUpdate } from '../commands/mcp/update.js';
+import { cmdMcpShow } from '../commands/mcp/show.js';
 import { PKG_NAME, PKG_VERSION } from '../meta.js';
 
 export type CliRunContext = {
@@ -48,6 +55,10 @@ export async function runCli(argv: string[], ctx: CliRunContext): Promise<number
 
   if (group === 'commands') {
     return await dispatchCommands(cmd, positionals, flags, ctx);
+  }
+
+  if (group === 'mcp') {
+    return await dispatchMcp(cmd, positionals, flags, ctx);
   }
 
   process.stderr.write(`Unknown group: ${group}\n\n`);
@@ -107,6 +118,34 @@ async function dispatchCommands(
     case 'help':
     default:
       process.stdout.write(formatHelp('commands'));
+      return cmd === 'help' ? 0 : 1;
+  }
+}
+
+async function dispatchMcp(
+  cmd: string,
+  positionals: string[],
+  flags: Record<string, string | boolean>,
+  ctx: CliRunContext,
+): Promise<number> {
+  switch (cmd) {
+    case 'add':
+      return await cmdMcpAdd(positionals, flags, ctx);
+    case 'rm':
+      return await cmdMcpRemove(positionals, flags, ctx);
+    case 'update':
+      return await cmdMcpUpdate(positionals, flags, ctx);
+    case 'sync':
+      return await cmdMcpSync(positionals, flags, ctx);
+    case 'collect':
+      return await cmdMcpCollect(positionals, flags, ctx);
+    case 'list':
+      return await cmdMcpList(positionals, flags, ctx);
+    case 'show':
+      return await cmdMcpShow(positionals, flags, ctx);
+    case 'help':
+    default:
+      process.stdout.write(formatHelp('mcp'));
       return cmd === 'help' ? 0 : 1;
   }
 }

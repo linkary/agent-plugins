@@ -1,4 +1,4 @@
-import { CLI_OPTIONS, SUBCOMMANDS, COMMAND_SUBCOMMANDS } from '../util/cli-defs.js';
+import { CLI_OPTIONS, SUBCOMMANDS, COMMAND_SUBCOMMANDS, MCP_SUBCOMMANDS } from '../util/cli-defs.js';
 import { PKG_NAME, PKG_VERSION } from '../meta.js';
 import type { SubcommandDef } from '../util/cli-defs.js';
 
@@ -22,6 +22,13 @@ export function formatHelp(group?: string, subcommand?: string): string {
     return formatGroupHelp('commands', COMMAND_SUBCOMMANDS);
   }
 
+  if (group === 'mcp') {
+    if (subcommand && subcommand in MCP_SUBCOMMANDS) {
+      return formatSubcommandHelp('mcp', subcommand as keyof typeof MCP_SUBCOMMANDS, MCP_SUBCOMMANDS);
+    }
+    return formatGroupHelp('mcp', MCP_SUBCOMMANDS);
+  }
+
   // 主帮助页
   return formatMainHelp();
 }
@@ -29,11 +36,12 @@ export function formatHelp(group?: string, subcommand?: string): string {
 function formatMainHelp(): string {
   const lines: string[] = [];
 
-  lines.push(`${PKG_NAME} (ap) — LLM skills & commands manager`);
+  lines.push(`${PKG_NAME} (ap) — LLM skills, commands & MCP manager`);
   lines.push('');
   lines.push('Usage:');
   lines.push('  ap skills <command> [args] [options]');
   lines.push('  ap commands <command> [args] [options]');
+  lines.push('  ap mcp <command> [args] [options]');
   lines.push('');
 
   lines.push('Skill Commands:');
@@ -42,6 +50,10 @@ function formatMainHelp(): string {
 
   lines.push('Command Commands:');
   lines.push(formatSubcommandList(COMMAND_SUBCOMMANDS));
+  lines.push('');
+
+  lines.push('MCP Commands:');
+  lines.push(formatSubcommandList(MCP_SUBCOMMANDS));
   lines.push('');
 
   lines.push('Global Options:');
@@ -55,6 +67,7 @@ function formatMainHelp(): string {
   lines.push('Aliases:');
   lines.push('  skills  skill, sk, s');
   lines.push('  commands  command, cmd, c');
+  lines.push('  mcp     m');
 
   lines.push('');
   lines.push('Environment:');

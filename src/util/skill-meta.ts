@@ -132,13 +132,14 @@ export function formatRelativeTime(isoDate: string | undefined): string {
 /**
  * 将 SkillSource 格式化为简短的可读字符串。
  */
-export function formatSourceShort(source: SkillSource | undefined): string {
+export function formatSourceShort(source: SkillSource | { type: string; from?: { target: string } } | undefined): string {
   if (!source) return '';
-  if (source.type === 'git') {
-    const repoShort = source.url.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+  if (source.type === 'git' && 'url' in source) {
+    const repoShort = (source as { url: string }).url.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
     return repoShort;
   }
   if (source.type === 'local') return 'local';
-  if (source.type === 'collected') return `from ${source.from.target}`;
+  if (source.type === 'manual') return 'manual';
+  if (source.type === 'collected' && 'from' in source) return `from ${(source as { from: { target: string } }).from.target}`;
   return '';
 }
