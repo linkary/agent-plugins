@@ -166,17 +166,17 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
       )
       .filter((v): v is string => v !== null);
 
+    const STATUS_LABELS: Record<CollectStatus, string> = {
+      new: `${ANSI.green}new${ANSI.reset}`,
+      identical: `${ANSI.gray}identical${ANSI.reset}`,
+      conflict: `${ANSI.red}conflict${ANSI.reset}`,
+      overwrite: `${ANSI.green}overwrite${ANSI.reset}`,
+    };
+
     const selectedKeys = await promptMultiSelect({
       message: `Confirm skills to collect (target: ${destBaseDir}):`,
       options: skillsWithStatus.map((s, i) => {
-        // Build status label
-        const labels: string[] = [];
-        if (s.isDuplicate) labels.push(`${ANSI.dim}dup${ANSI.reset}`);
-        else if (s.status === 'new') labels.push(`${ANSI.green}new${ANSI.reset}`);
-        else if (s.status === 'identical') labels.push(`${ANSI.gray}identical${ANSI.reset}`);
-        else if (s.status === 'conflict') labels.push(`${ANSI.red}conflict${ANSI.reset}`);
-        
-        const statusLabel = labels.join(', ');
+        const statusLabel = s.isDuplicate ? `${ANSI.dim}dup${ANSI.reset}` : STATUS_LABELS[s.status];
         return {
           label: `${s.name} (${getColoredLabel(s.adapter)}) [${statusLabel}]`,
           value: String(i),
@@ -206,8 +206,6 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
     }
     finalSkills = toCollect;
   }
-  // Reassign for execution phase
-  const skillsToExecute = finalSkills;
 
   // Phase 5: Execution with Batch Conflict Resolution
   if (!dryRun) await ensureCentralStore();
@@ -216,27 +214,23 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
   const syncState = await loadSyncState();
   const centralSkills = await listDirNames(getCentralSkillsDir());
 
-  // Detect which of the *selected* skills (finalSkills) have conflicts
-  // We already calculated hashes in Phase 3, but let's re-verify or use that info.
-  // Actually, we can just use the status we computed if we pass it through.
-  // But wait, finalSkills was mapped from skillsWithStatus, so it HAS the status and hashes!
-  const conflicts = skillsWithStatus.filter((s) => finalSkills.includes(s) && s.status === 'conflict');
-  
-  // Resolution strategy map (skill name -> action)
-  const resolutions = new Map<string, 'overwrite' | 'backup' | 'keep' | 'skip'>();
-  
-  // Automatic resolution for non-conflicts
+  const conflicts = finalSkills.filter((s) => s.status === 'conflict');
+
+  // 冲突解决策略映射（skill name → action）
+  type Resolution = 'overwrite' | 'backup' | 'keep' | 'skip';
+  const resolutions = new Map<string, Resolution>();
+
+  // 非冲突条目自动设为 overwrite
   for (const s of finalSkills) {
     if (s.status !== 'conflict') {
       resolutions.set(s.name, 'overwrite'); // New or identical, just overwrite/copy
     }
   }
 
-  // Handle conflicts
-  if (conflicts.length > 0 && interactive) { // conflictMode is not used here, interactive is key
+  // 处理冲突
+  if (conflicts.length > 0 && interactive) {
     process.stdout.write(`\n${ANSI.red}Conflicts detected for ${conflicts.length} skill(s).${ANSI.reset}\n`);
-    
-    // Batch Prompt
+
     const batchAction = await promptChoice({
       message: 'How would you like to resolve these conflicts?',
       options: [
@@ -252,15 +246,20 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
       process.stdout.write('Operation cancelled.\n');
       return 0;
     }
-    
-    if (batchAction === 'o') {
-      conflicts.forEach(c => resolutions.set(c.name, 'overwrite'));
-    } else if (batchAction === 's') {
-      conflicts.forEach(c => resolutions.set(c.name, 'skip'));
-    } else if (batchAction === 'b') {
-      conflicts.forEach(c => resolutions.set(c.name, 'backup'));
-    } else if (batchAction === 'i') {
-      // Individual selection
+
+    const BATCH_KEY_TO_RESOLUTION: Record<string, Resolution> = { o: 'overwrite', s: 'skip', b: 'backup' };
+    const batchResolution = BATCH_KEY_TO_RESOLUTION[batchAction];
+
+    if (batchResolution) {
+      conflicts.forEach((c) => resolutions.set(c.name, batchResolution));
+    } else {
+      // 逐个选择
+      const INDIVIDUAL_KEY_TO_RESOLUTION: Record<string, Resolution> = {
+        o: 'overwrite',
+        b: 'backup',
+        k: 'keep',
+        s: 'skip',
+      };
       for (const c of conflicts) {
         const action = await promptChoice({
           message: `Resolve conflict for ${c.name}:`,
@@ -271,13 +270,7 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
             { key: 's', label: 'Skip' },
           ],
         });
-        const keyToAction: Record<string, 'overwrite' | 'backup' | 'keep' | 'skip'> = {
-          o: 'overwrite',
-          b: 'backup',
-          k: 'keep',
-          s: 'skip',
-        };
-        resolutions.set(c.name, keyToAction[action] ?? 'skip');
+        resolutions.set(c.name, INDIVIDUAL_KEY_TO_RESOLUTION[action] ?? 'skip');
       }
     }
   } else if (force) {
@@ -290,11 +283,9 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
     return 1;
   }
 
-  // Execute based on resolutions
   for (const skill of finalSkills) {
-    const { name, srcDir, destDir, adapter, scope, projectRoot, srcHash, destHash } = skill;
-    
-    // Safety check if source disappeared
+    const { name, srcDir, destDir, adapter, scope, projectRoot, srcHash } = skill;
+
     if (!(await pathExists(srcDir))) {
       process.stderr.write(`Missing source skill: ${name}\n`);
       continue;
@@ -308,8 +299,6 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
     const context = syncState.contexts[contextId] ?? { skills: {} as Record<string, { hash: string; syncedAt: string }> };
     syncState.contexts[contextId] = context;
 
-    // For 'keep both', we rename INCOMING (source) to a new name in dest?
-    // "Keep both (rename incoming)"
     let targetDest = destDir;
     let targetName = name;
     
@@ -327,14 +316,13 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
     }
 
     if (action === 'keep') {
-       // Find unique name
-       let counter = 1;
-       while (await pathExists(targetDest)) {
-         targetName = `${name}_new${counter}`;
-         targetDest = path.join(destBaseDir, targetName);
-         counter++;
-       }
-       process.stdout.write(`Renaming incoming to ${targetName}\n`);
+      let counter = 1;
+      while (await pathExists(targetDest)) {
+        targetName = `${name}_new${counter}`;
+        targetDest = path.join(destBaseDir, targetName);
+        counter++;
+      }
+      process.stdout.write(`Renaming incoming to ${targetName}\n`);
     }
 
     if (action === 'backup') {

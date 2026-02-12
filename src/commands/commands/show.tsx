@@ -1,9 +1,8 @@
-import path from 'node:path';
 import React, { useState, useCallback } from 'react';
 import { render } from 'ink';
 import { loadConfig } from '../../core/config.js';
-import { loadRegistry } from '../../core/registry.js';
-import { listCentralCommands } from '../../core/command-store.js';
+import { loadRegistry, type CommandRecord } from '../../core/registry.js';
+import { listCentralCommands, findEntryMd } from '../../core/command-store.js';
 import { getAdapters } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { gatherTargetCommands, findSyncedCommandCopies } from './manage-utils.js';
@@ -11,10 +10,8 @@ import { SkillBrowser, type SkillEntry } from '../../ui/SkillBrowser.js';
 import { FileBrowser } from '../../ui/FileBrowser.js';
 import { FileViewer } from '../../ui/FileViewer.js';
 import { readCommandDescription } from '../../util/command-meta.js';
-import { findEntryMd } from '../../core/command-store.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
-import type { CommandRecord } from '../../core/registry.js';
 
 // ─── Entry point ────────────────────────────────────────────────────────
 
