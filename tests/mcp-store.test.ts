@@ -133,5 +133,17 @@ describe('mcp-store', () => {
       const def2: McpServerDef = { args: ['-y', 'pkg'], command: 'npx', type: 'stdio' };
       expect(computeMcpHash(def1)).toBe(computeMcpHash(def2));
     });
+
+    it('嵌套对象（env/headers）的值应参与 hash 计算', () => {
+      const defA: McpServerDef = { command: 'npx', args: ['-y', 'pkg'], env: { KEY: 'aaa' } };
+      const defB: McpServerDef = { command: 'npx', args: ['-y', 'pkg'], env: { KEY: 'bbb' } };
+      expect(computeMcpHash(defA)).not.toBe(computeMcpHash(defB));
+    });
+
+    it('嵌套对象键的顺序不影响 hash', () => {
+      const defA: McpServerDef = { command: 'npx', env: { A: '1', B: '2' } };
+      const defB: McpServerDef = { command: 'npx', env: { B: '2', A: '1' } };
+      expect(computeMcpHash(defA)).toBe(computeMcpHash(defB));
+    });
   });
 });

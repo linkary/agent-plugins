@@ -4,7 +4,7 @@
 import { listCentralMcpServers, readCentralMcpServer } from '../../core/mcp-store.js';
 import { loadRegistry } from '../../core/registry.js';
 import { ANSI } from '../../util/ansi.js';
-import { formatRelativeTime } from '../../util/skill-meta.js';
+import { formatRelativeTime, formatSourceShort } from '../../util/skill-meta.js';
 import type { McpServerDef } from '../../core/mcp-types.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
@@ -17,14 +17,6 @@ function formatMcpShort(def: McpServerDef): string {
   }
   if (def.url) return def.url;
   return def.type ?? 'unknown';
-}
-
-/** 将 McpSource 格式化为简短的可读字符串 */
-function formatMcpSourceShort(source: { type: string; from?: { target: string } } | undefined): string {
-  if (!source) return '';
-  if (source.type === 'manual') return 'manual';
-  if (source.type === 'collected' && source.from) return `from ${source.from.target}`;
-  return '';
 }
 
 export async function cmdMcpList(_positionals: string[], flags: ParsedFlags, _ctx: CliRunContext) {
@@ -44,7 +36,7 @@ export async function cmdMcpList(_positionals: string[], flags: ParsedFlags, _ct
     let line = `${ANSI.cyan}${name}${ANSI.reset}`;
 
     // 来源信息
-    const sourceLabel = formatMcpSourceShort(record?.source);
+    const sourceLabel = formatSourceShort(record?.source);
     if (sourceLabel) {
       line += ` ${ANSI.dim}(${sourceLabel})${ANSI.reset}`;
     }

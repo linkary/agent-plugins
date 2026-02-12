@@ -61,10 +61,25 @@ export async function removeCentralMcpServer(name: string): Promise<boolean> {
 }
 
 /**
+ * 递归排序对象键，确保嵌套对象（如 env、headers）也参与序列化。
+ * 数组元素保持原始顺序。
+ */
+function deepSortKeys(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(deepSortKeys);
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+    sorted[key] = deepSortKeys((value as Record<string, unknown>)[key]);
+  }
+  return sorted;
+}
+
+/**
  * 计算 MCP 服务器定义的 hash。
- * 使用 JSON 序列化（排序键）确保一致性。
+ * 使用递归排序键的 JSON 序列化确保一致性，
+ * 包括 env / headers 等嵌套对象的键。
  */
 export function computeMcpHash(def: McpServerDef): string {
-  const canonical = JSON.stringify(def, Object.keys(def).sort());
+  const canonical = JSON.stringify(deepSortKeys(def));
   return `sha256:${crypto.createHash('sha256').update(canonical).digest('hex')}`;
 }
