@@ -4,7 +4,7 @@
  */
 import path from 'node:path';
 import fs from 'node:fs/promises';
-import type { SkillSource } from '../core/registry.js';
+import type { SkillSource, McpSource } from '../core/registry.js';
 
 // ─── Description ────────────────────────────────────────────────────────
 
@@ -130,16 +130,20 @@ export function formatRelativeTime(isoDate: string | undefined): string {
 // ─── Source formatting ──────────────────────────────────────────────────
 
 /**
- * 将 SkillSource 格式化为简短的可读字符串。
+ * 将 SkillSource / McpSource 格式化为简短的可读字符串。
  */
-export function formatSourceShort(source: SkillSource | { type: string; from?: { target: string } } | undefined): string {
+export function formatSourceShort(source: SkillSource | McpSource | undefined): string {
   if (!source) return '';
-  if (source.type === 'git' && 'url' in source) {
-    const repoShort = (source as { url: string }).url.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
-    return repoShort;
+  switch (source.type) {
+    case 'git':
+      return source.url.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '');
+    case 'local':
+      return 'local';
+    case 'manual':
+      return 'manual';
+    case 'collected':
+      return `from ${source.from.target}`;
+    default:
+      return '';
   }
-  if (source.type === 'local') return 'local';
-  if (source.type === 'manual') return 'manual';
-  if (source.type === 'collected' && 'from' in source) return `from ${(source as { from: { target: string } }).from.target}`;
-  return '';
 }

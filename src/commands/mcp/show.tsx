@@ -7,7 +7,7 @@
 import React, { useState, useCallback } from 'react';
 import { render } from 'ink';
 import { loadConfig } from '../../core/config.js';
-import { loadRegistry, type McpRecord } from '../../core/registry.js';
+import { loadRegistry } from '../../core/registry.js';
 import { listCentralMcpServers, getCentralMcpPath, readCentralMcpServer } from '../../core/mcp-store.js';
 import { getAdapters } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
@@ -39,7 +39,7 @@ function formatMcpDescription(def: McpServerDef): string {
 }
 
 /** 读取 MCP 服务器定义并返回格式化描述 */
-async function readMcpDescription(filePath: string, name: string): Promise<string | undefined> {
+async function readMcpDescription(_filePath: string, name: string): Promise<string | undefined> {
   const def = await readCentralMcpServer(name);
   if (!def) return undefined;
   return formatMcpDescription(def);
@@ -97,8 +97,7 @@ export async function cmdMcpShow(_positionals: string[], flags: ParsedFlags, ctx
     mcpEntries = servers.map((name) => ({
       name,
       path: getCentralMcpPath(name),
-      // 将 McpRecord 兼容映射为 SkillRecord 形状（addedAt/updatedAt/source 都兼容）
-      record: registry.mcp?.[name] as unknown as SkillEntry['record'],
+      record: registry.mcp?.[name],
     }));
   }
 

@@ -3,7 +3,7 @@ import { Box, Text, useInput, useStdout } from 'ink';
 import { readSkillDescription, formatRelativeTime, formatSourceShort } from '../util/skill-meta.js';
 import { findSyncedCopies, type SyncedCopy } from '../commands/skills/manage-utils.js';
 import { loadConfig } from '../core/config.js';
-import type { SkillRecord } from '../core/registry.js';
+import type { SkillRecord, McpRecord } from '../core/registry.js';
 import type { ConfigV1 } from '../core/config.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -11,7 +11,8 @@ import type { ConfigV1 } from '../core/config.js';
 export type SkillEntry = {
   name: string;
   path: string;
-  record?: SkillRecord;
+  /** SkillRecord / CommandRecord (structurally compatible) / McpRecord */
+  record?: SkillRecord | McpRecord;
 };
 
 export type SyncedDisplay = {
