@@ -1,34 +1,43 @@
-const ALIASES = {
-  // Root commands
-  skills: ['skills', 'skill', 'sk', 's'],
-  agents: ['agents', 'ag'],
-  commands: ['commands', 'command', 'cmd', 'c'],
-  mcp: ['mcp', 'm'],
-  // Actions (共用于 skills 和 commands)
-  add: ['add', 'a', 'install', 'i'],
-  rm: ['rm', 'remove', 'del', 'delete'],
-  update: ['update', 'up', 'u'],
-  sync: ['sync', 'sy'],
-  collect: ['collect', 'col', 'c'],
-  list: ['list', 'ls'],
-  show: ['show', 'info', 's'],
-  help: ['help', 'h'],
-  // Legacy (deprecated): `agent skills ...`
-  agent: ['agent'],
-} as const;
+import {
+  ROOT_ALIASES,
+  SUBCOMMANDS,
+  AGENT_SUBCOMMANDS,
+  COMMAND_SUBCOMMANDS,
+  MCP_SUBCOMMANDS,
+  type SubcommandDef,
+} from './cli-defs.js';
 
-type Canonical = keyof typeof ALIASES;
+const ROOT_GROUPS = ['skills', 'agents', 'commands', 'mcp'] as const;
+type RootGroup = (typeof ROOT_GROUPS)[number];
+type Action = 'add' | 'rm' | 'update' | 'sync' | 'collect' | 'list' | 'show' | 'help';
+type Canonical = RootGroup | Action | 'agent';
 
-function resolveToken(token: string, allowed: readonly Canonical[]): Canonical | null {
-  const lower = token.toLowerCase();
-  for (const name of allowed) {
-    if (ALIASES[name].includes(lower)) return name;
+const SUBCOMMANDS_BY_GROUP: Record<RootGroup, Record<string, SubcommandDef>> = {
+  skills: SUBCOMMANDS,
+  agents: AGENT_SUBCOMMANDS,
+  commands: COMMAND_SUBCOMMANDS,
+  mcp: MCP_SUBCOMMANDS,
+};
+
+function resolveRootGroup(token: string | undefined): RootGroup | null {
+  if (!token) return null;
+  const resolved = ROOT_ALIASES[token.toLowerCase()];
+  if (!resolved) return null;
+  return ROOT_GROUPS.includes(resolved as RootGroup) ? (resolved as RootGroup) : null;
+}
+
+function resolveAction(group: RootGroup, token: string | undefined): Action | null {
+  if (!token) return 'help';
+  const normalized = token.toLowerCase();
+  if (normalized === 'help' || normalized === 'h') return 'help';
+
+  const defs = SUBCOMMANDS_BY_GROUP[group];
+  for (const [name, def] of Object.entries(defs)) {
+    if (normalized === name) return name as Action;
+    if (def.aliases?.includes(normalized)) return name as Action;
   }
   return null;
 }
-
-const ROOT_GROUPS = ['skills', 'agents', 'commands', 'mcp'] as const satisfies readonly Canonical[];
-const ACTIONS = ['add', 'rm', 'update', 'sync', 'collect', 'list', 'show', 'help'] as const satisfies readonly Canonical[];
 
 export function resolveCommandPath(argv: string[]): {
   path: Canonical[];
@@ -36,46 +45,43 @@ export function resolveCommandPath(argv: string[]): {
   error: string | null;
 } {
   // Legacy syntax: `agent skills <action> ...`
-  // Also supports `agent <action> ...` as shorthand for `agents <action> ...`.
-  if (argv[0] && resolveToken(argv[0], ['agent']) === 'agent') {
+  // Also supports shorthand: `agent <action> ...` => `agents <action> ...`.
+  if (argv[0]?.toLowerCase() === 'agent') {
     const second = argv[1];
-    const secondResolved = second ? resolveToken(second, ROOT_GROUPS) : null;
-    if (!secondResolved) {
-      const actionResolved = second ? resolveToken(second, ACTIONS) : 'help';
+    const asGroup = resolveRootGroup(second);
+
+    if (asGroup) {
+      const actionToken = argv[2];
+      const actionResolved = resolveAction(asGroup, actionToken);
       if (!actionResolved) {
         return {
-          path: ['agent'],
-          rest: argv.slice(1),
-          error: `Unknown subcommand for agent: ${second ?? '(none)'}`,
+          path: [asGroup],
+          rest: argv.slice(2),
+          error: `Unknown action for ${asGroup}: ${actionToken}`,
         };
       }
-      return { path: ['agents', actionResolved], rest: argv.slice(2), error: null };
+      return { path: [asGroup, actionResolved], rest: argv.slice(3), error: null };
     }
 
-    const actionToken = argv[2];
-    const actionResolved = actionToken ? resolveToken(actionToken, ACTIONS) : 'help';
-
-    if (!actionResolved) {
+    const shorthandAction = resolveAction('agents', second);
+    if (!shorthandAction) {
       return {
-        path: [secondResolved],
-        rest: argv.slice(2),
-        error: `Unknown action for ${secondResolved}: ${actionToken}`,
+        path: ['agent'],
+        rest: argv.slice(1),
+        error: `Unknown subcommand for agent: ${second ?? '(none)'}`,
       };
     }
-
-    return { path: [secondResolved, actionResolved], rest: argv.slice(3), error: null };
+    return { path: ['agents', shorthandAction], rest: argv.slice(2), error: null };
   }
 
-  // New syntax: `skills <action> ...` or `commands <action> ...`
   const root = argv[0];
-  const rootResolved = root ? resolveToken(root, ROOT_GROUPS) : null;
+  const rootResolved = resolveRootGroup(root);
   if (!rootResolved) {
     return { path: [], rest: argv, error: `Unknown command: ${root ?? '(none)'}` };
   }
 
   const actionToken = argv[1];
-  const actionResolved = actionToken ? resolveToken(actionToken, ACTIONS) : 'help';
-
+  const actionResolved = resolveAction(rootResolved, actionToken);
   if (!actionResolved) {
     return {
       path: [rootResolved],

@@ -15,4 +15,17 @@ describe('command-path', () => {
     expect(result.path).toEqual(['agents', 'sync']);
     expect(result.rest).toEqual(['--target', 'cursor']);
   });
+
+  it('supports legacy agent <group> <action> syntax', () => {
+    const result = resolveCommandPath(['agent', 'skills', 'sync', '--target', 'cursor']);
+    expect(result.error).toBeNull();
+    expect(result.path).toEqual(['skills', 'sync']);
+    expect(result.rest).toEqual(['--target', 'cursor']);
+  });
+
+  it('applies group-specific subcommand rules', () => {
+    const result = resolveCommandPath(['agents', 'show']);
+    expect(result.error).toBe('Unknown action for agents: show');
+    expect(result.path).toEqual(['agents']);
+  });
 });
