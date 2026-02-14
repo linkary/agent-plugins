@@ -1,10 +1,11 @@
-import { buildShortFlagMap, getValueShortFlags } from './cli-defs.js';
+import { buildShortFlagMap, getValueLongFlags, getValueShortFlags } from './cli-defs.js';
 
 export type ParsedFlags = Record<string, string | boolean | string[]>;
 
 // Build maps from metadata at module load time
 const SHORT_TO_LONG = buildShortFlagMap();
 const VALUE_SHORT_FLAGS = getValueShortFlags();
+const VALUE_LONG_FLAGS = getValueLongFlags();
 
 function pushFlag(flags: ParsedFlags, key: string, value: string | boolean) {
   const existing = flags[key];
@@ -40,9 +41,13 @@ export function parseOptions(argv: string[]): { positionals: string[]; flags: Pa
       }
 
       const next = argv[i + 1];
-      if (next !== undefined && !next.startsWith('-')) {
-        pushFlag(flags, rawKey, next);
-        i++;
+      if (VALUE_LONG_FLAGS.has(rawKey)) {
+        if (next !== undefined && !next.startsWith('-')) {
+          pushFlag(flags, rawKey, next);
+          i++;
+        } else {
+          pushFlag(flags, rawKey, true);
+        }
       } else {
         pushFlag(flags, rawKey, true);
       }

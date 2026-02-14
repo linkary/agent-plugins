@@ -12,6 +12,8 @@ import { resolveTargetContext } from '../../util/scope.js';
 import { promptConfirm, promptMultiSelect } from '../../util/prompt.js';
 import { ANSI } from '../../util/ansi.js';
 import { findSyncedMcpCopies, type SyncedMcpCopy } from './manage-utils.js';
+import type { ConfigV1 } from '../../core/config.js';
+import type { McpConfigSpec } from '../../core/mcp-types.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
@@ -104,17 +106,8 @@ async function removeServers(
 
   // 级联删除
   if (cascadeDelete) {
-    const adapters = getAdapters();
     for (const copy of copies) {
-      const adapter = adapters.find((a) => a.id === copy.adapterId);
-      if (!adapter?.resolveMcpConfig) continue;
-
-      const targetConfig = config.targets[adapter.id];
-      const { scope, projectRoot, homeDir } = await resolveTargetContext({
-        defaultScope: targetConfig?.defaultScope ?? 'global',
-        currentCwd: ctx.cwd,
-      });
-      const mcpSpec = adapter.resolveMcpConfig({ scope, projectRoot, homeDir });
+      const mcpSpec = await resolveCascadeCopyMcpSpec(copy, config, ctx.cwd);
       if (!mcpSpec) continue;
 
       const removed = await removeMcpServer(mcpSpec, copy.serverName);
@@ -144,4 +137,26 @@ async function removeServers(
   await saveSyncState(syncState);
 
   return 0;
+}
+
+/**
+ * Resolve MCP config path for a discovered synced copy.
+ * Uses the copy's discovered scope/projectRoot instead of target defaults.
+ */
+export async function resolveCascadeCopyMcpSpec(
+  copy: SyncedMcpCopy,
+  config: ConfigV1,
+  currentCwd: string,
+): Promise<McpConfigSpec | null> {
+  const adapter = getAdapters().find((a) => a.id === copy.adapterId);
+  if (!adapter?.resolveMcpConfig) return null;
+
+  const targetConfig = config.targets[adapter.id];
+  const { scope, projectRoot, homeDir } = await resolveTargetContext({
+    scopeFlag: copy.scope,
+    cwdFlag: copy.scope === 'local' ? copy.projectRoot : undefined,
+    defaultScope: targetConfig?.defaultScope ?? 'global',
+    currentCwd,
+  });
+  return adapter.resolveMcpConfig({ scope, projectRoot, homeDir });
 }

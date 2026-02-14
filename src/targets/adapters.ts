@@ -4,7 +4,16 @@ import type { McpConfigSpec } from '../core/mcp-types.js';
 
 export type Scope = 'local' | 'global';
 
-export type TargetId = 'cursor' | 'gemini' | 'codex' | 'claude-code' | 'antigravity' | 'openskills' | 'agents';
+export type TargetId =
+  | 'cursor'
+  | 'gemini'
+  | 'codex'
+  | 'claude-code'
+  | 'antigravity'
+  | 'openskills'
+  | 'agents'
+  | 'opencode'
+  | 'qoder';
 
 export type ResolveParams = {
   scope: Scope;
@@ -145,6 +154,44 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(homeDir, '.agents', 'commands')
         : path.join(projectRoot, '.agents', 'commands'),
+  },
+  {
+    id: 'opencode',
+    label: 'OpenCode',
+    color: ANSI.teal,
+    aliases: ['opencode', 'open-code'],
+    resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.opencode', 'skills') : path.join(projectRoot, '.opencode', 'skills'),
+    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global'
+        ? path.join(homeDir, '.opencode', 'commands')
+        : path.join(projectRoot, '.opencode', 'commands'),
+    resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
+      configPath:
+        scope === 'global'
+          ? path.join(homeDir, '.opencode', 'mcp.json')
+          : path.join(projectRoot, '.opencode', 'mcp.json'),
+      format: 'json',
+      serversKey: 'mcpServers',
+    }),
+  },
+  {
+    id: 'qoder',
+    label: 'Qoder',
+    color: ANSI.pink,
+    aliases: ['qoder'],
+    resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.qoder', 'skills') : path.join(projectRoot, '.qoder', 'skills'),
+    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.qoder', 'commands') : path.join(projectRoot, '.qoder', 'commands'),
+    resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
+      configPath:
+        scope === 'global'
+          ? path.join(homeDir, '.qoder', 'mcp.json')
+          : path.join(projectRoot, '.qoder', 'mcp.json'),
+      format: 'json',
+      serversKey: 'mcpServers',
+    }),
   },
 ];
 

@@ -29,11 +29,19 @@ export const CLI_OPTIONS = {
   version: { short: 'V', desc: 'Show version' },
   'dry-run': { short: 'd', desc: 'Preview changes without applying' },
   force: { short: 'f', desc: 'Overwrite on conflicts' },
-  target: { short: 't', arg: '<tools>', desc: 'Target tools (cursor|gemini|codex|claude-code|antigravity|openskills|agents|all)' },
+  target: {
+    short: 't',
+    arg: '<tools>',
+    desc: 'Target tools (cursor|gemini|codex|claude-code|antigravity|openskills|agents|opencode|qoder|all)',
+  },
   scope: { arg: '<scope>', desc: 'Scope: global (default) or local' },
   global: { short: 'g', desc: 'Alias for --scope=global' },
   local: { short: 'l', desc: 'Alias for --scope=local' },
   name: { short: 'n', arg: '<name>', desc: 'Override skill name' },
+  type: { arg: '<type>', desc: 'MCP transport type (stdio|sse|http|ws)' },
+  command: { arg: '<cmd>', desc: 'MCP stdio command' },
+  args: { arg: '<args>', desc: 'MCP stdio args (space-separated)' },
+  url: { arg: '<url>', desc: 'MCP server URL (for sse/http/ws)' },
   ref: { arg: '<ref>', desc: 'Git ref (branch/tag/commit)' },
   cwd: { short: 'C', arg: '<dir>', desc: 'Override project directory for local scope' },
   all: { short: 'a', desc: 'Apply to all skills' },
@@ -136,7 +144,7 @@ export const MCP_SUBCOMMANDS = {
     desc: 'Add MCP server definition to central store',
     args: '[name]',
     aliases: ['a'],
-    options: ['name', 'force', 'dry-run'],
+    options: ['name', 'type', 'command', 'args', 'url', 'force', 'dry-run'],
   },
   rm: {
     desc: 'Remove MCP server(s)',
@@ -210,6 +218,17 @@ export function getValueShortFlags(): Set<string> {
       for (const s of def.short.split(',')) {
         set.add(s.trim());
       }
+    }
+  }
+  return set;
+}
+
+/** Get set of long flags that take a value (have an `arg`) */
+export function getValueLongFlags(): Set<string> {
+  const set = new Set<string>();
+  for (const [key, def] of Object.entries(CLI_OPTIONS)) {
+    if ('arg' in def && def.arg) {
+      set.add(key);
     }
   }
   return set;

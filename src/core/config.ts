@@ -25,6 +25,8 @@ function defaultConfig(): ConfigV1 {
       antigravity: { defaultScope: 'global', include: ['*'] },
       openskills: { defaultScope: 'global', include: ['*'] },
       agents: { defaultScope: 'global', include: ['*'] },
+      opencode: { defaultScope: 'global', include: ['*'] },
+      qoder: { defaultScope: 'global', include: ['*'] },
     },
   };
 }

@@ -18,15 +18,17 @@ import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { ANSI } from '../../util/ansi.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
-import { computeItemHash } from '../../util/item-utils.js';
+import { computeCommandHash } from '../../util/item-utils.js';
 import { detectTargetCommands, collectToDirectory, collectToFile } from '../../util/command-transform.js';
 import { fsRenameOrCopy } from '../../util/sync-utils.js';
 import type { ParsedFlags } from '../../util/options.js';
 import { promptChoice, promptConfirm, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
+import { parseCommandMeta } from '../../util/command-meta.js';
 
 type CommandEntry = {
   name: string;
+  sourceCommandsDir: string;
   mdPath: string;
   resourceDirPath?: string;
   destDir: string;
@@ -35,6 +37,17 @@ type CommandEntry = {
   scope: Scope;
   projectRoot: string;
 };
+
+function mergeResourceRefs(...lists: (string[] | undefined)[]): string[] | undefined {
+  const merged = new Set<string>();
+  for (const list of lists) {
+    if (!list) continue;
+    for (const item of list) {
+      if (item.trim()) merged.add(item.trim());
+    }
+  }
+  return merged.size > 0 ? [...merged] : undefined;
+}
 
 export async function cmdCommandsCollect(
   _positionals: string[],
@@ -92,6 +105,7 @@ export async function cmdCommandsCollect(
 
       allCommands.push({
         name: t.name,
+        sourceCommandsDir: sourceDir,
         mdPath: t.mdPath,
         resourceDirPath: t.resourceDirPath,
         destDir,
@@ -150,13 +164,39 @@ export async function cmdCommandsCollect(
     const isDuplicate = seenNames.has(lowerName);
     seenNames.add(lowerName);
 
-    const srcHash = await computeItemHash(c.mdPath);
+    const srcMeta = await parseCommandMeta(c.mdPath);
+    const srcSharedResources = mergeResourceRefs(srcMeta.resources, c.resourceDirPath ? [c.name] : undefined);
+    const srcHash = await computeCommandHash({
+      commandName: c.name,
+      commandsDir: c.sourceCommandsDir,
+      form: 'file',
+      sharedResources: srcSharedResources,
+    });
     let destHash: string | undefined;
     let status: CollectStatus = 'new';
     const form = c.resourceDirPath ? 'directory' : 'file';
 
-    if (await pathExists(c.destMdPath)) {
-      destHash = await computeItemHash(c.destMdPath);
+    const existingForm = await detectCommandForm(c.name);
+    if (existingForm === 'directory') {
+      destHash = await computeCommandHash({
+        commandName: c.name,
+        commandsDir: centralRoot,
+        form: 'directory',
+      });
+      status = destHash === srcHash ? 'identical' : 'conflict';
+    } else if (existingForm === 'file') {
+      const centralMdPath = getCentralCommandFile(c.name);
+      const centralMeta = await parseCommandMeta(centralMdPath);
+      const centralSharedResources = mergeResourceRefs(
+        centralMeta.resources,
+        (await pathExists(path.join(centralRoot, c.name))) ? [c.name] : undefined,
+      );
+      destHash = await computeCommandHash({
+        commandName: c.name,
+        commandsDir: centralRoot,
+        form: 'file',
+        sharedResources: centralSharedResources,
+      });
       status = destHash === srcHash ? 'identical' : 'conflict';
     }
 

@@ -7,10 +7,20 @@ describe('adapters', () => {
   const projectRoot = '/Users/test/myproject';
 
   describe('getAdapters', () => {
-    it('should return all 7 adapters', () => {
+    it('should return all 9 adapters', () => {
       const adapters = getAdapters();
-      expect(adapters.length).toBe(7);
-      expect(adapters.map((a) => a.id)).toEqual(['cursor', 'gemini', 'codex', 'claude-code', 'antigravity', 'openskills', 'agents']);
+      expect(adapters.length).toBe(9);
+      expect(adapters.map((a) => a.id)).toEqual([
+        'cursor',
+        'gemini',
+        'codex',
+        'claude-code',
+        'antigravity',
+        'openskills',
+        'agents',
+        'opencode',
+        'qoder',
+      ]);
     });
 
     it('should return a copy of adapters array', () => {
@@ -35,6 +45,8 @@ describe('adapters', () => {
       expect(resolveAdapter('gemini-cli')?.id).toBe('gemini');
       expect(resolveAdapter('anti-gravity')?.id).toBe('antigravity');
       expect(resolveAdapter('openskills')?.id).toBe('openskills');
+      expect(resolveAdapter('open-code')?.id).toBe('opencode');
+      expect(resolveAdapter('qoder')?.id).toBe('qoder');
     });
 
     it('should be case-insensitive', () => {
@@ -144,6 +156,68 @@ describe('adapters', () => {
       it('should resolve local path to .agents/skills', () => {
         const dir = adapter.resolveSkillsDir({ scope: 'local', projectRoot, homeDir });
         expect(dir).toBe(path.join(projectRoot, '.agents', 'skills'));
+      });
+    });
+
+    describe('opencode', () => {
+      const adapter = resolveAdapter('opencode')!;
+
+      it('should resolve global path to ~/.opencode/skills', () => {
+        const dir = adapter.resolveSkillsDir({ scope: 'global', projectRoot, homeDir });
+        expect(dir).toBe(path.join(homeDir, '.opencode', 'skills'));
+      });
+
+      it('should resolve local path to .opencode/skills', () => {
+        const dir = adapter.resolveSkillsDir({ scope: 'local', projectRoot, homeDir });
+        expect(dir).toBe(path.join(projectRoot, '.opencode', 'skills'));
+      });
+
+      it('should resolve command paths', () => {
+        expect(adapter.resolveCommandsDir({ scope: 'global', projectRoot, homeDir })).toBe(
+          path.join(homeDir, '.opencode', 'commands'),
+        );
+        expect(adapter.resolveCommandsDir({ scope: 'local', projectRoot, homeDir })).toBe(
+          path.join(projectRoot, '.opencode', 'commands'),
+        );
+      });
+
+      it('should resolve MCP config paths', () => {
+        const globalSpec = adapter.resolveMcpConfig?.({ scope: 'global', projectRoot, homeDir });
+        const localSpec = adapter.resolveMcpConfig?.({ scope: 'local', projectRoot, homeDir });
+        expect(globalSpec?.configPath).toBe(path.join(homeDir, '.opencode', 'mcp.json'));
+        expect(localSpec?.configPath).toBe(path.join(projectRoot, '.opencode', 'mcp.json'));
+        expect(globalSpec?.serversKey).toBe('mcpServers');
+      });
+    });
+
+    describe('qoder', () => {
+      const adapter = resolveAdapter('qoder')!;
+
+      it('should resolve global path to ~/.qoder/skills', () => {
+        const dir = adapter.resolveSkillsDir({ scope: 'global', projectRoot, homeDir });
+        expect(dir).toBe(path.join(homeDir, '.qoder', 'skills'));
+      });
+
+      it('should resolve local path to .qoder/skills', () => {
+        const dir = adapter.resolveSkillsDir({ scope: 'local', projectRoot, homeDir });
+        expect(dir).toBe(path.join(projectRoot, '.qoder', 'skills'));
+      });
+
+      it('should resolve command paths', () => {
+        expect(adapter.resolveCommandsDir({ scope: 'global', projectRoot, homeDir })).toBe(
+          path.join(homeDir, '.qoder', 'commands'),
+        );
+        expect(adapter.resolveCommandsDir({ scope: 'local', projectRoot, homeDir })).toBe(
+          path.join(projectRoot, '.qoder', 'commands'),
+        );
+      });
+
+      it('should resolve MCP config paths', () => {
+        const globalSpec = adapter.resolveMcpConfig?.({ scope: 'global', projectRoot, homeDir });
+        const localSpec = adapter.resolveMcpConfig?.({ scope: 'local', projectRoot, homeDir });
+        expect(globalSpec?.configPath).toBe(path.join(homeDir, '.qoder', 'mcp.json'));
+        expect(localSpec?.configPath).toBe(path.join(projectRoot, '.qoder', 'mcp.json'));
+        expect(globalSpec?.serversKey).toBe('mcpServers');
       });
     });
   });

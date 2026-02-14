@@ -147,6 +147,8 @@ export async function cmdSkillsAdd(positionals: string[], flags: ParsedFlags, _c
       const registry = await loadRegistry();
       const now = new Date().toISOString();
 
+      const addedSkillNames: string[] = [];
+
       for (const { name, srcDir } of skillsToCopy) {
         const dest = getCentralSkillPath(name);
         const destExists = await pathExists(dest);
@@ -175,18 +177,17 @@ export async function cmdSkillsAdd(positionals: string[], flags: ParsedFlags, _c
           updatedAt: now,
           source: { type: 'git', url: source, ref: refFlag },
         };
+        addedSkillNames.push(name);
 
         process.stdout.write(`Added: ${name}\n`);
       }
 
       // Save repo record for tracking
-      if (!dryRun && skillsToCopy.length > 0) {
+      if (!dryRun && addedSkillNames.length > 0) {
         const { normalizeRepoUrl } = await import('../../core/registry.js');
         const repoKey = normalizeRepoUrl(source);
         const existingRepo = registry.repos?.[repoKey];
-        
-        const addedSkillNames = skillsToCopy.map((s) => s.name);
-        
+
         if (existingRepo) {
           // Merge skill lists (avoid duplicates)
           const merged = new Set([...existingRepo.skills, ...addedSkillNames]);
@@ -258,4 +259,3 @@ export async function cmdSkillsAdd(positionals: string[], flags: ParsedFlags, _c
   process.stdout.write(`Added local skill: ${resolvedName}\n`);
   return 0;
 }
-

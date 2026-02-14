@@ -19,6 +19,18 @@ describe('parseOptions', () => {
       expect(flags.target).toBe('cursor');
     });
 
+    it('should not consume positional args for boolean long flags', () => {
+      const { flags, positionals } = parseOptions(['--force', 'skill1']);
+      expect(flags.force).toBe(true);
+      expect(positionals).toEqual(['skill1']);
+    });
+
+    it('should parse long value flags registered in CLI metadata', () => {
+      const { flags } = parseOptions(['--type', 'stdio', '--command', 'npx']);
+      expect(flags.type).toBe('stdio');
+      expect(flags.command).toBe('npx');
+    });
+
     it('should collect positional arguments', () => {
       const { positionals } = parseOptions(['skill1', 'skill2']);
       expect(positionals).toEqual(['skill1', 'skill2']);

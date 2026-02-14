@@ -122,7 +122,7 @@ ap c show         # commands show
 
 `--target` 支持 `all`、逗号分隔（如 `--target cursor,codex`）或重复传入（如 `--target cursor --target codex`）。
 
-支持的目标：`cursor`、`gemini`、`codex`、`claude-code`、`antigravity`、`openskills`、`agents`。
+支持的目标：`cursor`、`gemini`、`codex`、`claude-code`、`antigravity`、`openskills`、`agents`、`opencode`、`qoder`。
 
 ## 同步目标与默认路径（macOS）
 
@@ -139,6 +139,8 @@ ap c show         # commands show
 | Antigravity          | `<project>/.agent/skills/`  | `~/.gemini/antigravity/global_skills/` |
 | Openskills           | `<project>/.agent/skills/`  | `~/.agent/skills/`                     |
 | Agents (Vercel Labs) | `<project>/.agents/skills/` | `~/.agents/skills/`                    |
+| OpenCode             | `<project>/.opencode/skills/` | `~/.opencode/skills/`                |
+| Qoder                | `<project>/.qoder/skills/`    | `~/.qoder/skills/`                   |
 
 ### Commands 路径
 
@@ -151,6 +153,8 @@ ap c show         # commands show
 | Antigravity          | `<project>/.agent/commands/`  | `~/.gemini/antigravity/global_commands/` |
 | Openskills           | `<project>/.agent/commands/`  | `~/.agent/commands/`                     |
 | Agents (Vercel Labs) | `<project>/.agents/commands/` | `~/.agents/commands/`                    |
+| OpenCode             | `<project>/.opencode/commands/` | `~/.opencode/commands/`               |
+| Qoder                | `<project>/.qoder/commands/`    | `~/.qoder/commands/`                  |
 
 ## 配置与状态文件
 
