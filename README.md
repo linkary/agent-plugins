@@ -122,7 +122,7 @@ ap c show         # commands show
 
 `--target` supports `all`, comma-separated values (e.g., `--target cursor,codex`), or repeated flags (e.g., `--target cursor --target codex`).
 
-Supported targets: `cursor`, `gemini`, `codex`, `claude-code`, `antigravity`, `openskills`, `agents`.
+Supported targets: `cursor`, `gemini`, `codex`, `claude-code`, `antigravity`, `openskills`, `agents`, `opencode`, `qoder`.
 
 ## Sync Targets and Default Paths (macOS)
 
@@ -139,6 +139,8 @@ Supported targets: `cursor`, `gemini`, `codex`, `claude-code`, `antigravity`, `o
 | Antigravity          | `<project>/.agent/skills/`  | `~/.gemini/antigravity/global_skills/` |
 | Openskills           | `<project>/.agent/skills/`  | `~/.agent/skills/`                     |
 | Agents (Vercel Labs) | `<project>/.agents/skills/` | `~/.agents/skills/`                    |
+| OpenCode             | `<project>/.opencode/skills/` | `~/.opencode/skills/`                |
+| Qoder                | `<project>/.qoder/skills/`    | `~/.qoder/skills/`                   |
 
 ### Commands Paths
 
@@ -151,6 +153,8 @@ Supported targets: `cursor`, `gemini`, `codex`, `claude-code`, `antigravity`, `o
 | Antigravity          | `<project>/.agent/commands/`  | `~/.gemini/antigravity/global_commands/` |
 | Openskills           | `<project>/.agent/commands/`  | `~/.agent/commands/`                     |
 | Agents (Vercel Labs) | `<project>/.agents/commands/` | `~/.agents/commands/`                    |
+| OpenCode             | `<project>/.opencode/commands/` | `~/.opencode/commands/`               |
+| Qoder                | `<project>/.qoder/commands/`    | `~/.qoder/commands/`                  |
 
 ## Configuration and State Files
 

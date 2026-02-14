@@ -8,14 +8,16 @@ import {
   detectCommandForm,
   findEntryMd,
 } from '../../core/command-store.js';
+import { getCentralCommandsDir } from '../../util/apg-paths.js';
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { copyDir } from '../../util/copy-dir.js';
-import { computeItemHash, copyItem, removeItem } from '../../util/item-utils.js';
+import { computeCommandHash, copyItem, removeItem } from '../../util/item-utils.js';
 import { promptMultiSelect } from '../../util/prompt.js';
 import { runGit } from '../../util/git-utils.js';
 import { ANSI } from '../../util/ansi.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
+import { parseCommandMeta } from '../../util/command-meta.js';
 
 // ─── 扫描源目录中的命令 ────────────────────────────────────────────────────
 
@@ -61,28 +63,68 @@ async function scanCommandsInDir(searchDir: string): Promise<ScannedCommand[]> {
   return result;
 }
 
-// ─── 比较命令状态（基于 .md 文件 hash）───────────────────────────────────────
+// ─── 比较命令状态（基于命令完整 hash）────────────────────────────────────────
 
 type CompareStatus = 'identical' | 'new' | 'update' | 'missing';
 
+function mergeResourceRefs(...lists: (string[] | undefined)[]): string[] | undefined {
+  const merged = new Set<string>();
+  for (const list of lists) {
+    if (!list) continue;
+    for (const item of list) {
+      if (item.trim()) merged.add(item.trim());
+    }
+  }
+  return merged.size > 0 ? [...merged] : undefined;
+}
+
+async function computeFileCommandStateHash(params: {
+  commandName: string;
+  commandsDir: string;
+  mdPath: string;
+  includeImplicitResourceDir: boolean;
+}): Promise<string> {
+  const { commandName, commandsDir, mdPath, includeImplicitResourceDir } = params;
+  const meta = await parseCommandMeta(mdPath);
+  const sharedResources = mergeResourceRefs(meta.resources, includeImplicitResourceDir ? [commandName] : undefined);
+
+  return await computeCommandHash({
+    commandName,
+    commandsDir,
+    form: 'file',
+    sharedResources,
+  });
+}
+
 async function compareCommandStatus(
-  name: string,
-  srcMdPath: string,
+  scanned: ScannedCommand,
+  commandsDir: string,
   centralForm: 'directory' | 'file' | null,
 ): Promise<CompareStatus> {
+  const name = scanned.name;
   if (!centralForm) return 'new';
 
-  const centralMdPath =
+  const srcHash =
+    scanned.form === 'directory'
+      ? await computeCommandHash({ commandName: name, commandsDir, form: 'directory' })
+      : await computeFileCommandStateHash({
+          commandName: name,
+          commandsDir,
+          mdPath: scanned.mdPath,
+          includeImplicitResourceDir: Boolean(scanned.resourceDirPath),
+        });
+
+  const centralRoot = getCentralCommandsDir();
+  const destHash =
     centralForm === 'directory'
-      ? await findEntryMd(getCentralCommandDir(name), name)
-      : getCentralCommandFile(name);
+      ? await computeCommandHash({ commandName: name, commandsDir: centralRoot, form: 'directory' })
+      : await computeFileCommandStateHash({
+          commandName: name,
+          commandsDir: centralRoot,
+          mdPath: getCentralCommandFile(name),
+          includeImplicitResourceDir: await pathExists(path.join(centralRoot, name)),
+        });
 
-  if (!centralMdPath || !(await pathExists(centralMdPath))) return 'new';
-
-  const [srcHash, destHash] = await Promise.all([
-    computeItemHash(srcMdPath),
-    computeItemHash(centralMdPath),
-  ]);
   if (srcHash === destHash) return 'identical';
   return 'update';
 }
@@ -168,9 +210,10 @@ export async function cmdCommandsUpdate(positionals: string[], flags: ParsedFlag
           continue;
         }
 
-        const srcMdPath = scannedCmd.form === 'directory' ? (await findEntryMd(scannedCmd.srcDir, scannedCmd.name))! : scannedCmd.mdPath;
         const centralForm = await detectCommandForm(commandName);
-        const status = await compareCommandStatus(commandName, srcMdPath, centralForm);
+        const status = await compareCommandStatus(scannedCmd, searchDir, centralForm);
+        const srcMdPath =
+          scannedCmd.form === 'directory' ? (await findEntryMd(scannedCmd.srcDir, scannedCmd.name))! : scannedCmd.mdPath;
 
         allUpdates.push({
           commandName,

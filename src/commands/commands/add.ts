@@ -211,6 +211,7 @@ export async function cmdCommandsAdd(positionals: string[], flags: ParsedFlags, 
       if (!registry.commands) registry.commands = {};
       if (!registry.commandRepos) registry.commandRepos = {};
       const now = new Date().toISOString();
+      const addedCommandNames: string[] = [];
 
       for (const cmd of toCopy) {
         const ok = await copyCommandToCentral(cmd, centralDir, dryRun, force);
@@ -226,16 +227,16 @@ export async function cmdCommandsAdd(positionals: string[], flags: ParsedFlags, 
           updatedAt: now,
           source: { type: 'git', url: source, ref: refFlag },
         };
+        addedCommandNames.push(cmd.name);
         process.stdout.write(`Added: ${cmd.name}\n`);
       }
 
-      if (!dryRun && toCopy.length > 0) {
+      if (!dryRun && addedCommandNames.length > 0) {
         const repoKey = normalizeRepoUrl(source);
         const existingRepo = registry.commandRepos?.[repoKey];
-        const addedNames = toCopy.map((c) => c.name);
 
         if (existingRepo) {
-          const merged = new Set([...existingRepo.skills, ...addedNames]);
+          const merged = new Set([...existingRepo.skills, ...addedCommandNames]);
           existingRepo.skills = [...merged];
           existingRepo.updatedAt = now;
           if (refFlag) existingRepo.ref = refFlag;
@@ -243,7 +244,7 @@ export async function cmdCommandsAdd(positionals: string[], flags: ParsedFlags, 
           registry.commandRepos![repoKey] = {
             url: source,
             ref: refFlag,
-            skills: addedNames,
+            skills: addedCommandNames,
             addedAt: now,
             updatedAt: now,
           };
