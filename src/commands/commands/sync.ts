@@ -6,7 +6,7 @@ import type { CliRunContext } from '../../runner/cli.js';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { listCentralCommands, getCentralCommandDir } from '../../core/command-store.js';
-import { getCentralCommandsDir, getHomeDir } from '../../util/apg-paths.js';
+import { getCentralCommandsDir } from '../../util/apg-paths.js';
 import { ANSI } from '../../util/ansi.js';
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { computeCommandHash } from '../../util/item-utils.js';
@@ -30,6 +30,41 @@ type SyncEntry = {
   projectRoot: string;
   destCommandsDir: string;
 };
+
+type EntryStatus = 'new' | 'replace' | 'same';
+
+function groupEntriesByName<T extends { name: string }>(entries: T[]): Map<string, T[]> {
+  const map = new Map<string, T[]>();
+  for (const entry of entries) {
+    const list = map.get(entry.name);
+    if (list) list.push(entry);
+    else map.set(entry.name, [entry]);
+  }
+  return map;
+}
+
+function formatStatusLabel(status: EntryStatus): string {
+  if (status === 'new') return `${ANSI.green}new${ANSI.reset}`;
+  if (status === 'replace') return `${ANSI.yellow}replace${ANSI.reset}`;
+  return `${ANSI.dim}same${ANSI.reset}`;
+}
+
+function formatCountSummary(counts: { newCount: number; replaceCount: number; sameCount: number }): string {
+  const parts: string[] = [];
+  if (counts.newCount > 0) parts.push(`${ANSI.green}${counts.newCount} new${ANSI.reset}`);
+  if (counts.replaceCount > 0) parts.push(`${ANSI.yellow}${counts.replaceCount} replace${ANSI.reset}`);
+  if (counts.sameCount > 0) parts.push(`${ANSI.dim}${counts.sameCount} same${ANSI.reset}`);
+  return parts.join(', ');
+}
+
+function formatScopeTitle(scopes: Scope[]): string {
+  const uniqueScopes = [...new Set(scopes)];
+  if (uniqueScopes.length === 1) {
+    if (uniqueScopes[0] === 'global') return `${ANSI.bold}${ANSI.brightBlue}global${ANSI.reset}`;
+    return `${ANSI.bold}${ANSI.brightMagenta}local${ANSI.reset}`;
+  }
+  return `${ANSI.bold}${ANSI.yellow}mixed${ANSI.reset}`;
+}
 
 export async function cmdCommandsSync(
   _positionals: string[],
@@ -57,7 +92,6 @@ export async function cmdCommandsSync(
   if (selectedAdapters.length === 0) return 1;
 
   const config = await loadConfig();
-  const homeDir = getHomeDir();
 
   const availableCommands = await listCentralCommands();
   if (availableCommands.length === 0) {
@@ -106,76 +140,84 @@ export async function cmdCommandsSync(
     process.stdout.write('No commands available to sync.\n');
     return 0;
   }
+  const scopeTitle = formatScopeTitle(allEntries.map((entry) => entry.scope));
 
-  // Phase 2: 统一选择列表
-  let selectedEntries: SyncEntry[];
-  if (positionals.length > 0) {
-    selectedEntries = allEntries;
-  } else if (interactive && !force) {
-    const selectedKeys = await promptMultiSelect({
-      message: 'Select commands to sync:',
-      options: allEntries.map((s, i) => ({
-        label: `${s.name} -> ${getColoredLabel(s.adapter)} (${s.scope})`,
-        value: String(i),
-      })),
-      defaultSelected: [],
-      searchable: true,
-    });
-    if (selectedKeys.length === 0) {
-      process.stdout.write('No commands selected.\n');
-      return 0;
-    }
-    selectedEntries = selectedKeys.map((i) => allEntries[Number(i)]!);
-  } else {
-    selectedEntries = allEntries;
-  }
-
-  // Phase 3: 检查覆盖状态并显示预览
+  // Phase 2: 检查目标状态并显示预览
   const targetMdPath = (e: SyncEntry) => path.join(e.destCommandsDir, `${e.name}.md`);
-  type EntryWithStatus = SyncEntry & { willOverwrite: boolean };
+  const srcBaseDir = getCentralCommandsDir();
+  type EntryWithStatus = SyncEntry & { status: EntryStatus };
   const entriesWithStatus: EntryWithStatus[] = await Promise.all(
-    selectedEntries.map(async (s) => ({
-      ...s,
-      willOverwrite: await pathExists(targetMdPath(s)),
-    })),
+    allEntries.map(async (s) => {
+      const targetMd = targetMdPath(s);
+      if (!(await pathExists(targetMd))) {
+        return { ...s, status: 'new' as const };
+      }
+
+      const targetResourceDir = path.join(s.destCommandsDir, s.name);
+      const sharedResources = s.form === 'file' ? (await parseCommandMeta(s.mdPath)).resources : undefined;
+      const srcHash = await computeCommandHash({
+        commandName: s.name,
+        commandsDir: srcBaseDir,
+        form: s.form,
+        sharedResources,
+      });
+      const destSharedResources = (await pathExists(targetResourceDir)) ? [s.name] : undefined;
+      const destHash = await computeCommandHash({
+        commandName: s.name,
+        commandsDir: s.destCommandsDir,
+        form: 'file',
+        sharedResources: destSharedResources,
+      });
+
+      return { ...s, status: destHash === srcHash ? ('same' as const) : ('replace' as const) };
+    }),
   );
 
-  const srcBaseDir = getCentralCommandsDir();
   let finalEntries: EntryWithStatus[];
 
-  if (interactive && !force) {
-    const replaceCount = entriesWithStatus.filter((s) => s.willOverwrite).length;
-    const newCount = entriesWithStatus.length - replaceCount;
-    process.stdout.write(
-      `\nPreview: ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.yellow}${replaceCount} replace${ANSI.reset}\n`,
-    );
+  if (positionals.length > 0) {
+    finalEntries = entriesWithStatus;
+  } else if (interactive && !force) {
+    const replaceCount = entriesWithStatus.filter((s) => s.status === 'replace').length;
+    const newCount = entriesWithStatus.filter((s) => s.status === 'new').length;
+    const sameCount = entriesWithStatus.filter((s) => s.status === 'same').length;
+    process.stdout.write(`\nPreview: ${formatCountSummary({ newCount, replaceCount, sameCount })}\n`);
 
-    const defaultSelected = entriesWithStatus
-      .map((s, i) => (!s.willOverwrite ? String(i) : null))
-      .filter((v): v is string => v !== null);
+    const grouped = groupEntriesByName(entriesWithStatus);
+    const groupedItems = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
+    const defaultSelected = groupedItems
+      .filter(([, entries]) => entries.some((entry) => entry.status === 'new'))
+      .map(([name]) => name);
 
-    const selectedKeys = await promptMultiSelect({
-      message: `Confirm commands to sync (source: ${srcBaseDir}):`,
-      options: entriesWithStatus.map((s, i) => {
-        const status = s.willOverwrite ? `${ANSI.yellow}replace${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
+    const selectedNames = await promptMultiSelect({
+      message: `Confirm commands to sync (${scopeTitle}, source: ${srcBaseDir}):`,
+      options: groupedItems.map(([name, entries]) => {
+        const replace = entries.filter((entry) => entry.status === 'replace').length;
+        const fresh = entries.filter((entry) => entry.status === 'new').length;
+        const same = entries.filter((entry) => entry.status === 'same').length;
+        const status = formatCountSummary({ newCount: fresh, replaceCount: replace, sameCount: same });
         return {
-          label: `${s.name} -> ${getColoredLabel(s.adapter)} (${s.scope}) [${status}]`,
-          value: String(i),
+          label: `${name} -> ${entries
+            .map((entry) => `${getColoredLabel(entry.adapter)} (${formatStatusLabel(entry.status)})`)
+            .join(', ')} [${status}]`,
+          value: name,
         };
       }),
       defaultSelected,
+      searchable: true,
     });
 
-    if (selectedKeys.length === 0) {
+    if (selectedNames.length === 0) {
       process.stdout.write('Cancelled.\n');
       return 0;
     }
-    finalEntries = selectedKeys.map((i) => entriesWithStatus[Number(i)]!);
+    const selectedNameSet = new Set(selectedNames);
+    finalEntries = entriesWithStatus.filter((entry) => selectedNameSet.has(entry.name));
   } else {
-    process.stdout.write(`\nSync ${entriesWithStatus.length} command(s) from ${srcBaseDir}:\n`);
+    process.stdout.write(`\nSync ${entriesWithStatus.length} command(s) from ${srcBaseDir} (${scopeTitle}):\n`);
     for (const s of entriesWithStatus) {
-      const status = s.willOverwrite ? `${ANSI.yellow}replace${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
-      process.stdout.write(`  ${s.name} -> ${getColoredLabel(s.adapter)} (${s.scope}) [${status}]\n`);
+      const status = formatStatusLabel(s.status);
+      process.stdout.write(`  ${s.name} -> ${getColoredLabel(s.adapter)} [${status}]\n`);
     }
     finalEntries = entriesWithStatus;
   }
@@ -280,7 +322,7 @@ export async function cmdCommandsSync(
         return 1;
       }
       const choice = await promptChoice({
-        message: `Conflict for ${name} in ${getColoredLabel(adapter)} (${scope}).`,
+        message: `Conflict for ${name} in ${getColoredLabel(adapter)}.`,
         options: [
           { key: 'o', label: 'Overwrite' },
           { key: 'b', label: 'Backup & overwrite' },
