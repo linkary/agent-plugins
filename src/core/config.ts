@@ -5,6 +5,7 @@ import type { Scope, TargetId } from '../targets/adapters.js';
 export type TargetConfigV1 = {
   defaultScope?: Scope;
   include?: string[]; // skill names; supports ['*']
+  includeAgents?: string[]; // agent names; supports ['*']
   includeCommands?: string[]; // command names; supports ['*']
   includeMcp?: string[]; // MCP server names; supports ['*']
 };
@@ -18,15 +19,15 @@ function defaultConfig(): ConfigV1 {
   return {
     version: 1,
     targets: {
-      cursor: { defaultScope: 'global', include: ['*'] },
-      gemini: { defaultScope: 'global', include: ['*'] },
-      codex: { defaultScope: 'global', include: ['*'] },
-      'claude-code': { defaultScope: 'global', include: ['*'] },
-      antigravity: { defaultScope: 'global', include: ['*'] },
-      openskills: { defaultScope: 'global', include: ['*'] },
-      agents: { defaultScope: 'global', include: ['*'] },
-      opencode: { defaultScope: 'global', include: ['*'] },
-      qoder: { defaultScope: 'global', include: ['*'] },
+      cursor: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
+      gemini: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
+      codex: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
+      'claude-code': { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
+      antigravity: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
+      openskills: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
+      agents: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
+      opencode: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
+      qoder: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
     },
   };
 }

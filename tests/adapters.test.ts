@@ -221,4 +221,26 @@ describe('adapters', () => {
       });
     });
   });
+
+  describe('resolveAgentsDir', () => {
+    it('should resolve cursor agent paths', () => {
+      const adapter = resolveAdapter('cursor')!;
+      expect(adapter.resolveAgentsDir({ scope: 'global', projectRoot, homeDir })).toBe(
+        path.join(homeDir, '.cursor', 'agents'),
+      );
+      expect(adapter.resolveAgentsDir({ scope: 'local', projectRoot, homeDir })).toBe(
+        path.join(projectRoot, '.cursor', 'agents'),
+      );
+    });
+
+    it('should resolve opencode agent paths', () => {
+      const adapter = resolveAdapter('opencode')!;
+      expect(adapter.resolveAgentsDir({ scope: 'global', projectRoot, homeDir })).toBe(
+        path.join(homeDir, '.opencode', 'agents'),
+      );
+      expect(adapter.resolveAgentsDir({ scope: 'local', projectRoot, homeDir })).toBe(
+        path.join(projectRoot, '.opencode', 'agents'),
+      );
+    });
+  });
 });

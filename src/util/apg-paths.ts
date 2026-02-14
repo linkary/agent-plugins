@@ -31,6 +31,10 @@ export function getCentralCommandsDir(): string {
   return path.join(getApgHomeDir(), 'commands');
 }
 
+export function getCentralAgentsDir(): string {
+  return path.join(getApgHomeDir(), 'agents');
+}
+
 export function getCentralMcpDir(): string {
   return path.join(getApgHomeDir(), 'mcp');
 }

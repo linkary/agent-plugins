@@ -9,6 +9,7 @@ export type SyncStateV1 = {
     string,
     {
       skills: Record<string, SyncedItemRecord>;
+      agents?: Record<string, SyncedItemRecord>;
       commands?: Record<string, SyncedItemRecord>;
       mcp?: Record<string, SyncedItemRecord>;
     }

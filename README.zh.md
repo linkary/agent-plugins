@@ -1,6 +1,6 @@
 # agent-plugins (ap)
 
-一个用于 **LLM Agent Skills** 和 **Commands** 的集中管理与跨工具同步的 CLI。
+一个用于 **LLM Agent Skills**、**Subagent** 与 **Commands** 的集中管理与跨工具同步 CLI。
 
 <div align="center">
   <a href="assets/intro.mp4">
@@ -13,6 +13,7 @@
 ## 核心约定
 
 - Central skills 目录（默认）：`$HOME/.agent-plugins/skills/<skill-name>/`
+- Central agents 目录（默认）：`$HOME/.agent-plugins/agents/<agent-name>/`
 - Central commands 目录（默认）：`$HOME/.agent-plugins/commands/<command-name>/`
 - `add/rm/update` 默认管理的是 central 中的条目
 - `sync`：central -> 目标工具（单向复制，支持冲突处理）
@@ -48,7 +49,7 @@ node dist/cli.mjs --help
 
 ## 命令概览
 
-`skills` 和 `commands` 共用相同的子命令结构。
+`skills`、`agents` 和 `commands` 共用相同生命周期子命令（`add/rm/update/sync/collect/list`）。
 
 ### Skills
 
@@ -100,6 +101,28 @@ ap commands collect [<command>...] --target <target> [--scope local|global] [--a
 ap commands rm [<command>...] [--target <...>] [--scope local|global] [--dry-run]
 ```
 
+### Agents
+
+```bash
+# 列出 central agents
+ap agents list
+
+# 添加 agent（git 或本地路径）
+ap agents add <git-url|local-path> [--name <agent>] [--ref <ref>] [--force]
+
+# 更新 agent
+ap agents update [<agent>...] [--all] [--dry-run] [--force]
+
+# 同步 central -> 目标工具
+ap agents sync [<agent>...] --target <target> [--scope local|global] [--dry-run] [--force]
+
+# 从目标工具收集 -> central
+ap agents collect [<agent>...] --target <target> [--scope local|global] [--all] [--dry-run] [--force]
+
+# 删除 agent
+ap agents rm [<agent>...] [--target <...>] [--scope local|global] [--dry-run]
+```
+
 ### 别名
 
 根命令组支持简写：
@@ -107,6 +130,7 @@ ap commands rm [<command>...] [--target <...>] [--scope local|global] [--dry-run
 | 全称       | 别名                  |
 | ---------- | --------------------- |
 | `skills`   | `skill`, `sk`, `s`    |
+| `agents`   | `ag`                  |
 | `commands` | `command`, `cmd`, `c` |
 
 子命令也支持简写（按位置解析）：

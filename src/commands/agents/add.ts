@@ -1,0 +1,229 @@
+import path from 'node:path';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import { ensureCentralAgentStore, getCentralAgentPath } from '../../core/agent-store.js';
+import { loadRegistry, saveRegistry } from '../../core/registry.js';
+import { listDirNames, pathExists, removeDir } from '../../util/fs-utils.js';
+import { copyDir } from '../../util/copy-dir.js';
+import { promptMultiSelect } from '../../util/prompt.js';
+import { detectSkillStatus, type SkillStatus } from '../../util/skill-compare.js';
+import {
+  isProbablyGitUrl,
+  isGitHubShorthand,
+  expandGitHubShorthand,
+  guessNameFromGitUrl,
+  runGit,
+  isAgentDir,
+} from '../../util/git-utils.js';
+import { ANSI } from '../../util/ansi.js';
+import type { ParsedFlags } from '../../util/options.js';
+import type { CliRunContext } from '../../runner/cli.js';
+
+export async function cmdAgentsAdd(positionals: string[], flags: ParsedFlags, _ctx: CliRunContext) {
+  let source = positionals[0];
+  if (!source) {
+    process.stderr.write('Usage: ap agents add <git-url|owner/repo|local-path> [--name <agent>] [--ref <ref>] [--force]\n');
+    return 1;
+  }
+
+  await ensureCentralAgentStore();
+
+  const nameFlag = typeof flags.name === 'string' ? flags.name : undefined;
+  const refFlag = typeof flags.ref === 'string' ? flags.ref : undefined;
+  const dryRun = flags['dry-run'] === true;
+  const force = flags.force === true || flags.overwrite === true;
+  const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+
+  if (isGitHubShorthand(source)) {
+    source = expandGitHubShorthand(source);
+    process.stdout.write(`Expanded to: ${source}\n`);
+  }
+
+  if (isProbablyGitUrl(source)) {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'apd-add-agent-'));
+    const cloneDest = path.join(tmpDir, 'repo');
+
+    try {
+      process.stdout.write(`Cloning ${source}...\n`);
+      const code = await runGit(['clone', '--depth', '1', source, cloneDest], { cwd: undefined });
+      if (code !== 0) {
+        process.stderr.write('Git clone failed.\n');
+        return code;
+      }
+
+      if (refFlag) {
+        const checkout = await runGit(['-C', cloneDest, 'fetch', '--depth', '1', 'origin', refFlag], { cwd: undefined });
+        if (checkout === 0) await runGit(['-C', cloneDest, 'checkout', refFlag], { cwd: undefined });
+      }
+
+      const isSingleAgent = await isAgentDir(cloneDest);
+      let agentsToCopy: { name: string; srcDir: string }[] = [];
+
+      if (isSingleAgent) {
+        const resolvedName = nameFlag ?? guessNameFromGitUrl(source);
+        agentsToCopy = [{ name: resolvedName, srcDir: cloneDest }];
+      } else {
+        let searchDir = cloneDest;
+        const agentsSubdir = path.join(cloneDest, 'agents');
+        if (await pathExists(agentsSubdir)) {
+          const stat = await fs.stat(agentsSubdir);
+          if (stat.isDirectory()) {
+            searchDir = agentsSubdir;
+            process.stdout.write('Found agents/ directory, searching inside...\n');
+          }
+        }
+
+        const subdirs = await listDirNames(searchDir);
+        const agentDirs: string[] = [];
+        for (const sub of subdirs) {
+          if (sub.startsWith('.')) continue;
+          const subPath = path.join(searchDir, sub);
+          if (await isAgentDir(subPath)) agentDirs.push(sub);
+        }
+        if (agentDirs.length === 0) {
+          process.stderr.write('No agents found in repository (no AGENT.md files).\n');
+          return 1;
+        }
+
+        type AgentInfo = { name: string; srcDir: string; status: SkillStatus };
+        const agentsInfo: AgentInfo[] = await Promise.all(
+          agentDirs.map(async (name) => {
+            const srcDir = path.join(searchDir, name);
+            const destDir = getCentralAgentPath(name);
+            const { status } = await detectSkillStatus(srcDir, destDir);
+            return { name, srcDir, status };
+          }),
+        );
+
+        const newCount = agentsInfo.filter((s) => s.status === 'new').length;
+        const updateCount = agentsInfo.filter((s) => s.status === 'update').length;
+        const identicalCount = agentsInfo.filter((s) => s.status === 'identical').length;
+        process.stdout.write(
+          `\nFound ${agentsInfo.length} agent(s): ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.yellow}${updateCount} update${ANSI.reset}, ${ANSI.dim}${identicalCount} identical${ANSI.reset}\n`,
+        );
+
+        if (interactive) {
+          const defaultSelected = agentsInfo.filter((s) => s.status !== 'identical').map((s) => s.name);
+          const selected = await promptMultiSelect({
+            message: 'Select agents to add:',
+            options: agentsInfo.map((s) => {
+              const statusLabel =
+                s.status === 'new'
+                  ? `${ANSI.green}new${ANSI.reset}`
+                  : s.status === 'update'
+                    ? `${ANSI.yellow}update${ANSI.reset}`
+                    : `${ANSI.dim}identical${ANSI.reset}`;
+              return { label: `${s.name} [${statusLabel}]`, value: s.name };
+            }),
+            defaultSelected,
+          });
+          if (selected.length === 0) {
+            process.stdout.write('Cancelled.\n');
+            return 0;
+          }
+          agentsToCopy = agentsInfo.filter((s) => selected.includes(s.name)).map((s) => ({ name: s.name, srcDir: s.srcDir }));
+        } else {
+          const toAdd = force ? agentsInfo : agentsInfo.filter((s) => s.status !== 'identical');
+          agentsToCopy = toAdd.map((s) => ({ name: s.name, srcDir: s.srcDir }));
+        }
+      }
+
+      const registry = await loadRegistry();
+      registry.agents ??= {};
+      registry.agentRepos ??= {};
+      const now = new Date().toISOString();
+      const addedAgentNames: string[] = [];
+
+      for (const { name, srcDir } of agentsToCopy) {
+        const dest = getCentralAgentPath(name);
+        const destExists = await pathExists(dest);
+        if (destExists && !force && !interactive) {
+          process.stderr.write(`Agent already exists: ${name} (use --force to overwrite)\n`);
+          continue;
+        }
+        if (dryRun) {
+          process.stdout.write(`[dry-run] add ${name} -> ${dest}\n`);
+          continue;
+        }
+        if (destExists) await removeDir(dest);
+        await copyDir(srcDir, dest, { ignoreNames: ['.git'] });
+
+        registry.agents[name] = {
+          name,
+          addedAt: registry.agents[name]?.addedAt ?? now,
+          updatedAt: now,
+          source: { type: 'git', url: source, ref: refFlag },
+        };
+        addedAgentNames.push(name);
+        process.stdout.write(`Added: ${name}\n`);
+      }
+
+      if (!dryRun && addedAgentNames.length > 0) {
+        const { normalizeRepoUrl } = await import('../../core/registry.js');
+        const repoKey = normalizeRepoUrl(source);
+        const existingRepo = registry.agentRepos[repoKey];
+
+        if (existingRepo) {
+          const merged = new Set([...existingRepo.skills, ...addedAgentNames]);
+          existingRepo.skills = [...merged];
+          existingRepo.updatedAt = now;
+          if (refFlag) existingRepo.ref = refFlag;
+        } else {
+          registry.agentRepos[repoKey] = {
+            url: source,
+            ref: refFlag,
+            skills: addedAgentNames,
+            addedAt: now,
+            updatedAt: now,
+          };
+        }
+        await saveRegistry(registry);
+      }
+
+      return 0;
+    } finally {
+      await removeDir(tmpDir);
+    }
+  }
+
+  const srcPath = path.resolve(source);
+  if (!(await pathExists(srcPath))) {
+    process.stderr.write(`Source path not found: ${srcPath}\n`);
+    return 1;
+  }
+  const stat = await fs.stat(srcPath);
+  if (!stat.isDirectory()) {
+    process.stderr.write(`Source must be a directory: ${srcPath}\n`);
+    return 1;
+  }
+
+  const resolvedName = nameFlag ?? path.basename(source);
+  const dest = getCentralAgentPath(resolvedName);
+  const destExists = await pathExists(dest);
+  if (destExists && !force) {
+    process.stderr.write(`Agent already exists: ${resolvedName}\nUse --force to overwrite.\n`);
+    return 1;
+  }
+
+  if (dryRun) {
+    process.stdout.write(`[dry-run] add ${resolvedName} -> ${dest}\n`);
+    return 0;
+  }
+
+  if (destExists) await removeDir(dest);
+  await copyDir(srcPath, dest, { ignoreNames: ['.git'] });
+
+  const registry = await loadRegistry();
+  registry.agents ??= {};
+  const now = new Date().toISOString();
+  registry.agents[resolvedName] = {
+    name: resolvedName,
+    addedAt: registry.agents[resolvedName]?.addedAt ?? now,
+    updatedAt: now,
+    source: { type: 'local', path: srcPath },
+  };
+  await saveRegistry(registry);
+
+  process.stdout.write(`Added local agent: ${resolvedName}\n`);
+  return 0;
+}

@@ -9,5 +9,10 @@ describe('help metadata', () => {
     expect(output).toContain('--args <args>');
     expect(output).toContain('--url <url>');
   });
-});
 
+  it('should include agents group in main help', () => {
+    const output = formatHelp();
+    expect(output).toContain('ap agents <command> [args] [options]');
+    expect(output).toContain('Agent Commands:');
+  });
+});

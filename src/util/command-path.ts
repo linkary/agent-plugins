@@ -1,6 +1,7 @@
 const ALIASES = {
   // Root commands
   skills: ['skills', 'skill', 'sk', 's'],
+  agents: ['agents', 'ag'],
   commands: ['commands', 'command', 'cmd', 'c'],
   mcp: ['mcp', 'm'],
   // Actions (共用于 skills 和 commands)
@@ -26,7 +27,7 @@ function resolveToken(token: string, allowed: readonly Canonical[]): Canonical |
   return null;
 }
 
-const ROOT_GROUPS = ['skills', 'commands', 'mcp'] as const satisfies readonly Canonical[];
+const ROOT_GROUPS = ['skills', 'agents', 'commands', 'mcp'] as const satisfies readonly Canonical[];
 const ACTIONS = ['add', 'rm', 'update', 'sync', 'collect', 'list', 'show', 'help'] as const satisfies readonly Canonical[];
 
 export function resolveCommandPath(argv: string[]): {
@@ -35,15 +36,20 @@ export function resolveCommandPath(argv: string[]): {
   error: string | null;
 } {
   // Legacy syntax: `agent skills <action> ...`
+  // Also supports `agent <action> ...` as shorthand for `agents <action> ...`.
   if (argv[0] && resolveToken(argv[0], ['agent']) === 'agent') {
     const second = argv[1];
     const secondResolved = second ? resolveToken(second, ROOT_GROUPS) : null;
     if (!secondResolved) {
-      return {
-        path: ['agent'],
-        rest: argv.slice(1),
-        error: `Unknown subcommand for agent: ${second ?? '(none)'}`,
-      };
+      const actionResolved = second ? resolveToken(second, ACTIONS) : 'help';
+      if (!actionResolved) {
+        return {
+          path: ['agent'],
+          rest: argv.slice(1),
+          error: `Unknown subcommand for agent: ${second ?? '(none)'}`,
+        };
+      }
+      return { path: ['agents', actionResolved], rest: argv.slice(2), error: null };
     }
 
     const actionToken = argv[2];

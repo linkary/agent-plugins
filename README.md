@@ -1,6 +1,6 @@
 # agent-plugins (ap)
 
-A CLI tool for centralized management and cross-tool synchronization of **LLM Agent Skills** and **Commands**.
+A CLI tool for centralized management and cross-tool synchronization of **LLM Agent Skills**, **Subagents**, and **Commands**.
 
 <div align="center">
   <a href="assets/intro.mp4">
@@ -13,6 +13,7 @@ A CLI tool for centralized management and cross-tool synchronization of **LLM Ag
 ## Core Conventions
 
 - Central skills directory (default): `$HOME/.agent-plugins/skills/<skill-name>/`
+- Central agents directory (default): `$HOME/.agent-plugins/agents/<agent-name>/`
 - Central commands directory (default): `$HOME/.agent-plugins/commands/<command-name>/`
 - `add/rm/update` commands operate on central items by default.
 - `sync`: Central -> Target tool (one-way copy, supports conflict resolution).
@@ -48,7 +49,7 @@ Interactive features (selection, conflict resolution, browsing) use an ink-based
 
 ## Command Overview
 
-Both `skills` and `commands` share the same subcommand structure.
+`skills`, `agents`, and `commands` share the same lifecycle-style subcommands (`add/rm/update/sync/collect/list`).
 
 ### Skills
 
@@ -100,6 +101,28 @@ ap commands collect [<command>...] --target <target> [--scope local|global] [--a
 ap commands rm [<command>...] [--target <...>] [--scope local|global] [--dry-run]
 ```
 
+### Agents
+
+```bash
+# List central agents
+ap agents list
+
+# Add an agent (git URL or local path)
+ap agents add <git-url|local-path> [--name <agent>] [--ref <ref>] [--force]
+
+# Update agents
+ap agents update [<agent>...] [--all] [--dry-run] [--force]
+
+# Sync: Central -> Target Tool
+ap agents sync [<agent>...] --target <target> [--scope local|global] [--dry-run] [--force]
+
+# Collect: Target Tool -> Central
+ap agents collect [<agent>...] --target <target> [--scope local|global] [--all] [--dry-run] [--force]
+
+# Remove agents
+ap agents rm [<agent>...] [--target <...>] [--scope local|global] [--dry-run]
+```
+
 ### Aliases
 
 Root groups support abbreviations:
@@ -107,6 +130,7 @@ Root groups support abbreviations:
 | Full       | Aliases               |
 | ---------- | --------------------- |
 | `skills`   | `skill`, `sk`, `s`    |
+| `agents`   | `ag`                  |
 | `commands` | `command`, `cmd`, `c` |
 
 Subcommands also support abbreviations (parsed by position):

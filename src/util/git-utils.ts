@@ -43,3 +43,8 @@ export async function runGit(args: string[], opts: { cwd?: string; stdio?: 'inhe
 export async function isSkillDir(dir: string): Promise<boolean> {
   return await pathExists(path.join(dir, 'SKILL.md'));
 }
+
+/** 检查目录是否包含 AGENT.md（即是否为 sub-agent 目录） */
+export async function isAgentDir(dir: string): Promise<boolean> {
+  return await pathExists(path.join(dir, 'AGENT.md'));
+}

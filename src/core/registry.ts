@@ -29,6 +29,13 @@ export type CommandRecord = {
   source: SkillSource;
 };
 
+export type AgentRecord = {
+  name: string;
+  addedAt: string;
+  updatedAt: string;
+  source: SkillSource;
+};
+
 export type McpSource =
   | { type: 'manual' }
   | { type: 'collected'; from: { target: string; scope: string } };
@@ -43,14 +50,16 @@ export type McpRecord = {
 export type RegistryFileV1 = {
   version: 1;
   skills: Record<string, SkillRecord>;
+  agents?: Record<string, AgentRecord>;
   commands?: Record<string, CommandRecord>;
   mcp?: Record<string, McpRecord>;
   repos?: Record<string, RepoRecord>;
+  agentRepos?: Record<string, RepoRecord>;
   commandRepos?: Record<string, RepoRecord>;
 };
 
 function createEmptyRegistry(): RegistryFileV1 {
-  return { version: 1, skills: {}, commands: {}, mcp: {}, repos: {}, commandRepos: {} };
+  return { version: 1, skills: {}, agents: {}, commands: {}, mcp: {}, repos: {}, agentRepos: {}, commandRepos: {} };
 }
 
 export async function loadRegistry(): Promise<RegistryFileV1> {
@@ -60,8 +69,10 @@ export async function loadRegistry(): Promise<RegistryFileV1> {
   if (parsed.version !== 1 || !parsed.skills) return createEmptyRegistry();
   // 确保可选字段存在
   if (!parsed.repos) parsed.repos = {};
+  if (!parsed.agents) parsed.agents = {};
   if (!parsed.commands) parsed.commands = {};
   if (!parsed.mcp) parsed.mcp = {};
+  if (!parsed.agentRepos) parsed.agentRepos = {};
   if (!parsed.commandRepos) parsed.commandRepos = {};
   return parsed;
 }
@@ -97,6 +108,24 @@ export function removeSkillFromRepo(registry: RegistryFileV1, skillName: string)
       repo.skills.splice(idx, 1);
       if (repo.skills.length === 0) {
         delete registry.repos[key];
+        return true;
+      }
+      return false;
+    }
+  }
+  return false;
+}
+
+/** Remove an agent from its agent-repo record; returns true if repo record was deleted */
+export function removeAgentFromRepo(registry: RegistryFileV1, agentName: string): boolean {
+  if (!registry.agentRepos) return false;
+
+  for (const [key, repo] of Object.entries(registry.agentRepos)) {
+    const idx = repo.skills.indexOf(agentName);
+    if (idx !== -1) {
+      repo.skills.splice(idx, 1);
+      if (repo.skills.length === 0) {
+        delete registry.agentRepos[key];
         return true;
       }
       return false;

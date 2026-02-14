@@ -27,6 +27,7 @@ export type TargetAdapter = {
   color: string; // ANSI color code for this adapter
   aliases: string[];
   resolveSkillsDir(params: ResolveParams): string;
+  resolveAgentsDir(params: ResolveParams): string;
   resolveCommandsDir(params: ResolveParams): string;
   /** 返回 MCP 配置文件规格；null 表示该工具不支持 MCP */
   resolveMcpConfig?(params: ResolveParams): McpConfigSpec | null;
@@ -46,6 +47,8 @@ const adapters: TargetAdapter[] = [
     aliases: ['cursor'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.cursor', 'skills') : path.join(projectRoot, '.cursor', 'skills'),
+    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.cursor', 'agents') : path.join(projectRoot, '.cursor', 'agents'),
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.cursor', 'commands') : path.join(projectRoot, '.cursor', 'commands'),
     resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
@@ -62,6 +65,8 @@ const adapters: TargetAdapter[] = [
     aliases: ['gemini', 'gemini-cli'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.gemini', 'skills') : path.join(projectRoot, '.gemini', 'skills'),
+    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.gemini', 'agents') : path.join(projectRoot, '.gemini', 'agents'),
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
         ? path.join(homeDir, '.gemini', 'commands')
@@ -82,6 +87,8 @@ const adapters: TargetAdapter[] = [
     aliases: ['codex'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(getCodexHomeDir(homeDir), 'skills') : path.join(projectRoot, '.codex', 'skills'),
+    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(getCodexHomeDir(homeDir), 'agents') : path.join(projectRoot, '.codex', 'agents'),
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
         ? path.join(getCodexHomeDir(homeDir), 'commands')
@@ -99,6 +106,8 @@ const adapters: TargetAdapter[] = [
     aliases: ['claude', 'claude-code', 'claudecode'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.claude', 'skills') : path.join(projectRoot, '.claude', 'skills'),
+    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.claude', 'agents') : path.join(projectRoot, '.claude', 'agents'),
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
         ? path.join(homeDir, '.claude', 'commands')
@@ -121,6 +130,10 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(homeDir, '.gemini', 'antigravity', 'global_skills')
         : path.join(projectRoot, '.agent', 'skills'),
+    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global'
+        ? path.join(homeDir, '.gemini', 'antigravity', 'global_agents')
+        : path.join(projectRoot, '.agent', 'agents'),
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
         ? path.join(homeDir, '.gemini', 'antigravity', 'global_commands')
@@ -138,6 +151,8 @@ const adapters: TargetAdapter[] = [
     aliases: ['openskills'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.agent', 'skills') : path.join(projectRoot, '.agent', 'skills'),
+    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.agent', 'agents') : path.join(projectRoot, '.agent', 'agents'),
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
         ? path.join(homeDir, '.agent', 'commands')
@@ -150,6 +165,8 @@ const adapters: TargetAdapter[] = [
     aliases: ['agents'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.agents', 'skills') : path.join(projectRoot, '.agents', 'skills'),
+    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.agents', 'agents') : path.join(projectRoot, '.agents', 'agents'),
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
         ? path.join(homeDir, '.agents', 'commands')
@@ -162,6 +179,8 @@ const adapters: TargetAdapter[] = [
     aliases: ['opencode', 'open-code'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.opencode', 'skills') : path.join(projectRoot, '.opencode', 'skills'),
+    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.opencode', 'agents') : path.join(projectRoot, '.opencode', 'agents'),
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
         ? path.join(homeDir, '.opencode', 'commands')
@@ -182,6 +201,8 @@ const adapters: TargetAdapter[] = [
     aliases: ['qoder'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.qoder', 'skills') : path.join(projectRoot, '.qoder', 'skills'),
+    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.qoder', 'agents') : path.join(projectRoot, '.qoder', 'agents'),
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.qoder', 'commands') : path.join(projectRoot, '.qoder', 'commands'),
     resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({

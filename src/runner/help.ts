@@ -1,4 +1,4 @@
-import { CLI_OPTIONS, SUBCOMMANDS, COMMAND_SUBCOMMANDS, MCP_SUBCOMMANDS } from '../util/cli-defs.js';
+import { CLI_OPTIONS, SUBCOMMANDS, AGENT_SUBCOMMANDS, COMMAND_SUBCOMMANDS, MCP_SUBCOMMANDS } from '../util/cli-defs.js';
 import { PKG_NAME, PKG_VERSION } from '../meta.js';
 import type { SubcommandDef } from '../util/cli-defs.js';
 
@@ -22,6 +22,13 @@ export function formatHelp(group?: string, subcommand?: string): string {
     return formatGroupHelp('commands', COMMAND_SUBCOMMANDS);
   }
 
+  if (group === 'agents') {
+    if (subcommand && subcommand in AGENT_SUBCOMMANDS) {
+      return formatSubcommandHelp('agents', subcommand as keyof typeof AGENT_SUBCOMMANDS, AGENT_SUBCOMMANDS);
+    }
+    return formatGroupHelp('agents', AGENT_SUBCOMMANDS);
+  }
+
   if (group === 'mcp') {
     if (subcommand && subcommand in MCP_SUBCOMMANDS) {
       return formatSubcommandHelp('mcp', subcommand as keyof typeof MCP_SUBCOMMANDS, MCP_SUBCOMMANDS);
@@ -36,10 +43,11 @@ export function formatHelp(group?: string, subcommand?: string): string {
 function formatMainHelp(): string {
   const lines: string[] = [];
 
-  lines.push(`${PKG_NAME} (ap) — LLM skills, commands & MCP manager`);
+  lines.push(`${PKG_NAME} (ap) — LLM skills, agents, commands & MCP manager`);
   lines.push('');
   lines.push('Usage:');
   lines.push('  ap skills <command> [args] [options]');
+  lines.push('  ap agents <command> [args] [options]');
   lines.push('  ap commands <command> [args] [options]');
   lines.push('  ap mcp <command> [args] [options]');
   lines.push('');
@@ -50,6 +58,10 @@ function formatMainHelp(): string {
 
   lines.push('Command Commands:');
   lines.push(formatSubcommandList(COMMAND_SUBCOMMANDS));
+  lines.push('');
+
+  lines.push('Agent Commands:');
+  lines.push(formatSubcommandList(AGENT_SUBCOMMANDS));
   lines.push('');
 
   lines.push('MCP Commands:');
@@ -66,6 +78,7 @@ function formatMainHelp(): string {
   lines.push('');
   lines.push('Aliases:');
   lines.push('  skills  skill, sk, s');
+  lines.push('  agents  ag');
   lines.push('  commands  command, cmd, c');
   lines.push('  mcp     m');
 

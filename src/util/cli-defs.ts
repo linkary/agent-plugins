@@ -93,6 +93,45 @@ export const SUBCOMMANDS = {
   },
 } as const satisfies Record<string, SubcommandDef>;
 
+/** Subcommands under `agents` */
+export const AGENT_SUBCOMMANDS = {
+  add: {
+    desc: 'Add agent from git URL or local path',
+    args: '<source>',
+    aliases: ['a', 'install', 'i'],
+    options: ['name', 'ref', 'force', 'dry-run'],
+  },
+  rm: {
+    desc: 'Remove agent(s)',
+    args: '[agent...]',
+    aliases: ['remove', 'del', 'delete'],
+    options: ['target', 'scope', 'global', 'local', 'cwd', 'dry-run'],
+  },
+  update: {
+    desc: 'Update agent(s) from original source',
+    args: '[agent...]',
+    aliases: ['up', 'u'],
+    options: ['all', 'force', 'dry-run'],
+  },
+  sync: {
+    desc: 'Sync central agents → target tools',
+    args: '[agent...]',
+    aliases: ['sy'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+  },
+  collect: {
+    desc: 'Collect agents from target tools → central',
+    args: '[agent...]',
+    aliases: ['col', 'c'],
+    options: ['target', 'scope', 'all', 'force', 'dry-run'],
+  },
+  list: {
+    desc: 'List central agents',
+    aliases: ['ls'],
+    options: ['verbose'],
+  },
+} as const satisfies Record<string, SubcommandDef>;
+
 /** Subcommands under `commands` */
 export const COMMAND_SUBCOMMANDS = {
   add: {
@@ -189,6 +228,9 @@ export const ROOT_ALIASES: Record<string, string> = {
   skill: 'skills',
   sk: 'skills',
   s: 'skills',
+  agent: 'agents',
+  agents: 'agents',
+  ag: 'agents',
   commands: 'commands',
   command: 'commands',
   cmd: 'commands',

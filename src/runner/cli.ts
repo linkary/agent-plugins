@@ -8,6 +8,12 @@ import { cmdSkillsRemove } from '../commands/skills/rm.js';
 import { cmdSkillsSync } from '../commands/skills/sync.js';
 import { cmdSkillsUpdate } from '../commands/skills/update.js';
 import { cmdSkillsShow } from '../commands/skills/show.js';
+import { cmdAgentsAdd } from '../commands/agents/add.js';
+import { cmdAgentsCollect } from '../commands/agents/collect.js';
+import { cmdAgentsList } from '../commands/agents/list.js';
+import { cmdAgentsRemove } from '../commands/agents/rm.js';
+import { cmdAgentsSync } from '../commands/agents/sync.js';
+import { cmdAgentsUpdate } from '../commands/agents/update.js';
 import { cmdCommandsAdd } from '../commands/commands/add.js';
 import { cmdCommandsCollect } from '../commands/commands/collect.js';
 import { cmdCommandsList } from '../commands/commands/list.js';
@@ -55,6 +61,10 @@ export async function runCli(argv: string[], ctx: CliRunContext): Promise<number
 
   if (group === 'commands') {
     return await dispatchCommands(cmd, positionals, flags, ctx);
+  }
+
+  if (group === 'agents') {
+    return await dispatchAgents(cmd, positionals, flags, ctx);
   }
 
   if (group === 'mcp') {
@@ -118,6 +128,32 @@ async function dispatchCommands(
     case 'help':
     default:
       process.stdout.write(formatHelp('commands'));
+      return cmd === 'help' ? 0 : 1;
+  }
+}
+
+async function dispatchAgents(
+  cmd: string,
+  positionals: string[],
+  flags: Record<string, string | boolean>,
+  ctx: CliRunContext,
+): Promise<number> {
+  switch (cmd) {
+    case 'add':
+      return await cmdAgentsAdd(positionals, flags, ctx);
+    case 'rm':
+      return await cmdAgentsRemove(positionals, flags, ctx);
+    case 'update':
+      return await cmdAgentsUpdate(positionals, flags, ctx);
+    case 'sync':
+      return await cmdAgentsSync(positionals, flags, ctx);
+    case 'collect':
+      return await cmdAgentsCollect(positionals, flags, ctx);
+    case 'list':
+      return await cmdAgentsList(positionals, flags, ctx);
+    case 'help':
+    default:
+      process.stdout.write(formatHelp('agents'));
       return cmd === 'help' ? 0 : 1;
   }
 }
