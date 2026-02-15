@@ -57,6 +57,11 @@ node dist/cli.mjs --help
 # 列出 central skills
 ap skills list
 
+# 查找 skills（本地 + 在线）
+ap skills find [query]
+ap skills find react --limit 10
+ap skills find react --offline
+
 # 浏览与查看 skills（交互式 TUI）
 ap skills show
 
@@ -82,6 +87,9 @@ ap skills rm [<skill>...] [--target <...>] [--scope local|global] [--dry-run]
 # 列出 central commands
 ap commands list
 
+# 查找 commands（本地 + 在线）
+ap commands find [query]
+
 # 浏览与查看 commands（交互式 TUI）
 ap commands show
 
@@ -106,6 +114,9 @@ ap commands rm [<command>...] [--target <...>] [--scope local|global] [--dry-run
 ```bash
 # 列出 central agents
 ap agents list
+
+# 查找 agents（本地 + 在线）
+ap agents find [query]
 
 # 添加 agent（git 或本地路径）
 ap agents add <git-url|local-path> [--name <agent>] [--ref <ref>] [--force]

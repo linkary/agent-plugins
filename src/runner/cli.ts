@@ -3,6 +3,7 @@ import { resolveCommandPath } from '../util/command-path.js';
 import { parseOptions } from '../util/options.js';
 import { cmdSkillsAdd } from '../commands/skills/add.js';
 import { cmdSkillsCollect } from '../commands/skills/collect.js';
+import { cmdSkillsFind } from '../commands/skills/find.js';
 import { cmdSkillsList } from '../commands/skills/list.js';
 import { cmdSkillsRemove } from '../commands/skills/rm.js';
 import { cmdSkillsSync } from '../commands/skills/sync.js';
@@ -10,12 +11,14 @@ import { cmdSkillsUpdate } from '../commands/skills/update.js';
 import { cmdSkillsShow } from '../commands/skills/show.js';
 import { cmdAgentsAdd } from '../commands/agents/add.js';
 import { cmdAgentsCollect } from '../commands/agents/collect.js';
+import { cmdAgentsFind } from '../commands/agents/find.js';
 import { cmdAgentsList } from '../commands/agents/list.js';
 import { cmdAgentsRemove } from '../commands/agents/rm.js';
 import { cmdAgentsSync } from '../commands/agents/sync.js';
 import { cmdAgentsUpdate } from '../commands/agents/update.js';
 import { cmdCommandsAdd } from '../commands/commands/add.js';
 import { cmdCommandsCollect } from '../commands/commands/collect.js';
+import { cmdCommandsFind } from '../commands/commands/find.js';
 import { cmdCommandsList } from '../commands/commands/list.js';
 import { cmdCommandsRemove } from '../commands/commands/rm.js';
 import { cmdCommandsSync } from '../commands/commands/sync.js';
@@ -23,6 +26,7 @@ import { cmdCommandsUpdate } from '../commands/commands/update.js';
 import { cmdCommandsShow } from '../commands/commands/show.js';
 import { cmdMcpAdd } from '../commands/mcp/add.js';
 import { cmdMcpCollect } from '../commands/mcp/collect.js';
+import { cmdMcpFind } from '../commands/mcp/find.js';
 import { cmdMcpList } from '../commands/mcp/list.js';
 import { cmdMcpRemove } from '../commands/mcp/rm.js';
 import { cmdMcpSync } from '../commands/mcp/sync.js';
@@ -93,6 +97,8 @@ async function dispatchSkills(
       return await cmdSkillsSync(positionals, flags, ctx);
     case 'collect':
       return await cmdSkillsCollect(positionals, flags, ctx);
+    case 'find':
+      return await cmdSkillsFind(positionals, flags, ctx);
     case 'list':
       return await cmdSkillsList(positionals, flags, ctx);
     case 'show':
@@ -121,6 +127,8 @@ async function dispatchCommands(
       return await cmdCommandsSync(positionals, flags, ctx);
     case 'collect':
       return await cmdCommandsCollect(positionals, flags, ctx);
+    case 'find':
+      return await cmdCommandsFind(positionals, flags, ctx);
     case 'list':
       return await cmdCommandsList(positionals, flags, ctx);
     case 'show':
@@ -149,6 +157,8 @@ async function dispatchAgents(
       return await cmdAgentsSync(positionals, flags, ctx);
     case 'collect':
       return await cmdAgentsCollect(positionals, flags, ctx);
+    case 'find':
+      return await cmdAgentsFind(positionals, flags, ctx);
     case 'list':
       return await cmdAgentsList(positionals, flags, ctx);
     case 'help':
@@ -175,6 +185,8 @@ async function dispatchMcp(
       return await cmdMcpSync(positionals, flags, ctx);
     case 'collect':
       return await cmdMcpCollect(positionals, flags, ctx);
+    case 'find':
+      return await cmdMcpFind(positionals, flags, ctx);
     case 'list':
       return await cmdMcpList(positionals, flags, ctx);
     case 'show':

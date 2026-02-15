@@ -15,4 +15,15 @@ describe('help metadata', () => {
     expect(output).toContain('ap agents <command> [args] [options]');
     expect(output).toContain('Agent Commands:');
   });
+
+  it('should include find in agents help', () => {
+    const output = formatHelp('agents');
+    expect(output).toContain('find [query]');
+  });
+
+  it('should include remote-search flags in find help', () => {
+    const output = formatHelp('skills', 'find');
+    expect(output).toContain('--limit <n>');
+    expect(output).toContain('--offline');
+  });
 });

@@ -9,7 +9,7 @@ import {
 
 const ROOT_GROUPS = ['skills', 'agents', 'commands', 'mcp'] as const;
 type RootGroup = (typeof ROOT_GROUPS)[number];
-type Action = 'add' | 'rm' | 'update' | 'sync' | 'collect' | 'list' | 'show' | 'help';
+type Action = 'add' | 'rm' | 'update' | 'sync' | 'collect' | 'find' | 'list' | 'show' | 'help';
 type Canonical = RootGroup | Action | 'agent';
 
 const SUBCOMMANDS_BY_GROUP: Record<RootGroup, Record<string, SubcommandDef>> = {

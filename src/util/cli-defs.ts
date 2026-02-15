@@ -45,6 +45,8 @@ export const CLI_OPTIONS = {
   ref: { arg: '<ref>', desc: 'Git ref (branch/tag/commit)' },
   cwd: { short: 'C', arg: '<dir>', desc: 'Override project directory for local scope' },
   all: { short: 'a', desc: 'Apply to all skills' },
+  limit: { arg: '<n>', desc: 'Max number of remote results (find only)' },
+  offline: { desc: 'Disable remote network search in find' },
   verbose: { short: 'v', desc: 'Show detailed output' },
 } as const;
 
@@ -79,6 +81,12 @@ export const SUBCOMMANDS = {
     args: '[skill...]',
     aliases: ['col', 'c'],
     options: ['target', 'scope', 'all', 'force', 'dry-run'],
+  },
+  find: {
+    desc: 'Find skills by keyword (local + remote)',
+    args: '[query]',
+    aliases: ['fd'],
+    options: ['limit', 'offline', 'verbose'],
   },
   list: {
     desc: 'List central skills',
@@ -125,6 +133,12 @@ export const AGENT_SUBCOMMANDS = {
     aliases: ['col', 'c'],
     options: ['target', 'scope', 'all', 'force', 'dry-run'],
   },
+  find: {
+    desc: 'Find agents by keyword (local + remote)',
+    args: '[query]',
+    aliases: ['fd'],
+    options: ['limit', 'offline', 'verbose'],
+  },
   list: {
     desc: 'List central agents',
     aliases: ['ls'],
@@ -163,6 +177,12 @@ export const COMMAND_SUBCOMMANDS = {
     args: '[command...]',
     aliases: ['col', 'c'],
     options: ['target', 'scope', 'all', 'force', 'dry-run'],
+  },
+  find: {
+    desc: 'Find commands by keyword (local + remote)',
+    args: '[query]',
+    aliases: ['fd'],
+    options: ['limit', 'offline', 'verbose'],
   },
   list: {
     desc: 'List central commands',
@@ -208,6 +228,12 @@ export const MCP_SUBCOMMANDS = {
     args: '[server...]',
     aliases: ['col', 'c'],
     options: ['target', 'scope', 'all', 'force', 'dry-run'],
+  },
+  find: {
+    desc: 'Find MCP servers by keyword (local + remote)',
+    args: '[query]',
+    aliases: ['fd'],
+    options: ['limit', 'offline', 'verbose'],
   },
   list: {
     desc: 'List central MCP servers',

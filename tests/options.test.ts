@@ -31,6 +31,12 @@ describe('parseOptions', () => {
       expect(flags.command).toBe('npx');
     });
 
+    it('should parse find remote options', () => {
+      const { flags } = parseOptions(['--limit', '5', '--offline']);
+      expect(flags.limit).toBe('5');
+      expect(flags.offline).toBe(true);
+    });
+
     it('should collect positional arguments', () => {
       const { positionals } = parseOptions(['skill1', 'skill2']);
       expect(positionals).toEqual(['skill1', 'skill2']);

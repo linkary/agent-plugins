@@ -57,6 +57,11 @@ Interactive features (selection, conflict resolution, browsing) use an ink-based
 # List central skills
 ap skills list
 
+# Find skills (local + remote)
+ap skills find [query]
+ap skills find react --limit 10
+ap skills find react --offline
+
 # Browse and inspect skills (interactive TUI)
 ap skills show
 
@@ -82,6 +87,9 @@ ap skills rm [<skill>...] [--target <...>] [--scope local|global] [--dry-run]
 # List central commands
 ap commands list
 
+# Find commands (local + remote)
+ap commands find [query]
+
 # Browse and inspect commands (interactive TUI)
 ap commands show
 
@@ -106,6 +114,9 @@ ap commands rm [<command>...] [--target <...>] [--scope local|global] [--dry-run
 ```bash
 # List central agents
 ap agents list
+
+# Find agents (local + remote)
+ap agents find [query]
 
 # Add an agent (git URL or local path)
 ap agents add <git-url|local-path> [--name <agent>] [--ref <ref>] [--force]

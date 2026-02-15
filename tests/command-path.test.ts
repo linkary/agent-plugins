@@ -28,4 +28,11 @@ describe('command-path', () => {
     expect(result.error).toBe('Unknown action for agents: show');
     expect(result.path).toEqual(['agents']);
   });
+
+  it('resolves find for all groups', () => {
+    expect(resolveCommandPath(['skills', 'find', 'foo']).path).toEqual(['skills', 'find']);
+    expect(resolveCommandPath(['agents', 'find', 'foo']).path).toEqual(['agents', 'find']);
+    expect(resolveCommandPath(['commands', 'find', 'foo']).path).toEqual(['commands', 'find']);
+    expect(resolveCommandPath(['mcp', 'find', 'foo']).path).toEqual(['mcp', 'find']);
+  });
 });
