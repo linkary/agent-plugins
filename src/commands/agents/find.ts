@@ -12,17 +12,27 @@ export async function cmdAgentsFind(positionals: string[], flags: ParsedFlags, _
   const verbose = flags.verbose === true || flags.v === true;
   const offline = getBooleanFlag(flags, 'offline');
   const limit = getPositiveIntFlag(flags, 'limit', 8, { min: 1, max: 20 });
+  const remotePromise =
+    needle && !offline
+      ? searchRemoteForGroup('agents', query, { limit })
+      : Promise.resolve({ results: [], error: undefined } as const);
 
   const agents = await listCentralAgents();
+  const localRows = await Promise.all(
+    agents.map(async (name) => {
+      const desc = await readAgentDescription(getCentralAgentPath(name));
+      const haystack = `${name}\n${desc ?? ''}`.toLowerCase();
+      return { name, desc, haystack };
+    }),
+  );
+
   let localMatched = 0;
-  for (const name of agents) {
-    const desc = await readAgentDescription(getCentralAgentPath(name));
-    const haystack = `${name}\n${desc ?? ''}`.toLowerCase();
-    if (needle && !haystack.includes(needle)) continue;
+  for (const row of localRows) {
+    if (needle && !row.haystack.includes(needle)) continue;
 
     localMatched++;
-    process.stdout.write(`${ANSI.cyan}${name}${ANSI.reset}\n`);
-    if (verbose && desc) process.stdout.write(`  ${ANSI.dim}${desc}${ANSI.reset}\n`);
+    process.stdout.write(`${ANSI.cyan}${row.name}${ANSI.reset}\n`);
+    if (verbose && row.desc) process.stdout.write(`  ${ANSI.dim}${row.desc}${ANSI.reset}\n`);
   }
 
   if (!needle) {
@@ -34,7 +44,10 @@ export async function cmdAgentsFind(positionals: string[], flags: ParsedFlags, _
     return 0;
   }
 
-  const remote = offline ? { results: [], error: undefined } : await searchRemoteForGroup('agents', query, { limit });
+  const remote = await remotePromise;
+  if (verbose && remote.cached) {
+    process.stdout.write(`${ANSI.dim}remote cache hit${ANSI.reset}\n`);
+  }
 
   if (remote.results.length > 0) {
     if (localMatched > 0) process.stdout.write('\n');

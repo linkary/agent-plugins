@@ -1,3 +1,7 @@
+import path from 'node:path';
+import { getApgHomeDir } from './apg-paths.js';
+import { pathExists, readJsonFile, writeJsonFileAtomic } from './fs-utils.js';
+
 type FindGroup = 'skills' | 'agents' | 'commands' | 'mcp';
 
 type FetchLike = (
@@ -9,6 +13,9 @@ type FetchLike = (
 ) => Promise<{
   ok: boolean;
   status: number;
+  headers?: {
+    get(name: string): string | null;
+  };
   json(): Promise<unknown>;
 }>;
 
@@ -24,16 +31,36 @@ export type RemoteFindResult = {
 export type RemoteFindResponse = {
   results: RemoteFindResult[];
   error?: string;
+  cached?: boolean;
 };
 
 export type RemoteFindOptions = {
   limit?: number;
   fetcher?: FetchLike;
+  cache?: boolean;
 };
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 20;
 const FETCH_TIMEOUT_MS = 7000;
+const MAX_RETRY_ATTEMPTS = 3;
+const DEFAULT_CACHE_TTL_SEC = 15 * 60;
+const CACHE_FILE_VERSION = 1;
+
+type CacheRecord = {
+  expiresAt: number;
+  response: RemoteFindResponse;
+};
+
+type CacheFile = {
+  version: number;
+  entries: Record<string, CacheRecord>;
+};
+
+const EMPTY_CACHE: CacheFile = {
+  version: CACHE_FILE_VERSION,
+  entries: {},
+};
 
 const SKILLS_API_BASE = (process.env.APG_FIND_SKILLS_API ?? process.env.SKILLS_API_URL ?? 'https://skills.sh').replace(
   /\/+$/,
@@ -69,6 +96,11 @@ type GitHubRepoSearchResponse = {
   items?: GitHubRepo[];
 };
 
+let cacheLoaded = false;
+let cacheData: CacheFile = EMPTY_CACHE;
+let cacheDirty = false;
+let cacheFilePath = '';
+
 function normalizeLimit(input?: number): number {
   if (!input || !Number.isFinite(input)) return DEFAULT_LIMIT;
   const rounded = Math.floor(input);
@@ -80,6 +112,95 @@ function normalizeLimit(input?: number): number {
 function toErrorMessage(err: unknown): string {
   if (err instanceof Error && err.message) return err.message;
   return String(err ?? 'unknown error');
+}
+
+function parseBool(value: string | undefined): boolean | undefined {
+  if (value === undefined) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on') return true;
+  if (normalized === '0' || normalized === 'false' || normalized === 'no' || normalized === 'off') return false;
+  return undefined;
+}
+
+function getCacheTtlMs(): number {
+  const raw = process.env.APG_FIND_CACHE_TTL_SEC;
+  const parsed = raw ? Number.parseInt(raw, 10) : DEFAULT_CACHE_TTL_SEC;
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return Math.min(parsed, 24 * 60 * 60) * 1000;
+}
+
+function shouldUseCache(opts?: RemoteFindOptions): boolean {
+  if (opts?.cache !== undefined) return opts.cache;
+  if (opts?.fetcher) return false;
+  const disabled = parseBool(process.env.APG_FIND_DISABLE_CACHE);
+  return disabled !== true;
+}
+
+function makeCacheKey(group: FindGroup, query: string, limit: number): string {
+  return `${group}|${limit}|${query.trim().toLowerCase()}`;
+}
+
+async function loadCache(): Promise<void> {
+  const resolvedPath = path.join(getApgHomeDir(), 'cache', 'remote-find-v1.json');
+  if (cacheFilePath !== resolvedPath) {
+    cacheFilePath = resolvedPath;
+    cacheLoaded = false;
+    cacheDirty = false;
+    cacheData = { ...EMPTY_CACHE, entries: {} };
+  }
+
+  if (cacheLoaded) return;
+  cacheLoaded = true;
+
+  if (!(await pathExists(cacheFilePath))) {
+    cacheData = { ...EMPTY_CACHE, entries: {} };
+    return;
+  }
+  try {
+    const file = await readJsonFile<CacheFile>(cacheFilePath);
+    if (!file || file.version !== CACHE_FILE_VERSION || !file.entries || typeof file.entries !== 'object') {
+      cacheData = { ...EMPTY_CACHE, entries: {} };
+      return;
+    }
+    cacheData = file;
+  } catch {
+    cacheData = { ...EMPTY_CACHE, entries: {} };
+  }
+}
+
+async function flushCacheIfNeeded(): Promise<void> {
+  if (!cacheDirty) return;
+  cacheDirty = false;
+  try {
+    await writeJsonFileAtomic(cacheFilePath, cacheData);
+  } catch {
+    // Ignore cache persistence errors.
+  }
+}
+
+async function getCachedResponse(key: string): Promise<RemoteFindResponse | null> {
+  await loadCache();
+  const hit = cacheData.entries[key];
+  if (!hit) return null;
+  if (hit.expiresAt <= Date.now()) {
+    delete cacheData.entries[key];
+    cacheDirty = true;
+    await flushCacheIfNeeded();
+    return null;
+  }
+  return { ...hit.response, cached: true };
+}
+
+async function setCachedResponse(key: string, response: RemoteFindResponse): Promise<void> {
+  const ttlMs = getCacheTtlMs();
+  if (ttlMs <= 0) return;
+  await loadCache();
+  cacheData.entries[key] = {
+    expiresAt: Date.now() + ttlMs,
+    response: { results: response.results, error: response.error },
+  };
+  cacheDirty = true;
+  await flushCacheIfNeeded();
 }
 
 function formatInstalls(count: number | undefined): string | undefined {
@@ -136,18 +257,47 @@ function inferNameFromPath(pathLike: string | undefined, fallback: string): stri
 }
 
 async function fetchJson<T>(fetcher: FetchLike, url: string, headers?: Record<string, string>): Promise<T> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  let lastError: unknown = null;
 
-  try {
-    const res = await fetcher(url, { headers, signal: controller.signal });
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
+  for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+    try {
+      const res = await fetcher(url, { headers, signal: controller.signal });
+      if (!res.ok) {
+        const retriable = res.status === 429 || res.status >= 500;
+        if (!retriable || attempt === MAX_RETRY_ATTEMPTS) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const retryAfterSec = Number.parseInt(res.headers?.get('retry-after') ?? '', 10);
+        const delayFromHeader = Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec * 1000 : null;
+        const backoff = delayFromHeader ?? 250 * 2 ** (attempt - 1) + Math.floor(Math.random() * 120);
+        await new Promise((resolve) => setTimeout(resolve, backoff));
+        continue;
+      }
+      return (await res.json()) as T;
+    } catch (err) {
+      lastError = err;
+      const message = toErrorMessage(err).toLowerCase();
+      const retriable =
+        message.includes('network') ||
+        message.includes('timed out') ||
+        message.includes('abort') ||
+        message.includes('fetch failed') ||
+        message.includes('connection');
+      if (!retriable || attempt === MAX_RETRY_ATTEMPTS) {
+        throw err;
+      }
+      const backoff = 250 * 2 ** (attempt - 1) + Math.floor(Math.random() * 120);
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+    } finally {
+      clearTimeout(timeout);
     }
-    return (await res.json()) as T;
-  } finally {
-    clearTimeout(timeout);
   }
+
+  throw lastError instanceof Error ? lastError : new Error('remote fetch failed');
 }
 
 async function searchSkills(query: string, limit: number, fetcher: FetchLike): Promise<RemoteFindResult[]> {
@@ -243,31 +393,57 @@ export async function searchRemoteForGroup(
   const limit = normalizeLimit(opts?.limit);
   const fetcher = opts?.fetcher ?? ((globalThis.fetch as FetchLike | undefined) ?? null);
   if (!fetcher) return { results: [], error: 'fetch is not available in this runtime' };
+  const useCache = shouldUseCache(opts);
+  const cacheKey = makeCacheKey(group, q, limit);
+
+  if (useCache) {
+    const cached = await getCachedResponse(cacheKey);
+    if (cached) return cached;
+  }
 
   try {
+    let response: RemoteFindResponse;
+
     if (group === 'skills') {
       const primary = await searchSkills(q, limit, fetcher);
-      if (primary.length > 0) return { results: dedupeByUrlOrName(primary).slice(0, limit) };
-      const fallback = await searchGitHubCode(q, 'SKILL.md', 'skills', limit, fetcher);
-      return { results: dedupeByUrlOrName(fallback).slice(0, limit) };
+      if (primary.length > 0) {
+        response = { results: dedupeByUrlOrName(primary).slice(0, limit) };
+      } else {
+        const fallback = await searchGitHubCode(q, 'SKILL.md', 'skills', limit, fetcher);
+        response = { results: dedupeByUrlOrName(fallback).slice(0, limit) };
+      }
+      if (useCache) await setCachedResponse(cacheKey, response);
+      return response;
     }
 
     if (group === 'agents') {
       const primary = await searchGitHubCode(q, 'AGENT.md', 'agents', limit, fetcher);
-      if (primary.length > 0) return { results: dedupeByUrlOrName(primary).slice(0, limit) };
-      const fallback = await searchGitHubRepos(`${q} coding agent`, 'agents', limit, fetcher);
-      return { results: dedupeByUrlOrName(fallback).slice(0, limit) };
+      if (primary.length > 0) {
+        response = { results: dedupeByUrlOrName(primary).slice(0, limit) };
+      } else {
+        const fallback = await searchGitHubRepos(`${q} coding agent`, 'agents', limit, fetcher);
+        response = { results: dedupeByUrlOrName(fallback).slice(0, limit) };
+      }
+      if (useCache) await setCachedResponse(cacheKey, response);
+      return response;
     }
 
     if (group === 'commands') {
       const primary = await searchGitHubCode(q, 'COMMAND.md', 'commands', limit, fetcher);
-      if (primary.length > 0) return { results: dedupeByUrlOrName(primary).slice(0, limit) };
-      const fallback = await searchGitHubRepos(`${q} prompt command`, 'commands', limit, fetcher);
-      return { results: dedupeByUrlOrName(fallback).slice(0, limit) };
+      if (primary.length > 0) {
+        response = { results: dedupeByUrlOrName(primary).slice(0, limit) };
+      } else {
+        const fallback = await searchGitHubRepos(`${q} prompt command`, 'commands', limit, fetcher);
+        response = { results: dedupeByUrlOrName(fallback).slice(0, limit) };
+      }
+      if (useCache) await setCachedResponse(cacheKey, response);
+      return response;
     }
 
     const mcpRepos = await searchGitHubRepos(`${q} mcp server`, 'mcp', limit, fetcher);
-    return { results: dedupeByUrlOrName(mcpRepos).slice(0, limit) };
+    response = { results: dedupeByUrlOrName(mcpRepos).slice(0, limit) };
+    if (useCache) await setCachedResponse(cacheKey, response);
+    return response;
   } catch (err) {
     return { results: [], error: toErrorMessage(err) };
   }

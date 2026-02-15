@@ -21,19 +21,29 @@ export async function cmdMcpFind(positionals: string[], flags: ParsedFlags, _ctx
   const verbose = flags.verbose === true || flags.v === true;
   const offline = getBooleanFlag(flags, 'offline');
   const limit = getPositiveIntFlag(flags, 'limit', 8, { min: 1, max: 20 });
+  const remotePromise =
+    needle && !offline
+      ? searchRemoteForGroup('mcp', query, { limit })
+      : Promise.resolve({ results: [], error: undefined } as const);
 
   const servers = await listCentralMcpServers();
+  const localRows = await Promise.all(
+    servers.map(async (name) => {
+      const def = await readCentralMcpServer(name);
+      const summary = def ? formatMcpShort(def) : '';
+      const haystack = `${name}\n${summary}`.toLowerCase();
+      return { name, summary, haystack, found: Boolean(def) };
+    }),
+  );
+
   let localMatched = 0;
-  for (const name of servers) {
-    const def = await readCentralMcpServer(name);
-    if (!def) continue;
-    const summary = formatMcpShort(def);
-    const haystack = `${name}\n${summary}`.toLowerCase();
-    if (needle && !haystack.includes(needle)) continue;
+  for (const row of localRows) {
+    if (!row.found) continue;
+    if (needle && !row.haystack.includes(needle)) continue;
 
     localMatched++;
-    process.stdout.write(`${ANSI.cyan}${name}${ANSI.reset}\n`);
-    if (verbose) process.stdout.write(`  ${ANSI.dim}${summary}${ANSI.reset}\n`);
+    process.stdout.write(`${ANSI.cyan}${row.name}${ANSI.reset}\n`);
+    if (verbose) process.stdout.write(`  ${ANSI.dim}${row.summary}${ANSI.reset}\n`);
   }
 
   if (!needle) {
@@ -45,7 +55,10 @@ export async function cmdMcpFind(positionals: string[], flags: ParsedFlags, _ctx
     return 0;
   }
 
-  const remote = offline ? { results: [], error: undefined } : await searchRemoteForGroup('mcp', query, { limit });
+  const remote = await remotePromise;
+  if (verbose && remote.cached) {
+    process.stdout.write(`${ANSI.dim}remote cache hit${ANSI.reset}\n`);
+  }
 
   if (remote.results.length > 0) {
     if (localMatched > 0) process.stdout.write('\n');

@@ -12,17 +12,27 @@ export async function cmdCommandsFind(positionals: string[], flags: ParsedFlags,
   const verbose = flags.verbose === true || flags.v === true;
   const offline = getBooleanFlag(flags, 'offline');
   const limit = getPositiveIntFlag(flags, 'limit', 8, { min: 1, max: 20 });
+  const remotePromise =
+    needle && !offline
+      ? searchRemoteForGroup('commands', query, { limit })
+      : Promise.resolve({ results: [], error: undefined } as const);
 
   const commands = await listCentralCommands();
+  const localRows = await Promise.all(
+    commands.map(async (cmd) => {
+      const desc = await readCommandDescription(cmd.mdPath);
+      const haystack = `${cmd.name}\n${desc ?? ''}`.toLowerCase();
+      return { name: cmd.name, desc, haystack };
+    }),
+  );
+
   let localMatched = 0;
-  for (const cmd of commands) {
-    const desc = await readCommandDescription(cmd.mdPath);
-    const haystack = `${cmd.name}\n${desc ?? ''}`.toLowerCase();
-    if (needle && !haystack.includes(needle)) continue;
+  for (const row of localRows) {
+    if (needle && !row.haystack.includes(needle)) continue;
 
     localMatched++;
-    process.stdout.write(`${ANSI.cyan}${cmd.name}${ANSI.reset}\n`);
-    if (verbose && desc) process.stdout.write(`  ${ANSI.dim}${desc}${ANSI.reset}\n`);
+    process.stdout.write(`${ANSI.cyan}${row.name}${ANSI.reset}\n`);
+    if (verbose && row.desc) process.stdout.write(`  ${ANSI.dim}${row.desc}${ANSI.reset}\n`);
   }
 
   if (!needle) {
@@ -34,7 +44,10 @@ export async function cmdCommandsFind(positionals: string[], flags: ParsedFlags,
     return 0;
   }
 
-  const remote = offline ? { results: [], error: undefined } : await searchRemoteForGroup('commands', query, { limit });
+  const remote = await remotePromise;
+  if (verbose && remote.cached) {
+    process.stdout.write(`${ANSI.dim}remote cache hit${ANSI.reset}\n`);
+  }
 
   if (remote.results.length > 0) {
     if (localMatched > 0) process.stdout.write('\n');

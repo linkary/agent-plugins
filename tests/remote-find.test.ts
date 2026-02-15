@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'bun:test';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { searchRemoteForGroup } from '../src/util/remote-find.js';
 
 type StubResponse = { ok: boolean; status: number; body: unknown };
@@ -10,6 +13,11 @@ function makeFetcher(routes: Record<string, StubResponse>) {
     return {
       ok: response.ok,
       status: response.status,
+      headers: {
+        get() {
+          return null;
+        },
+      },
       async json() {
         return response.body;
       },
@@ -105,5 +113,102 @@ describe('remote find', () => {
     const result = await searchRemoteForGroup('skills', 'react', { fetcher, limit: 5 });
     expect(result.results).toEqual([]);
     expect(result.error).toContain('HTTP 503');
+  });
+
+  it('retries transient errors and eventually succeeds', async () => {
+    let attempts = 0;
+    const fetcher = async (url: string) => {
+      if (url.includes('/api/search')) {
+        attempts++;
+        if (attempts < 3) {
+          return {
+            ok: false,
+            status: 503,
+            headers: {
+              get() {
+                return null;
+              },
+            },
+            async json() {
+              return {};
+            },
+          };
+        }
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get() {
+            return null;
+          },
+        },
+        async json() {
+          return {
+            skills: [
+              {
+                id: 'acme/react-skill',
+                name: 'react-skill',
+                source: 'acme/react-skills',
+                installs: 33,
+              },
+            ],
+          };
+        },
+      };
+    };
+
+    const result = await searchRemoteForGroup('skills', 'react', { fetcher, limit: 5 });
+    expect(result.error).toBeUndefined();
+    expect(result.results[0]?.name).toBe('react-skill');
+    expect(attempts).toBe(3);
+  });
+
+  it('uses persistent cache when cache option is enabled', async () => {
+    const tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), 'apg-find-cache-test-'));
+    const prevHome = process.env.APG_HOME;
+
+    let calls = 0;
+    const fetcher = async () => {
+      calls++;
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get() {
+            return null;
+          },
+        },
+        async json() {
+          return {
+            skills: [
+              {
+                id: 'acme/cache-skill',
+                name: 'cache-skill',
+                source: 'acme/skills',
+                installs: 88,
+              },
+            ],
+          };
+        },
+      };
+    };
+
+    try {
+      process.env.APG_HOME = tmpHome;
+      const first = await searchRemoteForGroup('skills', 'cache', { fetcher, limit: 5, cache: true });
+      const second = await searchRemoteForGroup('skills', 'cache', { fetcher, limit: 5, cache: true });
+
+      expect(first.cached).toBeUndefined();
+      expect(second.cached).toBe(true);
+      expect(first.results[0]?.name).toBe('cache-skill');
+      expect(second.results[0]?.name).toBe('cache-skill');
+      expect(calls).toBe(1);
+    } finally {
+      if (prevHome === undefined) delete process.env.APG_HOME;
+      else process.env.APG_HOME = prevHome;
+      await fs.rm(tmpHome, { recursive: true, force: true });
+    }
   });
 });
