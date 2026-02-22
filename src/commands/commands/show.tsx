@@ -3,7 +3,7 @@ import { render } from 'ink';
 import { loadConfig } from '../../core/config.js';
 import { loadRegistry, type CommandRecord } from '../../core/registry.js';
 import { listCentralCommands, findEntryMd } from '../../core/command-store.js';
-import { getAdapters } from '../../targets/adapters.js';
+import { filterCommandAdapters, getAdapters } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { gatherTargetCommands, findSyncedCommandCopies } from './manage-utils.js';
 import { SkillBrowser, type SkillEntry } from '../../ui/skill-browser.js';
@@ -26,7 +26,7 @@ export async function cmdCommandsShow(_positionals: string[], flags: ParsedFlags
   let commandEntries: SkillEntry[];
 
   if (hasTargetFlag) {
-    const adapters = getAdapters();
+    const adapters = filterCommandAdapters(getAdapters());
     const config = await loadConfig();
     const selectedAdapters = await selectTargetAdapters({
       adapters,

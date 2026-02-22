@@ -7,6 +7,7 @@ export type TargetConfigV1 = {
   include?: string[]; // skill names; supports ['*']
   includeAgents?: string[]; // agent names; supports ['*']
   includeCommands?: string[]; // command names; supports ['*']
+  includeRules?: string[]; // rule paths; supports ['*']
   includeMcp?: string[]; // MCP server names; supports ['*']
 };
 
@@ -19,15 +20,15 @@ function defaultConfig(): ConfigV1 {
   return {
     version: 1,
     targets: {
-      cursor: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
-      gemini: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
-      codex: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
-      'claude-code': { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
-      antigravity: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
-      openskills: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
-      agents: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
-      opencode: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
-      qoder: { defaultScope: 'global', include: ['*'], includeAgents: ['*'] },
+      cursor: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
+      gemini: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
+      codex: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
+      'claude-code': { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
+      antigravity: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
+      openskills: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
+      agents: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
+      opencode: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
+      qoder: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
     },
   };
 }

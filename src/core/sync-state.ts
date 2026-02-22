@@ -11,6 +11,7 @@ export type SyncStateV1 = {
       skills: Record<string, SyncedItemRecord>;
       agents?: Record<string, SyncedItemRecord>;
       commands?: Record<string, SyncedItemRecord>;
+      rules?: Record<string, SyncedItemRecord>;
       mcp?: Record<string, SyncedItemRecord>;
     }
   >;

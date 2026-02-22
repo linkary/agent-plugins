@@ -3,7 +3,13 @@ import { loadConfig } from '../../core/config.js';
 import { loadRegistry, saveRegistry } from '../../core/registry.js';
 import { ensureCentralAgentStore, getCentralAgentPath } from '../../core/agent-store.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
-import { type Scope, getAdapters, getColoredLabel, type TargetAdapter } from '../../targets/adapters.js';
+import {
+  type Scope,
+  filterAgentAdapters,
+  getAdapters,
+  getColoredLabel,
+  type TargetAdapter,
+} from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { getCentralAgentsDir } from '../../util/apg-paths.js';
 import { ANSI } from '../../util/ansi.js';
@@ -32,7 +38,7 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
   const scopeFlag = typeof flags.scope === 'string' ? flags.scope : undefined;
   const cwdFlag = typeof flags.cwd === 'string' ? flags.cwd : undefined;
 
-  const adapters = getAdapters();
+  const adapters = filterAgentAdapters(getAdapters());
   const selectedAdapters = await selectTargetAdapters({
     adapters,
     flags,

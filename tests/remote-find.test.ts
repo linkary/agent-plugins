@@ -101,6 +101,34 @@ describe('remote find', () => {
     expect(result.results[0]?.badge).toContain('★');
   });
 
+  it('maps GitHub code search results for rules', async () => {
+    const fetcher = makeFetcher({
+      '/search/code': {
+        ok: true,
+        status: 200,
+        body: {
+          items: [
+            {
+              path: 'rules/coding/typescript.mdc',
+              html_url: 'https://github.com/acme/rules/blob/main/rules/coding/typescript.mdc',
+              repository: {
+                full_name: 'acme/rules',
+                html_url: 'https://github.com/acme/rules',
+                description: 'shared rule pack',
+              },
+            },
+          ],
+        },
+      },
+    });
+
+    const result = await searchRemoteForGroup('rules', 'typescript', { fetcher, limit: 5, cache: false });
+    expect(result.error).toBeUndefined();
+    expect(result.results.length).toBe(1);
+    expect(result.results[0]?.name).toBe('typescript.mdc');
+    expect(result.results[0]?.addHint).toBe('ap rules add https://github.com/acme/rules');
+  });
+
   it('returns error info when remote endpoint fails', async () => {
     const fetcher = makeFetcher({
       '/api/search': {

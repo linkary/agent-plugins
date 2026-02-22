@@ -1,17 +1,60 @@
 import path from 'node:path';
-import { getColoredLabel, getAdapters, type TargetAdapter, type Scope } from '../../targets/adapters.js';
-import { listDirNames, pathExists } from '../../util/fs-utils.js';
+import fs from 'node:fs/promises';
+import {
+  filterAgentAdapters,
+  getColoredLabel,
+  getAdapters,
+  type TargetAdapter,
+  type Scope,
+} from '../../targets/adapters.js';
+import { pathExists } from '../../util/fs-utils.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import type { ConfigV1 } from '../../core/config.js';
 
 export type TargetAgent = {
   name: string;
   path: string;
+  form: 'directory' | 'file';
   adapterId: string;
   adapterLabel: string;
   scope: Scope;
   projectRoot?: string;
 };
+
+type AgentItem = { name: string; path: string; form: 'directory' | 'file' };
+
+async function listAgentItems(agentsDir: string): Promise<AgentItem[]> {
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.readdir(agentsDir, { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
+
+  const dedup = new Map<string, AgentItem>();
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    if (entry.isDirectory()) {
+      dedup.set(entry.name, {
+        name: entry.name,
+        path: path.join(agentsDir, entry.name),
+        form: 'directory',
+      });
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+    const name = entry.name.slice(0, -3);
+    if (dedup.has(name)) continue;
+    dedup.set(name, {
+      name,
+      path: path.join(agentsDir, entry.name),
+      form: 'file',
+    });
+  }
+
+  return [...dedup.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
 
 export async function gatherTargetAgents(params: {
   adapters: TargetAdapter[];
@@ -33,12 +76,13 @@ export async function gatherTargetAgents(params: {
     });
 
     const agentsDir = adapter.resolveAgentsDir({ scope, projectRoot, homeDir });
-    const agents = await listDirNames(agentsDir);
+    const agents = await listAgentItems(agentsDir);
 
-    for (const name of agents) {
+    for (const agent of agents) {
       allAgents.push({
-        name,
-        path: path.join(agentsDir, name),
+        name: agent.name,
+        path: agent.path,
+        form: agent.form,
         adapterId: adapter.id,
         adapterLabel: getColoredLabel(adapter),
         scope,
@@ -53,6 +97,7 @@ export async function gatherTargetAgents(params: {
 export type SyncedAgentCopy = {
   agentName: string;
   path: string;
+  form: 'directory' | 'file';
   adapterId: string;
   adapterLabel: string;
   scope: Scope;
@@ -65,7 +110,7 @@ export async function findSyncedAgentCopies(params: {
   currentCwd: string;
 }): Promise<SyncedAgentCopy[]> {
   const { agentNames, config, currentCwd } = params;
-  const adapters = getAdapters();
+  const adapters = filterAgentAdapters(getAdapters());
   const copies: SyncedAgentCopy[] = [];
 
   for (const adapter of adapters) {
@@ -78,11 +123,15 @@ export async function findSyncedAgentCopies(params: {
     const agentsDir = adapter.resolveAgentsDir({ scope, projectRoot, homeDir });
 
     for (const name of agentNames) {
-      const agentPath = path.join(agentsDir, name);
-      if (await pathExists(agentPath)) {
+      const dirPath = path.join(agentsDir, name);
+      const mdPath = path.join(agentsDir, `${name}.md`);
+      const [dirExists, fileExists] = await Promise.all([pathExists(dirPath), pathExists(mdPath)]);
+      const copyPath = dirExists ? dirPath : fileExists ? mdPath : null;
+      if (copyPath) {
         copies.push({
           agentName: name,
-          path: agentPath,
+          path: copyPath,
+          form: dirExists ? 'directory' : 'file',
           adapterId: adapter.id,
           adapterLabel: getColoredLabel(adapter),
           scope,

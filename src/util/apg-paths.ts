@@ -38,3 +38,7 @@ export function getCentralAgentsDir(): string {
 export function getCentralMcpDir(): string {
   return path.join(getApgHomeDir(), 'mcp');
 }
+
+export function getCentralRulesDir(): string {
+  return path.join(getApgHomeDir(), 'rules');
+}

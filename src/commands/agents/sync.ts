@@ -1,76 +1,66 @@
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 import path from 'node:path';
-import { listCentralAgents, getCentralAgentPath } from '../../core/agent-store.js';
+import { listCentralAgentItems, type CentralAgentItem } from '../../core/agent-store.js';
 import { ANSI } from '../../util/ansi.js';
-import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
-import { computeDirHash } from '../../util/hash-dir.js';
+import { ensureDir, pathExists } from '../../util/fs-utils.js';
 import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
-import { getAdapters, getColoredLabel, type Scope, type TargetAdapter } from '../../targets/adapters.js';
+import {
+  filterAgentAdapters,
+  getAdapters,
+  getColoredLabel,
+  type Scope,
+  type TargetAdapter,
+} from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { getCentralAgentsDir } from '../../util/apg-paths.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
 import { loadConfig } from '../../core/config.js';
-import { copyDir } from '../../util/copy-dir.js';
+import { computeItemHash, copyItem, removeItem } from '../../util/item-utils.js';
 import { fsRenameOrCopy, timestampId } from '../../util/sync-utils.js';
+import {
+  countByStatus,
+  formatCountSummary,
+  formatScopeTitle,
+  formatStatusLabel,
+  groupEntriesByName,
+  type StatusStyle,
+} from '../../util/sync-preview.js';
 
 type SyncEntry = {
   name: string;
-  srcDir: string;
-  destDir: string;
+  srcPath: string;
+  destPath: string;
+  altDestPath: string;
   adapter: TargetAdapter;
   scope: Scope;
   projectRoot: string;
 };
 
 type EntryStatus = 'new' | 'replace' | 'same';
+const ENTRY_STATUS_ORDER = ['new', 'replace', 'same'] as const;
+const ENTRY_STATUS_STYLES: StatusStyle<EntryStatus> = {
+  new: { color: 'green' },
+  replace: { color: 'yellow' },
+  same: { color: 'dim' },
+};
 
-function groupEntriesByName<T extends { name: string }>(entries: T[]): Map<string, T[]> {
-  const map = new Map<string, T[]>();
-  for (const entry of entries) {
-    const list = map.get(entry.name);
-    if (list) list.push(entry);
-    else map.set(entry.name, [entry]);
-  }
-  return map;
+async function resolveExistingPath(destPath: string, altDestPath: string): Promise<string | null> {
+  const [destExists, altExists] = await Promise.all([pathExists(destPath), pathExists(altDestPath)]);
+  if (destExists) return destPath;
+  if (altExists) return altDestPath;
+  return null;
 }
 
-function formatStatusLabel(status: EntryStatus): string {
-  if (status === 'new') return `${ANSI.green}new${ANSI.reset}`;
-  if (status === 'replace') return `${ANSI.yellow}replace${ANSI.reset}`;
-  return `${ANSI.dim}same${ANSI.reset}`;
-}
-
-function formatCountSummary(counts: { newCount: number; replaceCount: number; sameCount: number }): string {
-  const parts: string[] = [];
-  if (counts.newCount > 0) parts.push(`${ANSI.green}${counts.newCount} new${ANSI.reset}`);
-  if (counts.replaceCount > 0) parts.push(`${ANSI.yellow}${counts.replaceCount} replace${ANSI.reset}`);
-  if (counts.sameCount > 0) parts.push(`${ANSI.dim}${counts.sameCount} same${ANSI.reset}`);
-  return parts.join(', ');
-}
-
-function formatScopeTitle(scopes: Scope[]): string {
-  const uniqueScopes = [...new Set(scopes)];
-  if (uniqueScopes.length === 1) {
-    if (uniqueScopes[0] === 'global') return `${ANSI.bold}${ANSI.brightBlue}global${ANSI.reset}`;
-    return `${ANSI.bold}${ANSI.brightMagenta}local${ANSI.reset}`;
-  }
-  return `${ANSI.bold}${ANSI.yellow}mixed${ANSI.reset}`;
-}
-
-export async function cmdAgentsSync(_positionals: string[], _flags: ParsedFlags, _ctx: CliRunContext) {
-  const positionals = _positionals;
-  const flags = _flags;
-  const ctx = _ctx;
-
+export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, ctx: CliRunContext) {
   const dryRun = flags['dry-run'] === true;
   const force = flags.force === true || flags.overwrite === true;
   const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const scopeFlag = typeof flags.scope === 'string' ? flags.scope : undefined;
   const cwdFlag = typeof flags.cwd === 'string' ? flags.cwd : undefined;
 
-  const adapters = getAdapters();
+  const adapters = filterAgentAdapters(getAdapters());
   const selectedAdapters = await selectTargetAdapters({
     adapters,
     flags,
@@ -81,8 +71,11 @@ export async function cmdAgentsSync(_positionals: string[], _flags: ParsedFlags,
   if (selectedAdapters.length === 0) return 1;
 
   const config = await loadConfig();
-  const availableAgents = await listCentralAgents();
-  if (availableAgents.length === 0) {
+  const availableAgentItems = await listCentralAgentItems();
+  const availableAgentNames = availableAgentItems.map((agent) => agent.name);
+  const availableAgentNamesSet = new Set(availableAgentNames);
+  const availableAgentByName = new Map<string, CentralAgentItem>(availableAgentItems.map((agent) => [agent.name, agent]));
+  if (availableAgentNames.length === 0) {
     process.stdout.write('(no agents to sync)\n');
     return 0;
   }
@@ -100,17 +93,24 @@ export async function cmdAgentsSync(_positionals: string[], _flags: ParsedFlags,
 
     const defaultAgents =
       targetConfig?.includeAgents && !targetConfig.includeAgents.includes('*')
-        ? targetConfig.includeAgents.filter((s) => availableAgents.includes(s))
-        : availableAgents;
+        ? targetConfig.includeAgents.filter((name) => availableAgentNamesSet.has(name))
+        : availableAgentNames;
 
     for (const name of defaultAgents) {
       if (name.startsWith('.') && !positionals.includes(name)) continue;
       if (positionals.length > 0 && !positionals.includes(name)) continue;
+      const item = availableAgentByName.get(name);
+      if (!item) continue;
+      const destPath =
+        item.form === 'directory' ? path.join(destAgentsDir, name) : path.join(destAgentsDir, `${name}.md`);
+      const altDestPath =
+        item.form === 'directory' ? path.join(destAgentsDir, `${name}.md`) : path.join(destAgentsDir, name);
 
       allEntries.push({
         name,
-        srcDir: getCentralAgentPath(name),
-        destDir: path.join(destAgentsDir, name),
+        srcPath: item.path,
+        destPath,
+        altDestPath,
         adapter,
         scope,
         projectRoot,
@@ -128,13 +128,11 @@ export async function cmdAgentsSync(_positionals: string[], _flags: ParsedFlags,
   type EntryWithStatus = SyncEntry & { status: EntryStatus };
   const entriesWithStatus: EntryWithStatus[] = await Promise.all(
     allEntries.map(async (s) => {
-      const destExists = await pathExists(s.destDir);
-      if (!destExists) return { ...s, status: 'new' as const };
-      const [srcHash, destHash] = await Promise.all([
-        computeDirHash(s.srcDir, { ignoreNames: ['.git'] }),
-        computeDirHash(s.destDir, { ignoreNames: ['.git'] }),
-      ]);
-      return { ...s, status: destHash === srcHash ? ('same' as const) : ('replace' as const) };
+      const existingPath = await resolveExistingPath(s.destPath, s.altDestPath);
+      if (!existingPath) return { ...s, status: 'new' as const };
+      const srcHash = await computeItemHash(s.srcPath);
+      const existingHash = await computeItemHash(existingPath);
+      return { ...s, status: existingHash === srcHash ? ('same' as const) : ('replace' as const) };
     }),
   );
 
@@ -142,10 +140,8 @@ export async function cmdAgentsSync(_positionals: string[], _flags: ParsedFlags,
   if (positionals.length > 0) {
     finalEntries = entriesWithStatus;
   } else if (interactive && !force) {
-    const replaceCount = entriesWithStatus.filter((s) => s.status === 'replace').length;
-    const newCount = entriesWithStatus.filter((s) => s.status === 'new').length;
-    const sameCount = entriesWithStatus.filter((s) => s.status === 'same').length;
-    process.stdout.write(`\nPreview: ${formatCountSummary({ newCount, replaceCount, sameCount })}\n`);
+    const previewCounts = countByStatus(entriesWithStatus, ENTRY_STATUS_ORDER);
+    process.stdout.write(`\nPreview: ${formatCountSummary(previewCounts, ENTRY_STATUS_ORDER, ENTRY_STATUS_STYLES)}\n`);
 
     const grouped = groupEntriesByName(entriesWithStatus);
     const groupedItems = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
@@ -156,13 +152,14 @@ export async function cmdAgentsSync(_positionals: string[], _flags: ParsedFlags,
     const selectedNames = await promptMultiSelect({
       message: `Confirm agents to sync (${scopeTitle}, source: ${srcBaseDir}):`,
       options: groupedItems.map(([name, entries]) => {
-        const replace = entries.filter((entry) => entry.status === 'replace').length;
-        const fresh = entries.filter((entry) => entry.status === 'new').length;
-        const same = entries.filter((entry) => entry.status === 'same').length;
-        const status = formatCountSummary({ newCount: fresh, replaceCount: replace, sameCount: same });
+        const status = formatCountSummary(
+          countByStatus(entries, ENTRY_STATUS_ORDER),
+          ENTRY_STATUS_ORDER,
+          ENTRY_STATUS_STYLES,
+        );
         return {
           label: `${name} -> ${entries
-            .map((entry) => `${getColoredLabel(entry.adapter)} (${formatStatusLabel(entry.status)})`)
+            .map((entry) => `${getColoredLabel(entry.adapter)} (${formatStatusLabel(entry.status, ENTRY_STATUS_STYLES)})`)
             .join(', ')} [${status}]`,
           value: name,
         };
@@ -180,7 +177,7 @@ export async function cmdAgentsSync(_positionals: string[], _flags: ParsedFlags,
   } else {
     process.stdout.write(`\nSync ${entriesWithStatus.length} agent(s) from ${srcBaseDir} (${scopeTitle}):\n`);
     for (const s of entriesWithStatus) {
-      const status = formatStatusLabel(s.status);
+      const status = formatStatusLabel(s.status, ENTRY_STATUS_STYLES);
       process.stdout.write(`  ${s.name} -> ${getColoredLabel(s.adapter)} [${status}]\n`);
     }
     finalEntries = entriesWithStatus;
@@ -189,14 +186,14 @@ export async function cmdAgentsSync(_positionals: string[], _flags: ParsedFlags,
   const syncState = await loadSyncState();
   let conflictMode: 'ask' | 'overwrite' | 'backup' | 'skip' = force ? 'overwrite' : 'ask';
 
-  const destDirs = new Set(finalEntries.map((e) => path.dirname(e.destDir)));
+  const destDirs = new Set(finalEntries.map((e) => path.dirname(e.destPath)));
   if (!dryRun) {
     for (const dir of destDirs) await ensureDir(dir);
   }
 
   for (const entry of finalEntries) {
-    const { name, srcDir, destDir, adapter, scope, projectRoot } = entry;
-    if (!(await pathExists(srcDir))) {
+    const { name, srcPath, destPath, altDestPath, adapter, scope, projectRoot } = entry;
+    if (!(await pathExists(srcPath))) {
       process.stderr.write(`Missing central agent: ${name}\n`);
       continue;
     }
@@ -212,21 +209,21 @@ export async function cmdAgentsSync(_positionals: string[], _flags: ParsedFlags,
     context.agents ??= {};
     syncState.contexts[contextId] = context;
 
-    const srcHash = await computeDirHash(srcDir, { ignoreNames: ['.git'] });
-    const destExists = await pathExists(destDir);
+    const srcHash = await computeItemHash(srcPath);
+    const existingPath = await resolveExistingPath(destPath, altDestPath);
 
-    if (!destExists) {
+    if (!existingPath) {
       if (dryRun) {
-        process.stdout.write(`[dry-run] copy ${name} -> ${destDir}\n`);
+        process.stdout.write(`[dry-run] copy ${name} -> ${destPath}\n`);
         continue;
       }
-      await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
+      await copyItem(srcPath, destPath);
       context.agents[name] = { hash: srcHash, syncedAt: new Date().toISOString() };
       process.stdout.write(`Synced: ${name} -> ${getColoredLabel(adapter)}\n`);
       continue;
     }
 
-    const destHash = await computeDirHash(destDir, { ignoreNames: ['.git'] });
+    const destHash = await computeItemHash(existingPath);
     if (destHash === srcHash) {
       context.agents[name] = { hash: srcHash, syncedAt: context.agents[name]?.syncedAt ?? new Date().toISOString() };
       process.stdout.write(`Up-to-date: ${name} (${getColoredLabel(adapter)})\n`);
@@ -268,18 +265,22 @@ export async function cmdAgentsSync(_positionals: string[], _flags: ParsedFlags,
     }
 
     if (dryRun) {
-      process.stdout.write(`[dry-run] ${mode} ${name} -> ${destDir}\n`);
+      process.stdout.write(`[dry-run] ${mode} ${name} -> ${destPath}\n`);
       continue;
     }
 
     if (mode === 'backup') {
-      const backupDir = path.join(path.dirname(destDir), `${name}.bak-${timestampId()}`);
-      await fsRenameOrCopy(destDir, backupDir);
+      const baseName = path.basename(existingPath);
+      const backupPath = path.join(path.dirname(existingPath), `${baseName}.bak-${timestampId()}`);
+      await fsRenameOrCopy(existingPath, backupPath);
     } else {
-      await removeDir(destDir);
+      await removeItem(existingPath);
     }
 
-    await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
+    if (existingPath !== destPath && (await pathExists(destPath))) {
+      await removeItem(destPath);
+    }
+    await copyItem(srcPath, destPath);
     context.agents[name] = { hash: srcHash, syncedAt: new Date().toISOString() };
     process.stdout.write(`Synced: ${name} -> ${getColoredLabel(adapter)}\n`);
   }

@@ -13,6 +13,7 @@ import { readMcpServers } from '../../util/mcp-config-io.js';
 import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import { ANSI } from '../../util/ansi.js';
 import { filterMcpAdapters } from './manage-utils.js';
+import { normalizeCentralMcpDef, parseMcpToCanonical, serializeCanonicalMcpForTarget } from '../../util/mcp-transform.js';
 import type { McpServerDef } from '../../core/mcp-types.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
@@ -60,6 +61,10 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
 
   const config = await loadConfig();
   await ensureCentralMcpStore();
+  let incompatibleCount = 0;
+  let lossyCount = 0;
+  let duplicateConflictCount = 0;
+  let skippedCount = 0;
 
   // Phase 1: 收集所有目标中的 MCP 服务器定义
   const allEntries: CollectEntry[] = [];
@@ -80,18 +85,50 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
     for (const [name, def] of Object.entries(servers)) {
       if (positionals.length > 0 && !positionals.includes(name)) continue;
 
-      const hash = computeMcpHash(def);
+      const parsed = parseMcpToCanonical(def);
+      if (!parsed.canonical) {
+        incompatibleCount++;
+        process.stderr.write(
+          `${ANSI.yellow}Skipped ${name} from ${adapter.label}:${ANSI.reset} ${parsed.error ?? 'invalid definition'}\n`,
+        );
+        continue;
+      }
+      const transformed = serializeCanonicalMcpForTarget(parsed.canonical, 'cursor');
+      if (!transformed.def) {
+        incompatibleCount++;
+        process.stderr.write(
+          `${ANSI.yellow}Skipped ${name} from ${adapter.label}:${ANSI.reset} ${transformed.incompatibleReason ?? 'incompatible definition'}\n`,
+        );
+        continue;
+      }
+      if (transformed.lossy) {
+        lossyCount++;
+        if (!force) {
+          skippedCount++;
+          process.stderr.write(
+            `Skipped ${name} from ${adapter.label}: lossy normalization (${transformed.lossyReasons.join(', ')}) (use --force)\n`,
+          );
+          continue;
+        }
+      }
+
+      const hash = computeMcpHash(transformed.def);
       const centralDef = await readCentralMcpServer(name);
       let status: CollectStatus;
 
       if (!centralDef) {
         status = 'new';
       } else {
-        const centralHash = computeMcpHash(centralDef);
-        status = centralHash === hash ? 'identical' : 'conflict';
+        const normalizedCentral = normalizeCentralMcpDef(centralDef);
+        if (!normalizedCentral.def) {
+          status = 'conflict';
+        } else {
+          const centralHash = computeMcpHash(normalizedCentral.def);
+          status = centralHash === hash ? 'identical' : 'conflict';
+        }
       }
 
-      allEntries.push({ name, def, hash, adapter, scope, projectRoot, status });
+      allEntries.push({ name, def: transformed.def, hash, adapter, scope, projectRoot, status });
     }
   }
 
@@ -100,13 +137,22 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
     return 0;
   }
 
-  // 去重：同名服务器只保留第一个（来自最先选择的 adapter）
-  const seen = new Set<string>();
-  const uniqueEntries = allEntries.filter((e) => {
-    if (seen.has(e.name)) return false;
-    seen.add(e.name);
-    return true;
-  });
+  // 去重：同名服务器默认保留第一个（来自最先选择的 adapter），不同 hash 计为 source 冲突
+  const byName = new Map<string, CollectEntry>();
+  for (const entry of allEntries) {
+    const existing = byName.get(entry.name);
+    if (!existing) {
+      byName.set(entry.name, entry);
+      continue;
+    }
+    if (existing.hash !== entry.hash) {
+      duplicateConflictCount++;
+      process.stderr.write(
+        `${ANSI.yellow}Duplicate source conflict:${ANSI.reset} ${entry.name} differs between ${existing.adapter.label} and ${entry.adapter.label}; keeping first.\n`,
+      );
+    }
+  }
+  const uniqueEntries = [...byName.values()];
 
   // Phase 2: 交互选择
   let selectedEntries: CollectEntry[];
@@ -216,6 +262,12 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
     await saveRegistry(registry);
     await saveSyncState(syncState);
   }
+  const summaryParts: string[] = [];
+  if (incompatibleCount > 0) summaryParts.push(`${ANSI.red}${incompatibleCount} incompatible${ANSI.reset}`);
+  if (lossyCount > 0) summaryParts.push(`${ANSI.magenta}${lossyCount} lossy${ANSI.reset}`);
+  if (duplicateConflictCount > 0) summaryParts.push(`${ANSI.yellow}${duplicateConflictCount} source-conflict${ANSI.reset}`);
+  if (skippedCount > 0) summaryParts.push(`${ANSI.gray}${skippedCount} skipped${ANSI.reset}`);
+  if (summaryParts.length > 0) process.stdout.write(`\n${ANSI.dim}MCP transform:${ANSI.reset} ${summaryParts.join(', ')}\n`);
 
   return 0;
 }

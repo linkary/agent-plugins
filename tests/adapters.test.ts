@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'bun:test';
-import { getAdapters, resolveAdapter } from '../src/targets/adapters.js';
+import {
+  filterAgentAdapters,
+  filterCommandAdapters,
+  filterRuleAdapters,
+  getAdapters,
+  resolveAdapter,
+} from '../src/targets/adapters.js';
 import path from 'node:path';
 
 describe('adapters', () => {
@@ -241,6 +247,60 @@ describe('adapters', () => {
       expect(adapter.resolveAgentsDir({ scope: 'local', projectRoot, homeDir })).toBe(
         path.join(projectRoot, '.opencode', 'agents'),
       );
+    });
+
+    it('should return empty agents path for skills-only targets', () => {
+      expect(resolveAdapter('openskills')!.resolveAgentsDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+      expect(resolveAdapter('agents')!.resolveAgentsDir({ scope: 'local', projectRoot, homeDir })).toBe('');
+    });
+  });
+
+  describe('resolveCommandsDir', () => {
+    it('should return empty command paths for skills-only targets', () => {
+      expect(resolveAdapter('openskills')!.resolveCommandsDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+      expect(resolveAdapter('agents')!.resolveCommandsDir({ scope: 'local', projectRoot, homeDir })).toBe('');
+    });
+  });
+
+  describe('resolveRulesDir', () => {
+    it('should resolve cursor rule paths', () => {
+      const adapter = resolveAdapter('cursor')!;
+      expect(adapter.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe(
+        path.join(homeDir, '.cursor', 'rules'),
+      );
+      expect(adapter.resolveRulesDir({ scope: 'local', projectRoot, homeDir })).toBe(
+        path.join(projectRoot, '.cursor', 'rules'),
+      );
+    });
+
+    it('should resolve qoder rule paths', () => {
+      const adapter = resolveAdapter('qoder')!;
+      expect(adapter.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe(
+        path.join(homeDir, '.qoder', 'rules'),
+      );
+      expect(adapter.resolveRulesDir({ scope: 'local', projectRoot, homeDir })).toBe(
+        path.join(projectRoot, '.qoder', 'rules'),
+      );
+    });
+
+    it('should return empty rule paths for skills-only targets', () => {
+      expect(resolveAdapter('openskills')!.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+      expect(resolveAdapter('agents')!.resolveRulesDir({ scope: 'local', projectRoot, homeDir })).toBe('');
+    });
+  });
+
+  describe('group filters', () => {
+    it('should exclude skills-only targets from non-skill groups', () => {
+      const all = getAdapters();
+      const commands = filterCommandAdapters(all).map((adapter) => adapter.id);
+      const agents = filterAgentAdapters(all).map((adapter) => adapter.id);
+      const rules = filterRuleAdapters(all).map((adapter) => adapter.id);
+      expect(commands).not.toContain('openskills');
+      expect(commands).not.toContain('agents');
+      expect(agents).not.toContain('openskills');
+      expect(agents).not.toContain('agents');
+      expect(rules).not.toContain('openskills');
+      expect(rules).not.toContain('agents');
     });
   });
 });

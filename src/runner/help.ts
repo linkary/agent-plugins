@@ -1,4 +1,11 @@
-import { CLI_OPTIONS, SUBCOMMANDS, AGENT_SUBCOMMANDS, COMMAND_SUBCOMMANDS, MCP_SUBCOMMANDS } from '../util/cli-defs.js';
+import {
+  CLI_OPTIONS,
+  SUBCOMMANDS,
+  AGENT_SUBCOMMANDS,
+  COMMAND_SUBCOMMANDS,
+  RULE_SUBCOMMANDS,
+  MCP_SUBCOMMANDS,
+} from '../util/cli-defs.js';
 import { PKG_NAME, PKG_VERSION } from '../meta.js';
 import type { SubcommandDef } from '../util/cli-defs.js';
 
@@ -36,6 +43,13 @@ export function formatHelp(group?: string, subcommand?: string): string {
     return formatGroupHelp('mcp', MCP_SUBCOMMANDS);
   }
 
+  if (group === 'rules') {
+    if (subcommand && subcommand in RULE_SUBCOMMANDS) {
+      return formatSubcommandHelp('rules', subcommand as keyof typeof RULE_SUBCOMMANDS, RULE_SUBCOMMANDS);
+    }
+    return formatGroupHelp('rules', RULE_SUBCOMMANDS);
+  }
+
   // 主帮助页
   return formatMainHelp();
 }
@@ -43,12 +57,13 @@ export function formatHelp(group?: string, subcommand?: string): string {
 function formatMainHelp(): string {
   const lines: string[] = [];
 
-  lines.push(`${PKG_NAME} (ap) — LLM skills, agents, commands & MCP manager`);
+  lines.push(`${PKG_NAME} (ap) — LLM skills, agents, commands, rules & MCP manager`);
   lines.push('');
   lines.push('Usage:');
   lines.push('  ap skills <command> [args] [options]');
   lines.push('  ap agents <command> [args] [options]');
   lines.push('  ap commands <command> [args] [options]');
+  lines.push('  ap rules <command> [args] [options]');
   lines.push('  ap mcp <command> [args] [options]');
   lines.push('');
 
@@ -68,6 +83,10 @@ function formatMainHelp(): string {
   lines.push(formatSubcommandList(MCP_SUBCOMMANDS));
   lines.push('');
 
+  lines.push('Rule Commands:');
+  lines.push(formatSubcommandList(RULE_SUBCOMMANDS));
+  lines.push('');
+
   lines.push('Global Options:');
   lines.push(formatOptionsBlock(['help', 'version', 'dry-run', 'force']));
 
@@ -80,12 +99,14 @@ function formatMainHelp(): string {
   lines.push('  skills  skill, sk, s');
   lines.push('  agents  ag');
   lines.push('  commands  command, cmd, c');
+  lines.push('  rules   rule, rl');
   lines.push('  mcp     m');
 
   lines.push('');
   lines.push('Environment:');
   lines.push('  APG_HOME / AGENT_PLUGINS_HOME  Override ~/.agent-plugins');
   lines.push('  CODEX_HOME                     Override ~/.codex (Codex global scope)');
+  lines.push('  AP_CURSOR_USER_RULES_FILE      Override Cursor User Rules storage with a plain text file');
   lines.push('');
 
   return lines.join('\n');

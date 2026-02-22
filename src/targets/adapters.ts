@@ -29,9 +29,12 @@ export type TargetAdapter = {
   resolveSkillsDir(params: ResolveParams): string;
   resolveAgentsDir(params: ResolveParams): string;
   resolveCommandsDir(params: ResolveParams): string;
+  resolveRulesDir(params: ResolveParams): string;
   /** 返回 MCP 配置文件规格；null 表示该工具不支持 MCP */
   resolveMcpConfig?(params: ResolveParams): McpConfigSpec | null;
 };
+
+const SKILLS_ONLY_TARGET_IDS = new Set<TargetId>(['openskills', 'agents']);
 
 function getCodexHomeDir(homeDir: string): string {
   const override = process.env.CODEX_HOME;
@@ -51,6 +54,8 @@ const adapters: TargetAdapter[] = [
       scope === 'global' ? path.join(homeDir, '.cursor', 'agents') : path.join(projectRoot, '.cursor', 'agents'),
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.cursor', 'commands') : path.join(projectRoot, '.cursor', 'commands'),
+    resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.cursor', 'rules') : path.join(projectRoot, '.cursor', 'rules'),
     resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
       configPath:
         scope === 'global' ? path.join(homeDir, '.cursor', 'mcp.json') : path.join(projectRoot, '.cursor', 'mcp.json'),
@@ -71,6 +76,8 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(homeDir, '.gemini', 'commands')
         : path.join(projectRoot, '.gemini', 'commands'),
+    resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.gemini', 'rules') : path.join(projectRoot, '.gemini', 'rules'),
     resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
       configPath:
         scope === 'global'
@@ -93,6 +100,8 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(getCodexHomeDir(homeDir), 'commands')
         : path.join(projectRoot, '.codex', 'commands'),
+    resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(getCodexHomeDir(homeDir), 'rules') : path.join(projectRoot, '.codex', 'rules'),
     // Codex 仅支持 global 级别的 MCP 配置 (config.toml)
     resolveMcpConfig: ({ scope, homeDir }) =>
       scope === 'global'
@@ -112,6 +121,8 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(homeDir, '.claude', 'commands')
         : path.join(projectRoot, '.claude', 'commands'),
+    resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.claude', 'rules') : path.join(projectRoot, '.claude', 'rules'),
     resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
       configPath:
         scope === 'global'
@@ -138,6 +149,10 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(homeDir, '.gemini', 'antigravity', 'global_commands')
         : path.join(projectRoot, '.agent', 'commands'),
+    resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global'
+        ? path.join(homeDir, '.gemini', 'antigravity', 'global_rules')
+        : path.join(projectRoot, '.agent', 'rules'),
     // Antigravity 仅支持 global 级别的 MCP 配置 (~/.gemini/antigravity/mcp_config.json)
     resolveMcpConfig: ({ scope, homeDir }) =>
       scope === 'global'
@@ -151,12 +166,9 @@ const adapters: TargetAdapter[] = [
     aliases: ['openskills'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.agent', 'skills') : path.join(projectRoot, '.agent', 'skills'),
-    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global' ? path.join(homeDir, '.agent', 'agents') : path.join(projectRoot, '.agent', 'agents'),
-    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global'
-        ? path.join(homeDir, '.agent', 'commands')
-        : path.join(projectRoot, '.agent', 'commands'),
+    resolveAgentsDir: () => '',
+    resolveCommandsDir: () => '',
+    resolveRulesDir: () => '',
   },
   {
     id: 'agents',
@@ -165,12 +177,9 @@ const adapters: TargetAdapter[] = [
     aliases: ['agents'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.agents', 'skills') : path.join(projectRoot, '.agents', 'skills'),
-    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global' ? path.join(homeDir, '.agents', 'agents') : path.join(projectRoot, '.agents', 'agents'),
-    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global'
-        ? path.join(homeDir, '.agents', 'commands')
-        : path.join(projectRoot, '.agents', 'commands'),
+    resolveAgentsDir: () => '',
+    resolveCommandsDir: () => '',
+    resolveRulesDir: () => '',
   },
   {
     id: 'opencode',
@@ -185,6 +194,8 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(homeDir, '.opencode', 'commands')
         : path.join(projectRoot, '.opencode', 'commands'),
+    resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.opencode', 'rules') : path.join(projectRoot, '.opencode', 'rules'),
     resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
       configPath:
         scope === 'global'
@@ -205,6 +216,8 @@ const adapters: TargetAdapter[] = [
       scope === 'global' ? path.join(homeDir, '.qoder', 'agents') : path.join(projectRoot, '.qoder', 'agents'),
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.qoder', 'commands') : path.join(projectRoot, '.qoder', 'commands'),
+    resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.qoder', 'rules') : path.join(projectRoot, '.qoder', 'rules'),
     resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
       configPath:
         scope === 'global'
@@ -218,6 +231,18 @@ const adapters: TargetAdapter[] = [
 
 export function getAdapters(): TargetAdapter[] {
   return adapters.slice();
+}
+
+export function filterCommandAdapters(adapters: TargetAdapter[]): TargetAdapter[] {
+  return adapters.filter((adapter) => !SKILLS_ONLY_TARGET_IDS.has(adapter.id));
+}
+
+export function filterAgentAdapters(adapters: TargetAdapter[]): TargetAdapter[] {
+  return adapters.filter((adapter) => !SKILLS_ONLY_TARGET_IDS.has(adapter.id));
+}
+
+export function filterRuleAdapters(adapters: TargetAdapter[]): TargetAdapter[] {
+  return adapters.filter((adapter) => !SKILLS_ONLY_TARGET_IDS.has(adapter.id));
 }
 
 export function getColoredLabel(adapter: TargetAdapter): string {

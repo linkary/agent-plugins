@@ -23,6 +23,7 @@ export async function selectTargetAdapters(params: {
   promptMessage: string;
 }): Promise<TargetAdapter[]> {
   const { adapters, flags, interactive, mode, promptMessage } = params;
+  const selectableById = new Map(adapters.map((adapter) => [adapter.id, adapter]));
 
   let inputs = normalizeTargetFlag(flags.target);
   if (inputs.includes('all')) inputs = adapters.map((a) => a.id);
@@ -32,8 +33,16 @@ export async function selectTargetAdapters(params: {
     const unknown: string[] = [];
     for (const raw of inputs) {
       const adapter = resolveAdapter(raw);
-      if (!adapter) unknown.push(raw);
-      else resolved.push(adapter);
+      if (!adapter) {
+        unknown.push(raw);
+        continue;
+      }
+      const selectable = selectableById.get(adapter.id);
+      if (!selectable) {
+        unknown.push(raw);
+        continue;
+      }
+      resolved.push(selectable);
     }
     if (unknown.length > 0) {
       process.stderr.write(`Unknown target(s): ${unknown.join(', ')}\n`);
@@ -81,6 +90,5 @@ export async function selectTargetAdapters(params: {
     return [];
   }
 
-  const byId = new Map(adapters.map((a) => [a.id, a]));
-  return ids.map((id) => byId.get(id)).filter(Boolean) as TargetAdapter[];
+  return ids.map((id) => selectableById.get(id)).filter(Boolean) as TargetAdapter[];
 }

@@ -36,6 +36,13 @@ export type AgentRecord = {
   source: SkillSource;
 };
 
+export type RuleRecord = {
+  name: string;
+  addedAt: string;
+  updatedAt: string;
+  source: SkillSource;
+};
+
 export type McpSource =
   | { type: 'manual' }
   | { type: 'collected'; from: { target: string; scope: string } };
@@ -52,14 +59,27 @@ export type RegistryFileV1 = {
   skills: Record<string, SkillRecord>;
   agents?: Record<string, AgentRecord>;
   commands?: Record<string, CommandRecord>;
+  rules?: Record<string, RuleRecord>;
   mcp?: Record<string, McpRecord>;
   repos?: Record<string, RepoRecord>;
   agentRepos?: Record<string, RepoRecord>;
   commandRepos?: Record<string, RepoRecord>;
+  ruleRepos?: Record<string, RepoRecord>;
 };
 
 function createEmptyRegistry(): RegistryFileV1 {
-  return { version: 1, skills: {}, agents: {}, commands: {}, mcp: {}, repos: {}, agentRepos: {}, commandRepos: {} };
+  return {
+    version: 1,
+    skills: {},
+    agents: {},
+    commands: {},
+    rules: {},
+    mcp: {},
+    repos: {},
+    agentRepos: {},
+    commandRepos: {},
+    ruleRepos: {},
+  };
 }
 
 export async function loadRegistry(): Promise<RegistryFileV1> {
@@ -71,9 +91,11 @@ export async function loadRegistry(): Promise<RegistryFileV1> {
   if (!parsed.repos) parsed.repos = {};
   if (!parsed.agents) parsed.agents = {};
   if (!parsed.commands) parsed.commands = {};
+  if (!parsed.rules) parsed.rules = {};
   if (!parsed.mcp) parsed.mcp = {};
   if (!parsed.agentRepos) parsed.agentRepos = {};
   if (!parsed.commandRepos) parsed.commandRepos = {};
+  if (!parsed.ruleRepos) parsed.ruleRepos = {};
   return parsed;
 }
 
@@ -144,6 +166,24 @@ export function removeCommandFromRepo(registry: RegistryFileV1, commandName: str
       repo.skills.splice(idx, 1);
       if (repo.skills.length === 0) {
         delete registry.commandRepos[key];
+        return true;
+      }
+      return false;
+    }
+  }
+  return false;
+}
+
+/** Remove a rule from its rule-repo record; returns true if repo record was deleted */
+export function removeRuleFromRepo(registry: RegistryFileV1, ruleName: string): boolean {
+  if (!registry.ruleRepos) return false;
+
+  for (const [key, repo] of Object.entries(registry.ruleRepos)) {
+    const idx = repo.skills.indexOf(ruleName);
+    if (idx !== -1) {
+      repo.skills.splice(idx, 1);
+      if (repo.skills.length === 0) {
+        delete registry.ruleRepos[key];
         return true;
       }
       return false;

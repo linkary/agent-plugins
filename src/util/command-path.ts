@@ -3,19 +3,21 @@ import {
   SUBCOMMANDS,
   AGENT_SUBCOMMANDS,
   COMMAND_SUBCOMMANDS,
+  RULE_SUBCOMMANDS,
   MCP_SUBCOMMANDS,
   type SubcommandDef,
 } from './cli-defs.js';
 
-const ROOT_GROUPS = ['skills', 'agents', 'commands', 'mcp'] as const;
+const ROOT_GROUPS = ['skills', 'agents', 'commands', 'rules', 'mcp'] as const;
 type RootGroup = (typeof ROOT_GROUPS)[number];
-type Action = 'add' | 'rm' | 'update' | 'sync' | 'collect' | 'find' | 'list' | 'show' | 'help';
+type Action = 'add' | 'rm' | 'update' | 'sync' | 'collect' | 'find' | 'list' | 'show' | 'validate' | 'help';
 type Canonical = RootGroup | Action | 'agent';
 
 const SUBCOMMANDS_BY_GROUP: Record<RootGroup, Record<string, SubcommandDef>> = {
   skills: SUBCOMMANDS,
   agents: AGENT_SUBCOMMANDS,
   commands: COMMAND_SUBCOMMANDS,
+  rules: RULE_SUBCOMMANDS,
   mcp: MCP_SUBCOMMANDS,
 };
 

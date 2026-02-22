@@ -13,7 +13,13 @@ import {
 } from '../../core/command-store.js';
 import { getCentralCommandsDir } from '../../util/apg-paths.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
-import { type Scope, getAdapters, getColoredLabel, type TargetAdapter } from '../../targets/adapters.js';
+import {
+  type Scope,
+  filterCommandAdapters,
+  getAdapters,
+  getColoredLabel,
+  type TargetAdapter,
+} from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { ANSI } from '../../util/ansi.js';
 import { resolveTargetContext } from '../../util/scope.js';
@@ -64,7 +70,7 @@ export async function cmdCommandsCollect(
   const scopeFlag = typeof flags.scope === 'string' ? flags.scope : undefined;
   const cwdFlag = typeof flags.cwd === 'string' ? flags.cwd : undefined;
 
-  const adapters = getAdapters();
+  const adapters = filterCommandAdapters(getAdapters());
   const selectedAdapters = await selectTargetAdapters({
     adapters,
     flags,
