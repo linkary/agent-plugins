@@ -36,6 +36,9 @@ export type TargetAdapter = {
 
 const SKILLS_ONLY_TARGET_IDS = new Set<TargetId>(['openskills', 'agents']);
 
+/** Targets that do not support agents, commands, or rules sync (directory-based). */
+const NO_AGENTS_COMMANDS_IDS = new Set<TargetId>(['openskills', 'agents', 'antigravity']);
+
 function getCodexHomeDir(homeDir: string): string {
   const override = process.env.CODEX_HOME;
   if (override && override.trim()) return path.resolve(override.trim());
@@ -150,20 +153,14 @@ const adapters: TargetAdapter[] = [
     aliases: ['antigravity', 'anti-gravity'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
-        ? path.join(homeDir, '.gemini', 'antigravity', 'global_skills')
+        ? path.join(homeDir, '.gemini', 'antigravity', 'skills')
         : path.join(projectRoot, '.agent', 'skills'),
-    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global'
-        ? path.join(homeDir, '.gemini', 'antigravity', 'global_agents')
-        : path.join(projectRoot, '.agent', 'agents'),
-    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global'
-        ? path.join(homeDir, '.gemini', 'antigravity', 'global_commands')
-        : path.join(projectRoot, '.agent', 'commands'),
-    resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global'
-        ? path.join(homeDir, '.gemini', 'antigravity', 'global_rules')
-        : path.join(projectRoot, '.agent', 'rules'),
+    // Antigravity 不支持 agents/commands 同步（官方文档未定义这些路径）
+    resolveAgentsDir: () => '',
+    resolveCommandsDir: () => '',
+    // Global rules 为单文件 (~/.gemini/GEMINI.md)，不兼容目录模式；local rules 使用 .agent/rules/
+    resolveRulesDir: ({ scope, projectRoot }) =>
+      scope === 'global' ? '' : path.join(projectRoot, '.agent', 'rules'),
     // Antigravity 仅支持 global 级别的 MCP 配置 (~/.gemini/antigravity/mcp_config.json)
     resolveMcpConfig: ({ scope, homeDir }) =>
       scope === 'global'
@@ -249,15 +246,15 @@ export function getAdapters(): TargetAdapter[] {
 }
 
 export function filterCommandAdapters(adapters: TargetAdapter[]): TargetAdapter[] {
-  return adapters.filter((adapter) => !SKILLS_ONLY_TARGET_IDS.has(adapter.id));
+  return adapters.filter((adapter) => !NO_AGENTS_COMMANDS_IDS.has(adapter.id));
 }
 
 export function filterAgentAdapters(adapters: TargetAdapter[]): TargetAdapter[] {
-  return adapters.filter((adapter) => !SKILLS_ONLY_TARGET_IDS.has(adapter.id));
+  return adapters.filter((adapter) => !NO_AGENTS_COMMANDS_IDS.has(adapter.id));
 }
 
 export function filterRuleAdapters(adapters: TargetAdapter[]): TargetAdapter[] {
-  return adapters.filter((adapter) => !SKILLS_ONLY_TARGET_IDS.has(adapter.id));
+  return adapters.filter((adapter) => !NO_AGENTS_COMMANDS_IDS.has(adapter.id));
 }
 
 export function getColoredLabel(adapter: TargetAdapter): string {

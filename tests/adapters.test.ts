@@ -126,14 +126,41 @@ describe('adapters', () => {
     describe('antigravity', () => {
       const adapter = resolveAdapter('antigravity')!;
 
-      it('should resolve global path to ~/.gemini/antigravity/global_skills', () => {
+      it('should resolve global path to ~/.gemini/antigravity/skills', () => {
         const dir = adapter.resolveSkillsDir({ scope: 'global', projectRoot, homeDir });
-        expect(dir).toBe(path.join(homeDir, '.gemini', 'antigravity', 'global_skills'));
+        expect(dir).toBe(path.join(homeDir, '.gemini', 'antigravity', 'skills'));
       });
 
       it('should resolve local path to .agent/skills', () => {
         const dir = adapter.resolveSkillsDir({ scope: 'local', projectRoot, homeDir });
         expect(dir).toBe(path.join(projectRoot, '.agent', 'skills'));
+      });
+
+      it('should return empty agents path (unsupported)', () => {
+        expect(adapter.resolveAgentsDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+        expect(adapter.resolveAgentsDir({ scope: 'local', projectRoot, homeDir })).toBe('');
+      });
+
+      it('should return empty commands path (unsupported)', () => {
+        expect(adapter.resolveCommandsDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+        expect(adapter.resolveCommandsDir({ scope: 'local', projectRoot, homeDir })).toBe('');
+      });
+
+      it('should return empty global rules path but valid local rules path', () => {
+        expect(adapter.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+        expect(adapter.resolveRulesDir({ scope: 'local', projectRoot, homeDir })).toBe(
+          path.join(projectRoot, '.agent', 'rules'),
+        );
+      });
+
+      it('should resolve MCP config for global only', () => {
+        const globalSpec = adapter.resolveMcpConfig?.({ scope: 'global', projectRoot, homeDir });
+        const localSpec = adapter.resolveMcpConfig?.({ scope: 'local', projectRoot, homeDir });
+        expect(globalSpec?.configPath).toBe(
+          path.join(homeDir, '.gemini', 'antigravity', 'mcp_config.json'),
+        );
+        expect(globalSpec?.serversKey).toBe('mcpServers');
+        expect(localSpec).toBeNull();
       });
     });
 
@@ -309,12 +336,17 @@ describe('adapters', () => {
       const commands = filterCommandAdapters(all).map((adapter) => adapter.id);
       const agents = filterAgentAdapters(all).map((adapter) => adapter.id);
       const rules = filterRuleAdapters(all).map((adapter) => adapter.id);
+      // openskills and agents are skills-only
       expect(commands).not.toContain('openskills');
       expect(commands).not.toContain('agents');
       expect(agents).not.toContain('openskills');
       expect(agents).not.toContain('agents');
       expect(rules).not.toContain('openskills');
       expect(rules).not.toContain('agents');
+      // antigravity does not support agents/commands/rules sync
+      expect(commands).not.toContain('antigravity');
+      expect(agents).not.toContain('antigravity');
+      expect(rules).not.toContain('antigravity');
     });
   });
 });
