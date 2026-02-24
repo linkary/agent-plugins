@@ -200,7 +200,8 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
       projectRoot: scope === 'local' ? projectRoot : undefined,
     });
     const context =
-      syncState.contexts[contextId] ?? ({ skills: {} as Record<string, { hash: string; syncedAt: string }> } as const);
+      syncState.contexts[contextId] ?? ({ skills: {} as Record<string, { hash: string; syncedAt: string }> });
+    if (!context.skills) context.skills = {};
     syncState.contexts[contextId] = context;
 
     const srcHash = await computeDirHash(srcDir, { ignoreNames: ['.git'] });

@@ -218,12 +218,26 @@ describe('adapters', () => {
         );
       });
 
-      it('should resolve MCP config paths', () => {
+      it('should resolve MCP config paths (platform-aware)', () => {
         const globalSpec = adapter.resolveMcpConfig?.({ scope: 'global', projectRoot, homeDir });
         const localSpec = adapter.resolveMcpConfig?.({ scope: 'local', projectRoot, homeDir });
-        expect(globalSpec?.configPath).toBe(path.join(homeDir, '.qoder', 'mcp.json'));
-        expect(localSpec?.configPath).toBe(path.join(projectRoot, '.qoder', 'mcp.json'));
+
+        // Global path is platform-dependent (macOS in dev/CI)
+        const expectedAppData =
+          process.platform === 'darwin'
+            ? path.join(homeDir, 'Library', 'Application Support', 'Qoder')
+            : process.platform === 'win32'
+              ? path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'Qoder')
+              : path.join(homeDir, '.config', 'Qoder');
+
+        expect(globalSpec?.configPath).toBe(
+          path.join(expectedAppData, 'SharedClientCache', 'mcp.json'),
+        );
         expect(globalSpec?.serversKey).toBe('mcpServers');
+
+        // Local path is always <project>/.mcp.json
+        expect(localSpec?.configPath).toBe(path.join(projectRoot, '.mcp.json'));
+        expect(localSpec?.serversKey).toBe('mcpServers');
       });
     });
   });

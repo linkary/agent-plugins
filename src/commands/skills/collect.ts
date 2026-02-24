@@ -297,6 +297,7 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
       projectRoot: scope === 'local' ? projectRoot : undefined,
     });
     const context = syncState.contexts[contextId] ?? { skills: {} as Record<string, { hash: string; syncedAt: string }> };
+    if (!context.skills) context.skills = {};
     syncState.contexts[contextId] = context;
 
     let targetDest = destDir;

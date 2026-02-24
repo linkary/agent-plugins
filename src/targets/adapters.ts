@@ -42,6 +42,17 @@ function getCodexHomeDir(homeDir: string): string {
   return path.join(homeDir, '.codex');
 }
 
+function getQoderAppDataDir(homeDir: string): string {
+  switch (process.platform) {
+    case 'darwin':
+      return path.join(homeDir, 'Library', 'Application Support', 'Qoder');
+    case 'win32':
+      return path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'Qoder');
+    default: // Linux and others
+      return path.join(homeDir, '.config', 'Qoder');
+  }
+}
+
 const adapters: TargetAdapter[] = [
   {
     id: 'cursor',
@@ -218,14 +229,18 @@ const adapters: TargetAdapter[] = [
       scope === 'global' ? path.join(homeDir, '.qoder', 'commands') : path.join(projectRoot, '.qoder', 'commands'),
     resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.qoder', 'rules') : path.join(projectRoot, '.qoder', 'rules'),
-    resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
-      configPath:
-        scope === 'global'
-          ? path.join(homeDir, '.qoder', 'mcp.json')
-          : path.join(projectRoot, '.qoder', 'mcp.json'),
-      format: 'json',
-      serversKey: 'mcpServers',
-    }),
+    resolveMcpConfig: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global'
+        ? {
+            configPath: path.join(getQoderAppDataDir(homeDir), 'SharedClientCache', 'mcp.json'),
+            format: 'json',
+            serversKey: 'mcpServers',
+          }
+        : {
+            configPath: path.join(projectRoot, '.mcp.json'),
+            format: 'json',
+            serversKey: 'mcpServers',
+          },
   },
 ];
 
