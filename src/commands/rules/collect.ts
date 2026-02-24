@@ -32,11 +32,8 @@ import {
   parseRuleToCanonical,
   serializeCanonicalRule,
 } from '../../util/rule-transform.js';
-import {
-  getCursorUserRulesSourceLabel,
-  parseManagedCursorUserRules,
-  readCursorUserRules,
-} from '../../util/cursor-user-rules.js';
+import { parseManagedRuleBlocks } from '../../util/managed-rule-blocks.js';
+import { getGlobalRulesStore } from '../../util/global-rules-store.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
@@ -107,10 +104,15 @@ export async function cmdRulesCollect(positionals: string[], flags: ParsedFlags,
       currentCwd: ctx.cwd,
     });
 
-    if (adapter.id === 'cursor' && scope === 'global') {
-      const sourceLabel = getCursorUserRulesSourceLabel(homeDir);
-      const userRulesText = (await readCursorUserRules(homeDir)) ?? '';
-      const managedRules = parseManagedCursorUserRules(userRulesText)
+    const globalStore = scope === 'global' ? getGlobalRulesStore(adapter.id, homeDir) : null;
+    if (globalStore) {
+      const sourceLabel = globalStore.sourceLabel;
+      const globalText = await globalStore.read();
+      const capability = getRuleCapability(adapter.id);
+      const serializeFormat = capability.kind === 'prompt'
+        ? (capability.format === 'cursor-mdc' ? 'claude-md' : capability.format)
+        : 'claude-md';
+      const managedRules = parseManagedRuleBlocks(globalText)
         .filter((rule) => {
           if (requested.size === 0) return true;
           if (requested.has(rule.relativePath)) return true;
@@ -121,7 +123,7 @@ export async function cmdRulesCollect(positionals: string[], flags: ParsedFlags,
         const sourceName = managedRule.relativePath;
         const sourcePath = sourceLabel;
         const canonical = parseRuleToCanonical(sourceName, managedRule.content);
-        const transformed = serializeCanonicalRule(canonical, 'claude-md');
+        const transformed = serializeCanonicalRule(canonical, serializeFormat);
         const normalized = normalizeRulePath(transformed.relativePath);
         const transformedHash = computeRuleContentHash(transformed.content);
         const dest = getCentralRulePath(normalized);

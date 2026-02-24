@@ -3,18 +3,16 @@ import fs from 'node:fs/promises';
 import { execFile as execFileCallback } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ensureDir, pathExists } from './fs-utils.js';
-import { canonicalRuleIdFromPath } from './rule-transform.js';
+import {
+  type ManagedRuleBlock,
+  parseManagedRuleBlocks,
+  renderManagedRulesText,
+} from './managed-rule-blocks.js';
 
 const execFile = promisify(execFileCallback);
 const USER_RULES_KEY = 'aicontext.personalContext';
 
-const BLOCK_RE = /<!--\s*ap-rule:start\s+id="([^"]+)"\s*-->\s*\n?([\s\S]*?)\n?<!--\s*ap-rule:end\s*-->\s*\n?/g;
-
-export type ManagedCursorUserRule = {
-  id: string;
-  relativePath: string;
-  content: string;
-};
+export type ManagedCursorUserRule = ManagedRuleBlock;
 
 export function getCursorStateDbPath(homeDir: string): string {
   return path.join(homeDir, 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage', 'state.vscdb');
@@ -33,45 +31,10 @@ export function getCursorUserRulesSourceLabel(homeDir: string): string {
 }
 
 export function parseManagedCursorUserRules(text: string): ManagedCursorUserRule[] {
-  const out: ManagedCursorUserRule[] = [];
-  BLOCK_RE.lastIndex = 0;
-  let match: RegExpExecArray | null = BLOCK_RE.exec(text);
-  while (match) {
-    const id = canonicalRuleIdFromPath(match[1]!);
-    out.push({
-      id,
-      relativePath: `${id}.md`,
-      content: match[2]!,
-    });
-    match = BLOCK_RE.exec(text);
-  }
-  return out;
+  return parseManagedRuleBlocks(text);
 }
 
-function stripManagedBlocks(text: string): string {
-  BLOCK_RE.lastIndex = 0;
-  return text.replace(BLOCK_RE, '').trim();
-}
-
-function renderManagedBlock(id: string, content: string): string {
-  const body = content.replace(/\s+$/, '');
-  return `<!-- ap-rule:start id="${id}" -->\n${body}\n<!-- ap-rule:end -->`;
-}
-
-export function renderCursorUserRulesText(
-  existingText: string,
-  managedRules: Map<string, string>,
-): string {
-  const unmanaged = stripManagedBlocks(existingText);
-  const managedBlocks = Array.from(managedRules.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([id, content]) => renderManagedBlock(id, content));
-  const sections: string[] = [];
-  if (unmanaged) sections.push(unmanaged);
-  if (managedBlocks.length > 0) sections.push(managedBlocks.join('\n\n'));
-  if (sections.length === 0) return '';
-  return `${sections.join('\n\n').replace(/\s+$/, '')}\n`;
-}
+export { renderManagedRulesText as renderCursorUserRulesText };
 
 function toHex(text: string): string {
   return Buffer.from(text, 'utf-8').toString('hex');

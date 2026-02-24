@@ -68,8 +68,9 @@ const adapters: TargetAdapter[] = [
       scope === 'global' ? path.join(homeDir, '.cursor', 'agents') : path.join(projectRoot, '.cursor', 'agents'),
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.cursor', 'commands') : path.join(projectRoot, '.cursor', 'commands'),
-    resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global' ? path.join(homeDir, '.cursor', 'rules') : path.join(projectRoot, '.cursor', 'rules'),
+    // Global rules 通过 SQLite User Rules 处理 (GlobalRulesStore)，不使用目录
+    resolveRulesDir: ({ scope, projectRoot }) =>
+      scope === 'global' ? '' : path.join(projectRoot, '.cursor', 'rules'),
     resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
       configPath:
         scope === 'global' ? path.join(homeDir, '.cursor', 'mcp.json') : path.join(projectRoot, '.cursor', 'mcp.json'),
@@ -135,8 +136,9 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(homeDir, '.claude', 'commands')
         : path.join(projectRoot, '.claude', 'commands'),
-    resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global' ? path.join(homeDir, '.claude', 'rules') : path.join(projectRoot, '.claude', 'rules'),
+    // Global rules 通过 ~/.claude/CLAUDE.md 处理 (GlobalRulesStore)，不使用目录
+    resolveRulesDir: ({ scope, projectRoot }) =>
+      scope === 'global' ? '' : path.join(projectRoot, '.claude', 'rules'),
     resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
       configPath:
         scope === 'global'
@@ -254,7 +256,7 @@ export function filterAgentAdapters(adapters: TargetAdapter[]): TargetAdapter[] 
 }
 
 export function filterRuleAdapters(adapters: TargetAdapter[]): TargetAdapter[] {
-  return adapters.filter((adapter) => !NO_AGENTS_COMMANDS_IDS.has(adapter.id));
+  return adapters.filter((adapter) => !SKILLS_ONLY_TARGET_IDS.has(adapter.id));
 }
 
 export function getColoredLabel(adapter: TargetAdapter): string {

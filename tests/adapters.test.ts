@@ -306,11 +306,19 @@ describe('adapters', () => {
   describe('resolveRulesDir', () => {
     it('should resolve cursor rule paths', () => {
       const adapter = resolveAdapter('cursor')!;
-      expect(adapter.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe(
-        path.join(homeDir, '.cursor', 'rules'),
-      );
+      // Global rules handled by GlobalRulesStore (SQLite), not directory
+      expect(adapter.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe('');
       expect(adapter.resolveRulesDir({ scope: 'local', projectRoot, homeDir })).toBe(
         path.join(projectRoot, '.cursor', 'rules'),
+      );
+    });
+
+    it('should resolve claude-code rule paths', () => {
+      const adapter = resolveAdapter('claude-code')!;
+      // Global rules handled by GlobalRulesStore (CLAUDE.md), not directory
+      expect(adapter.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+      expect(adapter.resolveRulesDir({ scope: 'local', projectRoot, homeDir })).toBe(
+        path.join(projectRoot, '.claude', 'rules'),
       );
     });
 
@@ -343,10 +351,10 @@ describe('adapters', () => {
       expect(agents).not.toContain('agents');
       expect(rules).not.toContain('openskills');
       expect(rules).not.toContain('agents');
-      // antigravity does not support agents/commands/rules sync
+      // antigravity does not support agents/commands sync, but DOES support rules
       expect(commands).not.toContain('antigravity');
       expect(agents).not.toContain('antigravity');
-      expect(rules).not.toContain('antigravity');
+      expect(rules).toContain('antigravity');
     });
   });
 });

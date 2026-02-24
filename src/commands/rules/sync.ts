@@ -34,11 +34,10 @@ import {
   serializeCanonicalRule,
 } from '../../util/rule-transform.js';
 import {
-  parseManagedCursorUserRules,
-  readCursorUserRules,
-  renderCursorUserRulesText,
-  writeCursorUserRules,
-} from '../../util/cursor-user-rules.js';
+  parseManagedRuleBlocks,
+  renderManagedRulesText,
+} from '../../util/managed-rule-blocks.js';
+import { getGlobalRulesStore, type GlobalRulesStore } from '../../util/global-rules-store.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
@@ -51,7 +50,8 @@ type RuleSyncEntry = {
   projectRoot?: string;
   homeDir?: string;
   rulesDir?: string;
-  cursorUserRuleId?: string;
+  globalStore?: GlobalRulesStore;
+  globalRuleId?: string;
   status: RuleSyncStatus;
   reason?: string;
   transformedRelativePath?: string;
@@ -159,19 +159,20 @@ export async function cmdRulesSync(positionals: string[], flags: ParsedFlags, ct
       continue;
     }
 
-    if (adapter.id === 'cursor' && scope === 'global') {
-      const existingText = (await readCursorUserRules(homeDir)) ?? '';
+    const globalStore = scope === 'global' ? getGlobalRulesStore(adapter.id, homeDir) : null;
+    if (globalStore) {
+      const existingText = await globalStore.read();
       const managedRules = new Map(
-        parseManagedCursorUserRules(existingText).map((rule) => [rule.id, rule.content] as const),
+        parseManagedRuleBlocks(existingText).map((rule) => [rule.id, rule.content] as const),
       );
-      const toSync = selectPreferredRulePathsForTarget(filteredCandidates, 'claude-md');
+      const toSync = selectPreferredRulePathsForTarget(filteredCandidates, capability.format === 'cursor-mdc' ? 'claude-md' : capability.format);
       for (const name of toSync) {
         const src = getCentralRulePath(name);
         if (!(await pathExists(src))) continue;
 
         const srcContent = await fs.readFile(src, 'utf-8');
         const canonical = parseRuleToCanonical(name, srcContent);
-        const transformed = serializeCanonicalRule(canonical, 'claude-md');
+        const transformed = serializeCanonicalRule(canonical, capability.format === 'cursor-mdc' ? 'claude-md' : capability.format);
         const transformedRelativePath = transformed.relativePath;
         const transformedHash = computeRuleContentHash(transformed.content);
         const existingContent = managedRules.get(canonical.id);
@@ -192,7 +193,8 @@ export async function cmdRulesSync(positionals: string[], flags: ParsedFlags, ct
           transformedRelativePath,
           transformedContent: transformed.content,
           transformedHash,
-          cursorUserRuleId: canonical.id,
+          globalStore,
+          globalRuleId: canonical.id,
         });
       }
       continue;
@@ -307,9 +309,9 @@ export async function cmdRulesSync(positionals: string[], flags: ParsedFlags, ct
   let incompatibleCount = 0;
   let lossyCount = 0;
   let skippedCount = 0;
-  const cursorUserRulesWrites = new Map<
+  const globalRulesWrites = new Map<
     string,
-    { homeDir: string; originalText: string; managedRules: Map<string, string>; dirty: boolean }
+    { store: GlobalRulesStore; originalText: string; managedRules: Map<string, string>; dirty: boolean }
   >();
 
   // Phase 3: execute
@@ -324,7 +326,8 @@ export async function cmdRulesSync(positionals: string[], flags: ParsedFlags, ct
       transformedRelativePath,
       transformedContent,
       transformedHash,
-      cursorUserRuleId,
+      globalRuleId,
+      globalStore: entryGlobalStore,
       homeDir,
     } = entry;
     const contextId = makeContextId({
@@ -354,15 +357,15 @@ export async function cmdRulesSync(positionals: string[], flags: ParsedFlags, ct
       continue;
     }
 
-    if (cursorUserRuleId && homeDir) {
-      let writeState = cursorUserRulesWrites.get(contextId);
+    if (globalRuleId && entryGlobalStore) {
+      let writeState = globalRulesWrites.get(contextId);
       if (!writeState) {
-        const originalText = (await readCursorUserRules(homeDir)) ?? '';
+        const originalText = await entryGlobalStore.read();
         const managedRules = new Map(
-          parseManagedCursorUserRules(originalText).map((rule) => [rule.id, rule.content] as const),
+          parseManagedRuleBlocks(originalText).map((rule) => [rule.id, rule.content] as const),
         );
-        writeState = { homeDir, originalText, managedRules, dirty: false };
-        cursorUserRulesWrites.set(contextId, writeState);
+        writeState = { store: entryGlobalStore, originalText, managedRules, dirty: false };
+        globalRulesWrites.set(contextId, writeState);
       }
 
       if (status === 'same') {
@@ -371,12 +374,12 @@ export async function cmdRulesSync(positionals: string[], flags: ParsedFlags, ct
           hash: transformedHash,
           syncedAt: context.rules[transformedRelativePath]?.syncedAt ?? new Date().toISOString(),
         };
-        process.stdout.write(`Up-to-date: ${name} (${adapter.label} User Rules)\n`);
+        process.stdout.write(`Up-to-date: ${name} (${adapter.label} ${entryGlobalStore.sourceLabel})\n`);
         continue;
       }
       if (status === 'replace' && !force) {
         skippedCount++;
-        process.stderr.write(`Conflict: ${name} in ${adapter.label} User Rules (use --force to overwrite)\n`);
+        process.stderr.write(`Conflict: ${name} in ${adapter.label} ${entryGlobalStore.sourceLabel} (use --force to overwrite)\n`);
         continue;
       }
 
@@ -385,16 +388,16 @@ export async function cmdRulesSync(positionals: string[], flags: ParsedFlags, ct
 
       if (dryRun) {
         process.stdout.write(
-          `[dry-run] sync ${name} -> ${adapter.label} User Rules as ${transformedRelativePath} [${status}]\n`,
+          `[dry-run] sync ${name} -> ${adapter.label} ${entryGlobalStore.sourceLabel} as ${transformedRelativePath} [${status}]\n`,
         );
         continue;
       }
 
-      writeState.managedRules.set(cursorUserRuleId, transformedContent);
+      writeState.managedRules.set(globalRuleId, transformedContent);
       writeState.dirty = true;
       context.rules[transformedRelativePath] = { hash: transformedHash, syncedAt: new Date().toISOString() };
       process.stdout.write(
-        `Synced: ${name} -> ${adapter.label} User Rules ${status === 'new' ? `${ANSI.green}[new]` : `${ANSI.yellow}[replace]`}${ANSI.reset}\n`,
+        `Synced: ${name} -> ${adapter.label} ${entryGlobalStore.sourceLabel} ${status === 'new' ? `${ANSI.green}[new]` : `${ANSI.yellow}[replace]`}${ANSI.reset}\n`,
       );
       continue;
     }
@@ -440,10 +443,10 @@ export async function cmdRulesSync(positionals: string[], flags: ParsedFlags, ct
   }
 
   if (!dryRun) {
-    for (const writeState of cursorUserRulesWrites.values()) {
+    for (const writeState of globalRulesWrites.values()) {
       if (!writeState.dirty) continue;
-      const mergedText = renderCursorUserRulesText(writeState.originalText, writeState.managedRules);
-      await writeCursorUserRules(writeState.homeDir, mergedText);
+      const mergedText = renderManagedRulesText(writeState.originalText, writeState.managedRules);
+      await writeState.store.write(mergedText);
     }
   }
   if (!dryRun) await saveSyncState(syncState);
