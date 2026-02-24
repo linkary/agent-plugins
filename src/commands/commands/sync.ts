@@ -166,10 +166,6 @@ export async function cmdCommandsSync(
 
     const grouped = groupEntriesByName(entriesWithStatus);
     const groupedItems = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
-    const defaultSelected = groupedItems
-      .filter(([, entries]) => entries.some((entry) => entry.status === 'new'))
-      .map(([name]) => name);
-
     const selectedNames = await promptMultiSelect({
       message: `Confirm commands to sync (${scopeTitle}, source: ${srcBaseDir}):`,
       options: groupedItems.map(([name, entries]) => {
@@ -185,7 +181,6 @@ export async function cmdCommandsSync(
           value: name,
         };
       }),
-      defaultSelected,
       searchable: true,
     });
 

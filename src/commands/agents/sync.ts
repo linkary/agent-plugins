@@ -145,10 +145,6 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
 
     const grouped = groupEntriesByName(entriesWithStatus);
     const groupedItems = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
-    const defaultSelected = groupedItems
-      .filter(([, entries]) => entries.some((entry) => entry.status === 'new'))
-      .map(([name]) => name);
-
     const selectedNames = await promptMultiSelect({
       message: `Confirm agents to sync (${scopeTitle}, source: ${srcBaseDir}):`,
       options: groupedItems.map(([name, entries]) => {
@@ -164,7 +160,6 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
           value: name,
         };
       }),
-      defaultSelected,
       searchable: true,
     });
 

@@ -264,10 +264,6 @@ export async function cmdRulesSync(positionals: string[], flags: ParsedFlags, ct
 
     const grouped = groupEntriesByName(allEntries);
     const groupedItems = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
-    const defaultSelected = groupedItems
-      .filter(([, entries]) => entries.some((entry) => entry.status === 'new'))
-      .map(([name]) => name);
-
     const selectedNames = await promptMultiSelect({
       message: `Confirm rules to sync (${formatScopeTitle(allEntries.map((entry) => entry.scope))}):`,
       options: groupedItems.map(([name, entries]) => {
@@ -283,7 +279,6 @@ export async function cmdRulesSync(positionals: string[], flags: ParsedFlags, ct
           value: name,
         };
       }),
-      defaultSelected,
       searchable: true,
     });
 

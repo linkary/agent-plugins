@@ -170,10 +170,6 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
 
     const grouped = groupEntriesByName(entriesWithStatus);
     const groupedItems = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
-    const defaultSelected = groupedItems
-      .filter(([, entries]) => entries.some((entry) => entry.status === 'new'))
-      .map(([name]) => name);
-
     const selectedNames = await promptMultiSelect({
       message: `Confirm MCP servers to sync (${scopeTitle}, source: ${srcBaseDir}):`,
       options: groupedItems.map(([name, entries]) => {
@@ -189,7 +185,6 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
           value: name,
         };
       }),
-      defaultSelected,
     });
 
     if (selectedNames.length === 0) {

@@ -138,10 +138,6 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
 
     const grouped = groupEntriesByName(entriesWithStatus);
     const groupedItems = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
-    const defaultSelected = groupedItems
-      .filter(([, entries]) => entries.some((entry) => entry.status === 'new'))
-      .map(([name]) => name);
-
     const selectedNames = await promptMultiSelect({
       message: `Confirm skills to sync (${scopeTitle}, source: ${srcBaseDir}):`,
       options: groupedItems.map(([name, entries]) => {
@@ -157,7 +153,6 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
           value: name,
         };
       }),
-      defaultSelected,
       searchable: true,
     });
 
