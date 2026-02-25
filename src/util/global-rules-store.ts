@@ -61,14 +61,30 @@ function createFileStore(config: SingleFileConfig): GlobalRulesStore {
 }
 
 function createCursorStore(homeDir: string): GlobalRulesStore {
+  // read() 时缓存 apiToken, 供 write() 复用
+  let cachedApiToken: string | null = null;
+  let labelResolved = false;
+  let resolvedLabel = getCursorUserRulesSourceLabel(homeDir, false);
+
   return {
-    sourceLabel: getCursorUserRulesSourceLabel(homeDir),
+    get sourceLabel() {
+      return resolvedLabel;
+    },
     async read() {
-      const globalRules = (await readCursorUserRules(homeDir)) ?? '';
-      return globalRules;
+      const { text, apiToken } = await readCursorUserRules(homeDir);
+      cachedApiToken = apiToken;
+      if (!labelResolved) {
+        resolvedLabel = getCursorUserRulesSourceLabel(homeDir, apiToken !== null);
+        labelResolved = true;
+      }
+      return text;
     },
     async write(text: string) {
-      await writeCursorUserRules(homeDir, text);
+      const lines = text
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+      await writeCursorUserRules(homeDir, lines, cachedApiToken);
     },
   };
 }

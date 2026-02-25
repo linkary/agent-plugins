@@ -3,6 +3,11 @@ import fs from 'node:fs/promises';
 import { execFile as execFileCallback } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ensureDir, pathExists } from './fs-utils.js';
+import {
+  readCursorAccessToken,
+  readCursorKnowledgeBaseRules,
+  syncKnowledgeBaseItems,
+} from './cursor-api.js';
 
 const execFile = promisify(execFileCallback);
 const USER_RULES_KEY = 'aicontext.personalContext';
@@ -46,9 +51,10 @@ export async function readCursorLocalRulesFallback(cwd: string): Promise<string>
 }
 
 
-export function getCursorUserRulesSourceLabel(homeDir: string): string {
+export function getCursorUserRulesSourceLabel(homeDir: string, apiAvailable = false): string {
   const override = getCursorUserRulesFileOverride();
   if (override) return override;
+  if (apiAvailable) return 'Cursor Knowledge Base API';
   return `${getCursorStateDbPath(homeDir)}#ItemTable[${USER_RULES_KEY}]`;
 }
 
@@ -117,39 +123,88 @@ conn.close()
   await execFile('python3', ['-c', script, dbPath], { input: text, maxBuffer: 8 * 1024 * 1024 });
 }
 
-export async function readCursorUserRules(homeDir: string): Promise<string | null> {
+/**
+ * 读取 Cursor User Rules.
+ *
+ * Fallback 顺序:
+ *   1. AP_CURSOR_USER_RULES_FILE 环境变量覆盖
+ *   2. Knowledge Base API (Cursor 2.5+)
+ *   3. SQLite aicontext.personalContext (legacy)
+ *
+ * 返回 { text, apiToken } — apiToken 非 null 时表示 API 可用,
+ * 后续 write 可直接复用该 token。
+ */
+export async function readCursorUserRules(
+  homeDir: string,
+): Promise<{ text: string; apiToken: string | null }> {
   const overrideFile = getCursorUserRulesFileOverride();
   if (overrideFile) {
-    if (!(await pathExists(overrideFile))) return '';
-    return await fs.readFile(overrideFile, 'utf-8');
+    if (!(await pathExists(overrideFile))) return { text: '', apiToken: null };
+    const content = await fs.readFile(overrideFile, 'utf-8');
+    return { text: content, apiToken: null };
   }
 
+  // 尝试 Knowledge Base API
+  const token = await readCursorAccessToken(homeDir);
+  if (token) {
+    try {
+      const text = await readCursorKnowledgeBaseRules(token);
+      return { text, apiToken: token };
+    } catch {
+      // API 失败, 降级到 SQLite
+    }
+  }
+
+  // Legacy SQLite fallback
   const dbPath = getCursorStateDbPath(homeDir);
-  if (!(await pathExists(dbPath))) return '';
+  if (!(await pathExists(dbPath))) return { text: '', apiToken: null };
 
   try {
-    return await readViaSqliteCli(dbPath);
+    const text = (await readViaSqliteCli(dbPath)) ?? '';
+    return { text, apiToken: null };
   } catch {
     try {
-      return await readViaPython(dbPath);
+      const text = (await readViaPython(dbPath)) ?? '';
+      return { text, apiToken: null };
     } catch {
       throw new Error(
-        'Unable to read Cursor User Rules: sqlite3 CLI and python3 are both unavailable. Set AP_CURSOR_USER_RULES_FILE as a fallback.',
+        'Unable to read Cursor User Rules: Knowledge Base API, sqlite3 CLI, and python3 are all unavailable. Set AP_CURSOR_USER_RULES_FILE as a fallback.',
       );
     }
   }
 }
 
-export async function writeCursorUserRules(homeDir: string, text: string): Promise<void> {
+/**
+ * 写入 Cursor User Rules.
+ *
+ * 当 apiToken 非 null 时使用 Knowledge Base API 进行行级同步;
+ * 否则降级到 SQLite 或文件覆盖。
+ *
+ * @param lines - 期望的规则行 (已 trim, 非空)
+ */
+export async function writeCursorUserRules(
+  homeDir: string,
+  lines: string[],
+  apiToken: string | null,
+): Promise<void> {
   const overrideFile = getCursorUserRulesFileOverride();
   if (overrideFile) {
     await ensureDir(path.dirname(overrideFile));
+    const text = lines.length > 0 ? lines.join('\n') + '\n' : '';
     await fs.writeFile(overrideFile, text, 'utf-8');
     return;
   }
 
+  // Knowledge Base API
+  if (apiToken) {
+    await syncKnowledgeBaseItems(apiToken, lines);
+    return;
+  }
+
+  // Legacy SQLite fallback
   const dbPath = getCursorStateDbPath(homeDir);
   await ensureDir(path.dirname(dbPath));
+  const text = lines.length > 0 ? lines.join('\n') + '\n' : '';
 
   try {
     await writeViaSqliteCli(dbPath, text);
@@ -160,7 +215,7 @@ export async function writeCursorUserRules(homeDir: string, text: string): Promi
       return;
     } catch {
       throw new Error(
-        'Unable to write Cursor User Rules: sqlite3 CLI and python3 are both unavailable. Set AP_CURSOR_USER_RULES_FILE as a fallback.',
+        'Unable to write Cursor User Rules: Knowledge Base API unavailable, sqlite3 CLI and python3 also unavailable. Set AP_CURSOR_USER_RULES_FILE as a fallback.',
       );
     }
   }
