@@ -320,6 +320,7 @@ export const ROOT_ALIASES: Record<string, string> = {
   rules: 'rules',
   rule: 'rules',
   rl: 'rules',
+  r: 'rules',
   mcp: 'mcp',
   m: 'mcp',
 };

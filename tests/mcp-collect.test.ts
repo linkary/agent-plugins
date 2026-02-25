@@ -58,7 +58,7 @@ afterEach(async () => {
 describe('mcp collect', () => {
   it('reports duplicate source conflicts with adapter labels', async () => {
     const cursorConfig = path.join(tmpProjectRoot, '.cursor', 'mcp.json');
-    const qoderConfig = path.join(tmpProjectRoot, '.qoder', 'mcp.json');
+    const qoderConfig = path.join(tmpProjectRoot, '.mcp.json');
     await fs.mkdir(path.dirname(cursorConfig), { recursive: true });
     await fs.mkdir(path.dirname(qoderConfig), { recursive: true });
 

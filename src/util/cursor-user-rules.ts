@@ -3,16 +3,9 @@ import fs from 'node:fs/promises';
 import { execFile as execFileCallback } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ensureDir, pathExists } from './fs-utils.js';
-import {
-  type ManagedRuleBlock,
-  parseManagedRuleBlocks,
-  renderManagedRulesText,
-} from './managed-rule-blocks.js';
 
 const execFile = promisify(execFileCallback);
 const USER_RULES_KEY = 'aicontext.personalContext';
-
-export type ManagedCursorUserRule = ManagedRuleBlock;
 
 export function getCursorStateDbPath(homeDir: string): string {
   return path.join(homeDir, 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage', 'state.vscdb');
@@ -24,17 +17,40 @@ function getCursorUserRulesFileOverride(): string | null {
   return path.resolve(override.trim());
 }
 
+export async function readCursorLocalRulesFallback(cwd: string): Promise<string> {
+  let content = '';
+
+  const cursorrulesPath = path.join(cwd, '.cursorrules');
+  if (await pathExists(cursorrulesPath)) {
+    const text = await fs.readFile(cursorrulesPath, 'utf-8');
+    if (text.trim()) {
+      content += text.trim() + '\n\n';
+    }
+  }
+
+  const rulesDir = path.join(cwd, '.cursor', 'rules');
+  if (await pathExists(rulesDir)) {
+    try {
+      const files = await fs.readdir(rulesDir);
+      for (const file of files.sort()) {
+        if (!file.endsWith('.mdc')) continue;
+        const text = await fs.readFile(path.join(rulesDir, file), 'utf-8');
+        if (text.trim()) {
+          content += `<!-- Rule: ${file} -->\n${text.trim()}\n\n`;
+        }
+      }
+    } catch {}
+  }
+
+  return content.trim();
+}
+
+
 export function getCursorUserRulesSourceLabel(homeDir: string): string {
   const override = getCursorUserRulesFileOverride();
   if (override) return override;
   return `${getCursorStateDbPath(homeDir)}#ItemTable[${USER_RULES_KEY}]`;
 }
-
-export function parseManagedCursorUserRules(text: string): ManagedCursorUserRule[] {
-  return parseManagedRuleBlocks(text);
-}
-
-export { renderManagedRulesText as renderCursorUserRulesText };
 
 function toHex(text: string): string {
   return Buffer.from(text, 'utf-8').toString('hex');

@@ -1,3 +1,9 @@
+/**
+ * rules manage-utils — 文件级 (local) 规则扫描与同步副本查找.
+ *
+ * 全局行级规则不使用这些工具, 但 show 命令仍需
+ * findSyncedRuleCopies 来显示文件级规则的同步状态.
+ */
 import path from 'node:path';
 import {
   filterRuleAdapters,
@@ -10,8 +16,8 @@ import { resolveTargetContext } from '../../util/scope.js';
 import { scanRuleFiles } from '../../util/rule-utils.js';
 import { pathExists } from '../../util/fs-utils.js';
 import { canonicalRuleIdFromPath } from '../../util/rule-transform.js';
-import { parseManagedCursorUserRules, readCursorUserRules } from '../../util/cursor-user-rules.js';
 import type { ConfigV1 } from '../../core/config.js';
+import os from 'node:os';
 
 export type TargetRule = {
   name: string;
@@ -43,6 +49,8 @@ export async function gatherTargetRules(params: {
     });
 
     const rulesDir = adapter.resolveRulesDir({ scope, projectRoot, homeDir });
+    if (!rulesDir) continue;
+
     const rules = await scanRuleFiles(rulesDir);
 
     for (const name of rules) {
@@ -65,15 +73,13 @@ export type SyncedRuleCopy = {
   ruleName: string;
   path: string;
   rulesDir: string;
-  storageType?: 'file' | 'cursor-user-rules';
-  ruleId?: string;
-  homeDir?: string;
   adapterId: string;
   adapterLabel: string;
   scope: Scope;
   projectRoot?: string;
 };
 
+/** 查找文件级规则在各目标中的副本 (仅 local scope, 全局行级规则不在此处理). */
 export async function findSyncedRuleCopies(params: {
   ruleNames: string[];
   config: ConfigV1;
@@ -83,15 +89,18 @@ export async function findSyncedRuleCopies(params: {
   const requestedIds = new Set(ruleNames.map((name) => canonicalRuleIdFromPath(name)));
   const adapters = filterRuleAdapters(getAdapters());
   const copies: SyncedRuleCopy[] = [];
+  const homeDir = os.homedir();
 
   for (const adapter of adapters) {
     const targetConfig = config.targets[adapter.id];
-    const { scope, projectRoot, homeDir } = await resolveTargetContext({
+    const { scope, projectRoot } = await resolveTargetContext({
       defaultScope: targetConfig?.defaultScope ?? 'global',
       currentCwd,
     });
 
     const rulesDir = adapter.resolveRulesDir({ scope, projectRoot, homeDir });
+    if (!rulesDir) continue;
+
     const rules = await scanRuleFiles(rulesDir);
     for (const name of rules) {
       const ruleId = canonicalRuleIdFromPath(name);
@@ -102,33 +111,11 @@ export async function findSyncedRuleCopies(params: {
         ruleName: name,
         path: rulePath,
         rulesDir,
-        storageType: 'file',
         adapterId: adapter.id,
         adapterLabel: getColoredLabel(adapter),
         scope,
-        projectRoot: scope === 'local' ? projectRoot : undefined,
+        projectRoot,
       });
-    }
-
-    if (adapter.id === 'cursor' && scope === 'global') {
-      const userRulesText = (await readCursorUserRules(homeDir)) ?? '';
-      const managedRules = parseManagedCursorUserRules(userRulesText);
-      for (const managedRule of managedRules) {
-        const ruleId = canonicalRuleIdFromPath(managedRule.relativePath);
-        if (!requestedIds.has(ruleId)) continue;
-        copies.push({
-          ruleName: managedRule.relativePath,
-          path: `<cursor-user-rules:${ruleId}>`,
-          rulesDir: '',
-          storageType: 'cursor-user-rules',
-          ruleId,
-          homeDir,
-          adapterId: adapter.id,
-          adapterLabel: getColoredLabel(adapter),
-          scope,
-          projectRoot: scope === 'local' ? projectRoot : undefined,
-        });
-      }
     }
   }
 

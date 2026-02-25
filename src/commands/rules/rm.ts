@@ -1,8 +1,19 @@
+/**
+ * rules rm — 行级规则移除.
+ *
+ * rm 是唯一能删除规则行的操作 (collect/sync 只增不减).
+ *
+ * 路由:
+ *   1. 无参数 + TTY → 交互式选择 (中心或目标)
+ *   2. 参数是 repo URL → 按 repo 移除文件 (不变)
+ *   3. --target → 从目标的全局规则中移除匹配行
+ *   4. 参数匹配中心规则文件 → 删除文件 (不变)
+ *   5. 参数匹配中心 _global.md 行 → 移除行
+ */
 import path from 'node:path';
-import { loadConfig } from '../../core/config.js';
+import os from 'node:os';
 import { loadRegistry, saveRegistry, normalizeRepoUrl, removeRuleFromRepo } from '../../core/registry.js';
-import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
-import { listCentralRules, getCentralRulePath } from '../../core/rule-store.js';
+import { listCentralRules, getCentralRulePath, readCentralGlobalRuleLines, writeCentralGlobalRuleLines } from '../../core/rule-store.js';
 import { getCentralRulesDir } from '../../util/apg-paths.js';
 import { pathExists } from '../../util/fs-utils.js';
 import {
@@ -10,26 +21,42 @@ import {
   getAdapters,
   getColoredLabel,
   resolveAdapter,
-  type TargetAdapter,
+  type TargetId,
 } from '../../targets/adapters.js';
 import { resolveTargetContext } from '../../util/scope.js';
-import { promptConfirm, promptMultiSelect, promptSelect } from '../../util/prompt.js';
+import { promptConfirm, promptMultiSelect } from '../../util/prompt.js';
 import { isGitHubShorthand, isProbablyGitUrl } from '../../util/git-utils.js';
 import { ANSI } from '../../util/ansi.js';
-import { gatherTargetRules, findSyncedRuleCopies, type SyncedRuleCopy } from './manage-utils.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { InvalidRulePathError, normalizeRulePath, removeFileAndEmptyParents } from '../../util/rule-utils.js';
-import { canonicalRuleIdFromPath } from '../../util/rule-transform.js';
 import {
-  parseManagedCursorUserRules,
-  readCursorUserRules,
-  renderCursorUserRulesText,
-  writeCursorUserRules,
-} from '../../util/cursor-user-rules.js';
+  getGlobalRulesStore,
+  normalizeRuleLines,
+  shortHash,
+  serializeLines,
+  type NormalizedLine,
+} from '../../util/global-rules-store.js';
+import { loadConfig } from '../../core/config.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
 const CENTRAL_VALUE = '__central__';
+
+// ---------------------------------------------------------------------------
+// 行匹配: 精确内容 或 hash 前缀
+// ---------------------------------------------------------------------------
+
+function matchesLine(arg: string, line: NormalizedLine): boolean {
+  if (line.content === arg) return true;
+  const sh = shortHash(line.hash);
+  if (arg === sh || line.hash === arg) return true;
+  const hex = line.hash.indexOf(':') >= 0 ? line.hash.slice(line.hash.indexOf(':') + 1) : line.hash;
+  return arg.length >= 4 && hex.startsWith(arg);
+}
+
+// ---------------------------------------------------------------------------
+// 入口
+// ---------------------------------------------------------------------------
 
 export async function cmdRulesRemove(positionals: string[], flags: ParsedFlags, ctx: CliRunContext) {
   const args = positionals;
@@ -40,39 +67,164 @@ export async function cmdRulesRemove(positionals: string[], flags: ParsedFlags, 
     return await interactiveRemove(flags, ctx);
   }
   if (args.length === 0 && flags.target && interactive) {
-    return await interactiveRemoveFromTarget(flags, ctx);
+    return await interactiveRemoveFromTarget(flags, ctx, dryRun);
   }
   if (args.length === 0) {
-    process.stderr.write('Usage: ap rules rm <rule|repo>...\n');
+    process.stderr.write('Usage: ap rules rm <rule|line|hash|repo>...\n');
     return 1;
   }
 
   const targetRaw = flags.target;
   const targetFlag =
-    typeof targetRaw === 'string'
-      ? targetRaw
-      : Array.isArray(targetRaw)
-        ? targetRaw[0]
-        : undefined;
+    typeof targetRaw === 'string' ? targetRaw : Array.isArray(targetRaw) ? targetRaw[0] : undefined;
   if (Array.isArray(targetRaw) && targetRaw.length > 1) {
     process.stderr.write('rm only supports a single --target. Use separate commands for multiple targets.\n');
     return 1;
   }
 
+  // repo URL → 文件级移除 (不变)
+  const firstArg = args[0]!;
+  const isRepo = isGitHubShorthand(firstArg) || isProbablyGitUrl(firstArg);
+  if (isRepo && !targetFlag) {
+    const registry = await loadRegistry();
+    registry.rules ??= {};
+    registry.ruleRepos ??= {};
+    return await removeByRepo(firstArg, registry, dryRun, interactive);
+  }
+
+  // --target → 从目标全局规则中移除行
+  if (targetFlag) {
+    return await removeFromTarget(args, targetFlag, flags, ctx, dryRun);
+  }
+
+  // 无 target: 先尝试文件路径, 再尝试全局行匹配
+  return await removeFromCentral(args, dryRun);
+}
+
+// ---------------------------------------------------------------------------
+// 中心移除: 文件路径 → 全局行
+// ---------------------------------------------------------------------------
+
+async function removeFromCentral(args: string[], dryRun: boolean): Promise<number> {
   const registry = await loadRegistry();
   registry.rules ??= {};
   registry.ruleRepos ??= {};
 
-  const firstArg = args[0]!;
-  const isRepo = isGitHubShorthand(firstArg) || isProbablyGitUrl(firstArg);
-  if (isRepo && !targetFlag) {
-    return await removeByRepo(firstArg, registry, dryRun, interactive);
+  let centralLines: NormalizedLine[] | null = null;
+  let centralDirty = false;
+  let removed = 0;
+
+  for (const raw of args) {
+    // 尝试文件路径
+    let matchedFile = false;
+    try {
+      const name = normalizeRulePath(raw);
+      const fullPath = getCentralRulePath(name);
+      if (await pathExists(fullPath)) {
+        if (dryRun) {
+          process.stdout.write(`${ANSI.dim}[dry-run]${ANSI.reset} rm ${name} (${fullPath})\n`);
+        } else {
+          await removeFileAndEmptyParents(fullPath, getCentralRulesDir());
+          delete registry.rules[name];
+          removeRuleFromRepo(registry, name);
+          process.stdout.write(`Removed file: ${name}\n`);
+        }
+        removed++;
+        matchedFile = true;
+      }
+    } catch (err) {
+      if (!(err instanceof InvalidRulePathError)) throw err;
+    }
+    if (matchedFile) continue;
+
+    // 尝试全局行匹配
+    centralLines ??= await readCentralGlobalRuleLines();
+    const before = centralLines.length;
+    centralLines = centralLines.filter((l) => !matchesLine(raw, l));
+    const delta = before - centralLines.length;
+    if (delta === 0) {
+      process.stderr.write(`Not found: ${raw}\n`);
+      continue;
+    }
+    removed += delta;
+    centralDirty = true;
+    process.stdout.write(`Removed ${delta} line(s) matching: ${raw}\n`);
   }
 
-  if (targetFlag) {
-    return await removeFromTargetDirect(args, targetFlag, flags, ctx, dryRun);
+  if (!dryRun) {
+    if (centralDirty && centralLines) await writeCentralGlobalRuleLines(centralLines);
+    await saveRegistry(registry);
   }
 
+  if (removed > 0) {
+    process.stdout.write(`\n${ANSI.dim}Tip: run ${ANSI.reset}${ANSI.bold}ap rules sync${ANSI.reset}${ANSI.dim} to propagate changes to targets.${ANSI.reset}\n`);
+  }
+  return removed > 0 ? 0 : 1;
+}
+
+// ---------------------------------------------------------------------------
+// 目标移除: 全局行级
+// ---------------------------------------------------------------------------
+
+async function removeFromTarget(
+  args: string[],
+  targetFlag: string,
+  flags: ParsedFlags,
+  ctx: CliRunContext,
+  dryRun: boolean,
+): Promise<number> {
+  const adapters = filterRuleAdapters(getAdapters());
+  const resolved = resolveAdapter(targetFlag);
+  const adapter = resolved && adapters.find((c) => c.id === resolved.id);
+  if (!adapter) {
+    process.stderr.write(`Unknown target: ${targetFlag}\n`);
+    process.stderr.write(`Known targets: ${adapters.map((a) => a.id).join(', ')}\n`);
+    return 1;
+  }
+
+  const homeDir = os.homedir();
+  const config = await loadConfig();
+  const targetConfig = config.targets[adapter.id];
+  const { scope, projectRoot } = await resolveTargetContext({
+    scopeFlag: typeof flags.scope === 'string' ? flags.scope : undefined,
+    cwdFlag: typeof flags.cwd === 'string' ? flags.cwd : undefined,
+    defaultScope: targetConfig?.defaultScope,
+    currentCwd: ctx.cwd,
+  });
+
+  // 全局 → 行级移除
+  if (scope === 'global') {
+    const store = getGlobalRulesStore(adapter.id, homeDir);
+    if (!store) {
+      process.stderr.write(`${adapter.label} has no global rules store.\n`);
+      return 1;
+    }
+
+    let lines = normalizeRuleLines((await store.read()).trim());
+    let removed = 0;
+
+    for (const raw of args) {
+      const before = lines.length;
+      lines = lines.filter((l) => !matchesLine(raw, l));
+      const delta = before - lines.length;
+      if (delta === 0) {
+        process.stderr.write(`Not found in ${adapter.label}: ${raw}\n`);
+        continue;
+      }
+      removed += delta;
+      if (dryRun) {
+        process.stdout.write(`${ANSI.dim}[dry-run]${ANSI.reset} rm ${delta} line(s): ${raw}\n`);
+      } else {
+        process.stdout.write(`Removed ${delta} line(s) from ${adapter.label}: ${raw}\n`);
+      }
+    }
+
+    if (!dryRun && removed > 0) await store.write(serializeLines(lines));
+    return removed > 0 ? 0 : 1;
+  }
+
+  // 本地 → 文件级移除 (不变)
+  const rulesDir = adapter.resolveRulesDir({ scope, projectRoot, homeDir });
   let removed = 0;
   for (const raw of args) {
     let name: string;
@@ -86,39 +238,40 @@ export async function cmdRulesRemove(positionals: string[], flags: ParsedFlags, 
       throw err;
     }
 
-    const fullPath = getCentralRulePath(name);
-    if (!(await pathExists(fullPath))) {
-      process.stderr.write(`Not found: ${name}\n`);
+    const targetPath = path.join(rulesDir, name);
+    if (!(await pathExists(targetPath))) {
+      process.stderr.write(`Not found in ${adapter.label}: ${name}\n`);
       continue;
     }
 
     if (dryRun) {
-      process.stdout.write(`[dry-run] rm ${name} (${fullPath})\n`);
+      process.stdout.write(`${ANSI.dim}[dry-run]${ANSI.reset} rm ${name} (${targetPath})\n`);
       removed++;
       continue;
     }
 
-    await removeFileAndEmptyParents(fullPath, getCentralRulesDir());
-    delete registry.rules[name];
-    removeRuleFromRepo(registry, name);
+    await removeFileAndEmptyParents(targetPath, rulesDir);
     removed++;
-    process.stdout.write(`Removed: ${name}\n`);
+    process.stdout.write(`Removed: ${name} (${adapter.label})\n`);
   }
 
-  if (!dryRun) await saveRegistry(registry);
   return removed > 0 ? 0 : 1;
 }
 
+// ---------------------------------------------------------------------------
+// 交互式: 中心 / 目标选择
+// ---------------------------------------------------------------------------
+
 async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext): Promise<number> {
   const adapters = filterRuleAdapters(getAdapters());
-  const targetOptions = [
-    { label: 'Central', value: CENTRAL_VALUE },
-    ...adapters.map((adapter) => ({ label: getColoredLabel(adapter), value: adapter.id })),
+  const options = [
+    { label: 'Central (_global.md)', value: CENTRAL_VALUE },
+    ...adapters.map((a) => ({ label: getColoredLabel(a), value: a.id })),
   ];
 
   const selectedTargets = await promptMultiSelect({
     message: 'Select where to remove from:',
-    options: targetOptions,
+    options,
   });
   if (selectedTargets.length === 0) {
     process.stdout.write('Cancelled.\n');
@@ -126,210 +279,107 @@ async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext): Promis
   }
 
   const hasCentral = selectedTargets.includes(CENTRAL_VALUE);
-  const toolTargetIds = selectedTargets.filter((target) => target !== CENTRAL_VALUE);
+  const toolIds = selectedTargets.filter((t) => t !== CENTRAL_VALUE);
 
-  if (hasCentral) await interactiveRemoveCentral(ctx, toolTargetIds);
-  if (toolTargetIds.length > 0) await interactiveRemoveFromTools(toolTargetIds, flags, ctx);
+  if (hasCentral) await interactiveRemoveCentralLines();
+  if (toolIds.length > 0) {
+    for (const id of toolIds) {
+      await interactiveRemoveTargetLines(id);
+    }
+  }
   return 0;
 }
 
-async function interactiveRemoveCentral(ctx: CliRunContext, pendingToolTargets: string[]): Promise<void> {
-  const rules = await listCentralRules();
-  if (rules.length === 0) {
-    process.stdout.write('(no central rules installed)\n');
+async function interactiveRemoveCentralLines(): Promise<void> {
+  const lines = await readCentralGlobalRuleLines();
+  if (lines.length === 0) {
+    process.stdout.write('(no central global rules)\n');
     return;
   }
 
   const selected = await promptMultiSelect({
-    message: `Select central rules to remove (${rules.length} available):`,
-    options: rules.map((name) => ({ label: name, value: name })),
+    message: `Select lines to remove (${lines.length} available):`,
+    options: lines.map((l) => ({
+      label: `[${shortHash(l.hash)}] ${l.content}`,
+      value: l.content,
+    })),
   });
   if (selected.length === 0) return;
 
   const confirmed = await promptConfirm({
-    message: `Remove ${selected.length} central rule(s)?`,
+    message: `Remove ${selected.length} line(s) from central?`,
     default: false,
   });
   if (!confirmed) return;
 
-  const registry = await loadRegistry();
-  registry.rules ??= {};
-  registry.ruleRepos ??= {};
+  const toRemove = new Set(selected);
+  const remaining = lines.filter((l) => !toRemove.has(l.content));
+  await writeCentralGlobalRuleLines(remaining);
 
-  for (const name of selected) {
-    const fullPath = getCentralRulePath(name);
-    if (!(await pathExists(fullPath))) continue;
-    await removeFileAndEmptyParents(fullPath, getCentralRulesDir());
-    delete registry.rules[name];
-    removeRuleFromRepo(registry, name);
-    process.stdout.write(`Removed: ${name}\n`);
+  for (const content of selected) {
+    process.stdout.write(`Removed: ${content}\n`);
   }
-  await saveRegistry(registry);
-
-  await promptCascadeDelete(selected, ctx, pendingToolTargets);
+  process.stdout.write(`\n${ANSI.dim}Tip: run ${ANSI.reset}${ANSI.bold}ap rules sync${ANSI.reset}${ANSI.dim} to propagate changes.${ANSI.reset}\n`);
 }
 
-async function promptCascadeDelete(ruleNames: string[], ctx: CliRunContext, excludeTargets: string[]): Promise<void> {
-  const config = await loadConfig();
-  const allCopies = await findSyncedRuleCopies({
-    ruleNames,
-    config,
-    currentCwd: ctx.cwd,
-  });
-  const copies = allCopies.filter((copy) => !excludeTargets.includes(copy.adapterId));
-
-  if (copies.length === 0) return;
-
-  process.stdout.write(`\n${ANSI.yellow}Synced copies found in other targets:${ANSI.reset}\n`);
-  for (const copy of copies) {
-    process.stdout.write(`  ${copy.ruleName} -> ${copy.adapterLabel} (${copy.scope})\n`);
-  }
-  process.stdout.write('\n');
-
-  const action = await promptSelect({
-    message: 'Remove synced copies too?',
-    options: [
-      { label: 'Yes, remove all synced copies', value: 'all' },
-      { label: 'Select which to remove', value: 'select' },
-      { label: 'No, keep synced copies', value: 'no' },
-    ],
-  });
-  if (action === 'no') return;
-
-  let toRemove: SyncedRuleCopy[];
-  if (action === 'all') {
-    toRemove = copies;
-  } else {
-    const selectedIndices = await promptMultiSelect({
-      message: 'Select synced copies to remove:',
-      options: copies.map((copy, i) => ({
-        label: `${copy.ruleName} -> ${copy.adapterLabel} (${copy.scope})`,
-        value: String(i),
-      })),
-      defaultSelected: 'all',
-    });
-    if (selectedIndices.length === 0) return;
-    toRemove = selectedIndices.map((i) => copies[Number(i)]!);
-  }
-
-  const syncState = await loadSyncState();
-  const cursorUserRulesCache = new Map<string, { homeDir: string; originalText: string; rules: Map<string, string> }>();
-  for (const copy of toRemove) {
-    if (copy.storageType === 'cursor-user-rules' && copy.homeDir && copy.ruleId) {
-      const cacheKey = `${copy.adapterId}:${copy.scope}:${copy.homeDir}`;
-      let cache = cursorUserRulesCache.get(cacheKey);
-      if (!cache) {
-        const originalText = (await readCursorUserRules(copy.homeDir)) ?? '';
-        const rules = new Map(
-          parseManagedCursorUserRules(originalText).map((rule) => [rule.id, rule.content] as const),
-        );
-        cache = { homeDir: copy.homeDir, originalText, rules };
-        cursorUserRulesCache.set(cacheKey, cache);
-      }
-      if (!cache.rules.has(copy.ruleId)) continue;
-      cache.rules.delete(copy.ruleId);
-    } else {
-      if (!(await pathExists(copy.path))) continue;
-      await removeFileAndEmptyParents(copy.path, copy.rulesDir);
-    }
-
-    const contextId = makeContextId({
-      target: copy.adapterId,
-      scope: copy.scope,
-      projectRoot: copy.projectRoot,
-    });
-    const context = syncState.contexts[contextId];
-    if (context?.rules) delete context.rules[copy.ruleName];
-
-    process.stdout.write(`Removed: ${copy.ruleName} (${copy.adapterLabel})\n`);
-  }
-  for (const cache of cursorUserRulesCache.values()) {
-    const mergedText = renderCursorUserRulesText(cache.originalText, cache.rules);
-    await writeCursorUserRules(cache.homeDir, mergedText);
-  }
-  await saveSyncState(syncState);
-}
-
-/** 从目标中选择并移除规则的通用流程，供多处复用。 */
-async function promptAndRemoveTargetRules(params: {
-  adapters: TargetAdapter[];
-  flags: ParsedFlags;
-  ctx: CliRunContext;
-}): Promise<{ removed: boolean; cancelled: boolean }> {
-  const { adapters: selectedAdapters, flags, ctx } = params;
-  const config = await loadConfig();
-  const allRules = await gatherTargetRules({
-    adapters: selectedAdapters,
-    config,
-    scopeFlag: typeof flags.scope === 'string' ? flags.scope : undefined,
-    cwdFlag: typeof flags.cwd === 'string' ? flags.cwd : undefined,
-    currentCwd: ctx.cwd,
-  });
-
-  if (allRules.length === 0) {
-    const targetLabels = selectedAdapters.map((adapter) => getColoredLabel(adapter)).join(', ');
-    process.stdout.write(`(no rules found in ${targetLabels})\n`);
-    return { removed: false, cancelled: false };
-  }
-
-  const selected = await promptMultiSelect({
-    message: `Select rules to remove (${allRules.length} available):`,
-    options: allRules.map((rule, i) => ({
-      label: `${rule.name} (${rule.adapterLabel} - ${rule.scope})`,
-      value: String(i),
-    })),
-  });
-  if (selected.length === 0) return { removed: false, cancelled: true };
-
-  const confirmed = await promptConfirm({
-    message: `Remove ${selected.length} rule(s) from targets?`,
-    default: false,
-  });
-  if (!confirmed) return { removed: false, cancelled: true };
-
-  const syncState = await loadSyncState();
-  for (const idx of selected) {
-    const rule = allRules[Number(idx)]!;
-    if (!(await pathExists(rule.path))) continue;
-    await removeFileAndEmptyParents(rule.path, rule.rulesDir);
-
-    const contextId = makeContextId({
-      target: rule.adapterId,
-      scope: rule.scope,
-      projectRoot: rule.projectRoot,
-    });
-    const context = syncState.contexts[contextId];
-    if (context?.rules) delete context.rules[rule.name];
-
-    process.stdout.write(`Removed: ${rule.name} (${rule.adapterLabel})\n`);
-  }
-  await saveSyncState(syncState);
-  return { removed: true, cancelled: false };
-}
-
-async function interactiveRemoveFromTools(
-  toolTargetIds: string[],
-  flags: ParsedFlags,
-  ctx: CliRunContext,
-): Promise<void> {
-  const adapters = filterRuleAdapters(getAdapters()).filter((adapter) => toolTargetIds.includes(adapter.id));
-  await promptAndRemoveTargetRules({ adapters, flags, ctx });
-}
-
-async function interactiveRemoveFromTarget(flags: ParsedFlags, ctx: CliRunContext): Promise<number> {
+async function interactiveRemoveFromTarget(flags: ParsedFlags, ctx: CliRunContext, dryRun: boolean): Promise<number> {
   const adapters = filterRuleAdapters(getAdapters());
-  const selectedAdapters = await selectTargetAdapters({
+  const selected = await selectTargetAdapters({
     adapters,
     flags,
     interactive: true,
     mode: 'multi',
     promptMessage: 'Select target(s):',
   });
-  if (selectedAdapters.length === 0) return 1;
+  if (selected.length === 0) return 1;
 
-  await promptAndRemoveTargetRules({ adapters: selectedAdapters, flags, ctx });
+  for (const adapter of selected) {
+    await interactiveRemoveTargetLines(adapter.id);
+  }
   return 0;
 }
+
+async function interactiveRemoveTargetLines(targetId: string): Promise<void> {
+  const homeDir = os.homedir();
+  const store = getGlobalRulesStore(targetId as TargetId, homeDir);
+  if (!store) {
+    process.stdout.write(`${ANSI.dim}Skipped ${targetId}: no global rules store${ANSI.reset}\n`);
+    return;
+  }
+
+  const lines = normalizeRuleLines((await store.read()).trim());
+  if (lines.length === 0) {
+    process.stdout.write(`(${targetId}: empty)\n`);
+    return;
+  }
+
+  const selected = await promptMultiSelect({
+    message: `[${targetId}] Select lines to remove (${lines.length} available):`,
+    options: lines.map((l) => ({
+      label: `[${shortHash(l.hash)}] ${l.content}`,
+      value: l.content,
+    })),
+  });
+  if (selected.length === 0) return;
+
+  const confirmed = await promptConfirm({
+    message: `Remove ${selected.length} line(s) from ${targetId}?`,
+    default: false,
+  });
+  if (!confirmed) return;
+
+  const toRemove = new Set(selected);
+  const remaining = lines.filter((l) => !toRemove.has(l.content));
+  await store.write(serializeLines(remaining));
+
+  for (const content of selected) {
+    process.stdout.write(`Removed from ${targetId}: ${content}\n`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Repo 移除 (文件级, 不变)
+// ---------------------------------------------------------------------------
 
 async function removeByRepo(
   firstArg: string,
@@ -379,7 +429,7 @@ async function removeByRepo(
       continue;
     }
     if (dryRun) {
-      process.stdout.write(`[dry-run] rm ${name} (${fullPath})\n`);
+      process.stdout.write(`${ANSI.dim}[dry-run]${ANSI.reset} rm ${name} (${fullPath})\n`);
       removed++;
       continue;
     }
@@ -400,123 +450,5 @@ async function removeByRepo(
     await saveRegistry(registry);
   }
 
-  return removed > 0 ? 0 : 1;
-}
-
-async function removeFromTargetDirect(
-  rules: string[],
-  targetFlag: string,
-  flags: ParsedFlags,
-  ctx: CliRunContext,
-  dryRun: boolean,
-): Promise<number> {
-  const adapters = filterRuleAdapters(getAdapters());
-  const resolved = resolveAdapter(targetFlag);
-  const adapter = resolved && adapters.find((candidate) => candidate.id === resolved.id);
-  if (!adapter) {
-    process.stderr.write(`Unknown target: ${targetFlag}\n`);
-    process.stderr.write(`Known targets: ${adapters.map((a) => a.id).join(', ')}\n`);
-    return 1;
-  }
-
-  const normalizedRules: string[] = [];
-  for (const raw of rules) {
-    try {
-      normalizedRules.push(normalizeRulePath(raw));
-    } catch (err) {
-      if (err instanceof InvalidRulePathError) {
-        process.stderr.write(`${err.message}\n`);
-        return 1;
-      }
-      throw err;
-    }
-  }
-
-  const config = await loadConfig();
-  const targetConfig = config.targets[adapter.id];
-  const { scope, projectRoot, homeDir } = await resolveTargetContext({
-    scopeFlag: typeof flags.scope === 'string' ? flags.scope : undefined,
-    cwdFlag: typeof flags.cwd === 'string' ? flags.cwd : undefined,
-    defaultScope: targetConfig?.defaultScope,
-    currentCwd: ctx.cwd,
-  });
-
-  const rulesDir = adapter.resolveRulesDir({ scope, projectRoot, homeDir });
-  const syncState = await loadSyncState();
-  const contextId = makeContextId({
-    target: adapter.id,
-    scope,
-    projectRoot: scope === 'local' ? projectRoot : undefined,
-  });
-  const context = syncState.contexts[contextId];
-
-  if (adapter.id === 'cursor' && scope === 'global') {
-    const userRulesText = (await readCursorUserRules(homeDir)) ?? '';
-    const managedRules = new Map(
-      parseManagedCursorUserRules(userRulesText).map((rule) => [rule.id, rule.content] as const),
-    );
-    let userRulesDirty = false;
-    let removed = 0;
-
-    for (const name of normalizedRules) {
-      const ruleId = canonicalRuleIdFromPath(name);
-      const targetPath = path.join(rulesDir, name);
-      const hasFileCopy = await pathExists(targetPath);
-      const hasUserRuleCopy = managedRules.has(ruleId);
-
-      if (!hasFileCopy && !hasUserRuleCopy) {
-        process.stderr.write(`Not found in ${adapter.label}: ${name}\n`);
-        continue;
-      }
-
-      if (dryRun) {
-        const location = hasUserRuleCopy ? `${adapter.label} User Rules` : targetPath;
-        process.stdout.write(`[dry-run] rm ${name} (${location})\n`);
-        removed++;
-        continue;
-      }
-
-      if (hasUserRuleCopy) {
-        managedRules.delete(ruleId);
-        userRulesDirty = true;
-      }
-      if (hasFileCopy) await removeFileAndEmptyParents(targetPath, rulesDir);
-      if (context?.rules) {
-        delete context.rules[name];
-        delete context.rules[`${ruleId}.md`];
-      }
-      removed++;
-      process.stdout.write(`Removed: ${name} (${adapter.label})\n`);
-    }
-
-    if (!dryRun && userRulesDirty) {
-      const mergedText = renderCursorUserRulesText(userRulesText, managedRules);
-      await writeCursorUserRules(homeDir, mergedText);
-    }
-    if (!dryRun && removed > 0) await saveSyncState(syncState);
-    return removed > 0 ? 0 : 1;
-  }
-
-  let removed = 0;
-  for (const name of normalizedRules) {
-    const targetPath = path.join(rulesDir, name);
-    if (!(await pathExists(targetPath))) {
-      process.stderr.write(`Not found in ${adapter.label}: ${name}\n`);
-      continue;
-    }
-
-    if (dryRun) {
-      process.stdout.write(`[dry-run] rm ${name} (${targetPath})\n`);
-      removed++;
-      continue;
-    }
-
-    await removeFileAndEmptyParents(targetPath, rulesDir);
-    if (context?.rules) delete context.rules[name];
-    removed++;
-    process.stdout.write(`Removed: ${name} (${adapter.label})\n`);
-  }
-
-  if (!dryRun && removed > 0) await saveSyncState(syncState);
   return removed > 0 ? 0 : 1;
 }

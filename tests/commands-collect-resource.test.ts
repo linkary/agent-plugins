@@ -40,8 +40,8 @@ describe('commands collect resource-only changes', () => {
     await fs.writeFile(path.join(centralCommandsDir, 'demo', 'resource.txt'), 'central-resource-v1');
 
     const exitCode = await cmdCommandsCollect(
-      [],
-      { target: 'cursor', scope: 'local', cwd: projectRoot },
+      ['demo'],
+      { target: 'cursor', scope: 'local', cwd: projectRoot, force: true, overwrite: true },
       { cwd: projectRoot },
     );
 
