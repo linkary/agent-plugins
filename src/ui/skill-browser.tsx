@@ -34,6 +34,8 @@ type SkillBrowserProps = {
   findSynced?: (params: { skillNames: string[]; config: ConfigV1; currentCwd: string }) => Promise<SyncedDisplay[]>;
   /** 列表标题，默认 "Skills" */
   listLabel?: string;
+  /** 可选：自定义右侧面板标题 (默认使用 entry.name) */
+  formatInfoTitle?: (entry: SkillEntry) => string;
 };
 
 type MetaInfo = {
@@ -51,7 +53,7 @@ const POINTER = '>';
 const MIN_INFO_WIDTH = 30;
 
 export function SkillBrowser(props: SkillBrowserProps) {
-  const { skills, currentCwd, initialSkillName, onSelect, onExit, readDescription, findSynced, listLabel = 'Skills' } =
+  const { skills, currentCwd, initialSkillName, onSelect, onExit, readDescription, findSynced, listLabel = 'Skills', formatInfoTitle } =
     props;
   const { stdout } = useStdout();
   const termWidth = stdout?.columns ?? 80;
@@ -251,7 +253,7 @@ export function SkillBrowser(props: SkillBrowserProps) {
             <Text dimColor>Loading...</Text>
           ) : meta && currentSkill ? (
             <Box flexDirection="column">
-              <Text bold>{currentSkill.name}</Text>
+              <Text bold>{formatInfoTitle ? formatInfoTitle(currentSkill) : currentSkill.name}</Text>
               {meta.source ? (
                 <Text><Text dimColor>Source:  </Text>{meta.source}</Text>
               ) : null}
