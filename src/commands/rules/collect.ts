@@ -63,13 +63,9 @@ export async function cmdRulesCollect(
 
     const { onlyInA: newItems, common } = diffItems(targetItems, accumulated);
 
-    process.stdout.write(`\n${getColoredLabel(adapter)} (${store.sourceLabel}):\n`);
-    for (const item of newItems) {
-      process.stdout.write(`  ${ANSI.green}+${ANSI.reset} ${ANSI.dim}[${shortHash(item.hash)}]${ANSI.reset} ${displayItem(item)}\n`);
-    }
-    for (const item of common) {
-      process.stdout.write(`  ${ANSI.dim}= [${shortHash(item.hash)}] ${displayItem(item)}${ANSI.reset}\n`);
-    }
+    process.stdout.write(
+      `\n${getColoredLabel(adapter)}: ${ANSI.green}${newItems.length} new${ANSI.reset}, ${ANSI.dim}${common.length} identical${ANSI.reset}\n`,
+    );
 
     for (const item of newItems) {
       allNew.push({ ...item, source: getColoredLabel(adapter) });

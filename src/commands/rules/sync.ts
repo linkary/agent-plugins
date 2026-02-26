@@ -18,7 +18,7 @@ import {
   displayItem,
 } from '../../util/global-rules-store.js';
 import { readCentralGlobalRuleItems } from '../../core/rule-store.js';
-import { promptMultiSelect, promptConfirm } from '../../util/prompt.js';
+import { promptMultiSelect } from '../../util/prompt.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
@@ -55,6 +55,13 @@ export async function cmdRulesSync(
   let synced = 0;
   let skipped = 0;
 
+  type SyncStatus = 'new' | 'identical' | 'preserved';
+  const STATUS_LABELS: Record<SyncStatus, string> = {
+    new: `${ANSI.green}new${ANSI.reset}`,
+    identical: `${ANSI.dim}identical${ANSI.reset}`,
+    preserved: `${ANSI.dim}preserved${ANSI.reset}`,
+  };
+
   for (const adapter of selected) {
     const store = getGlobalRulesStore(adapter.id, homeDir);
     if (!store) {
@@ -67,7 +74,7 @@ export async function cmdRulesSync(
     const { onlyInA: toAdd, common: alreadyIn } = diffItems(centralItems, targetItems);
     const onlyInTarget = diffItems(targetItems, centralItems).onlyInA;
 
-    process.stdout.write(`${getColoredLabel(adapter)} (${store.sourceLabel}):\n`);
+    process.stdout.write(`\n${getColoredLabel(adapter)} (${store.sourceLabel}):\n`);
 
     if (toAdd.length === 0) {
       process.stdout.write(`  ${ANSI.dim}Already in sync (${alreadyIn.length} items)${ANSI.reset}\n`);
@@ -75,31 +82,51 @@ export async function cmdRulesSync(
       continue;
     }
 
-    for (const item of toAdd) {
-      process.stdout.write(`  ${ANSI.green}+${ANSI.reset} ${ANSI.dim}[${shortHash(item.hash)}]${ANSI.reset} ${displayItem(item)}\n`);
-    }
-    for (const item of alreadyIn) {
-      process.stdout.write(`  ${ANSI.dim}= [${shortHash(item.hash)}] ${displayItem(item)}${ANSI.reset}\n`);
-    }
-    for (const item of onlyInTarget) {
-      process.stdout.write(`  ${ANSI.dim}· [${shortHash(item.hash)}] ${displayItem(item)} (preserved)${ANSI.reset}\n`);
-    }
+    // 合并所有 items 到一个列表, 附加状态
+    type ItemWithStatus = { hash: string; content: string; status: SyncStatus };
+    const allItems: ItemWithStatus[] = [
+      ...toAdd.map((item) => ({ ...item, status: 'new' as const })),
+      ...alreadyIn.map((item) => ({ ...item, status: 'identical' as const })),
+      ...onlyInTarget.map((item) => ({ ...item, status: 'preserved' as const })),
+    ];
 
-    // 交互式选择要添加的 items
+    // 统计摘要
+    process.stdout.write(
+      `  Preview: ${ANSI.green}${toAdd.length} new${ANSI.reset}, ` +
+        `${ANSI.dim}${alreadyIn.length} identical${ANSI.reset}` +
+        (onlyInTarget.length > 0 ? `, ${ANSI.dim}${onlyInTarget.length} preserved${ANSI.reset}` : '') +
+        '\n',
+    );
+
+    // 交互式: 合并列表, 默认选中 new
     let selectedToAdd = toAdd;
-    if (interactive && !force && toAdd.length > 1) {
+    if (interactive && !force) {
+      const defaultSelected = allItems
+        .map((item, i) => (item.status === 'new' ? String(i) : null))
+        .filter((v): v is string => v !== null);
+
       const chosen = await promptMultiSelect({
-        message: `Select rules to add to ${adapter.label} (${toAdd.length} new):`,
-        options: toAdd.map((item) => ({
-          label: `[${shortHash(item.hash)}] ${displayItem(item)}`,
-          value: item.hash,
+        message: `Confirm rules to sync to ${getColoredLabel(adapter)}:`,
+        options: allItems.map((item, i) => ({
+          label: `[${shortHash(item.hash)}] ${displayItem(item)} [${STATUS_LABELS[item.status]}]`,
+          value: String(i),
         })),
-        defaultSelected: 'all',
-        searchable: toAdd.length > 10,
+        defaultSelected,
+        searchable: allItems.length > 10,
       });
-      selectedToAdd = toAdd.filter((item) => chosen.includes(item.hash));
-      if (selectedToAdd.length === 0) {
+
+      if (chosen.length === 0) {
         process.stdout.write(`  ${ANSI.dim}Skipped (nothing selected)${ANSI.reset}\n`);
+        skipped++;
+        continue;
+      }
+
+      // 只取选中的 new items (identical/preserved 选了也是 no-op)
+      const chosenIndices = new Set(chosen.map(Number));
+      selectedToAdd = allItems.filter((item, i) => chosenIndices.has(i) && item.status === 'new');
+
+      if (selectedToAdd.length === 0) {
+        process.stdout.write(`  ${ANSI.dim}No new rules selected${ANSI.reset}\n`);
         skipped++;
         continue;
       }
@@ -109,19 +136,6 @@ export async function cmdRulesSync(
       process.stdout.write(`  ${ANSI.dim}[dry-run]${ANSI.reset} Would add ${selectedToAdd.length} rules\n`);
       synced++;
       continue;
-    }
-
-    // 确认
-    if (interactive && !force) {
-      const confirmed = await promptConfirm({
-        message: `Add ${selectedToAdd.length} rule(s) to ${adapter.label}?`,
-        default: true,
-      });
-      if (!confirmed) {
-        process.stdout.write(`  ${ANSI.dim}Skipped (cancelled)${ANSI.reset}\n`);
-        skipped++;
-        continue;
-      }
     }
 
     const merged = mergeItems(targetItems, selectedToAdd);
