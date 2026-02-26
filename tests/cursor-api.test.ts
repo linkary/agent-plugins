@@ -9,10 +9,11 @@ import {
   addKnowledgeBase,
   updateKnowledgeBase,
   removeKnowledgeBase,
-  readCursorKnowledgeBaseRules,
+  listCursorUserRuleItems,
   syncKnowledgeBaseItems,
   type CursorKnowledgeItem,
 } from '../src/util/cursor-api.js';
+import { toRuleItem } from '../src/util/global-rules-store.js';
 
 const TOKEN = 'test-token-abc';
 
@@ -129,8 +130,8 @@ describe('removeKnowledgeBase', () => {
   });
 });
 
-describe('readCursorKnowledgeBaseRules', () => {
-  it('joins non-generated items with newline', async () => {
+describe('listCursorUserRuleItems', () => {
+  it('returns RuleItem[] for non-generated items', async () => {
     mockFetch(() => ({
       status: 200,
       body: {
@@ -142,18 +143,20 @@ describe('readCursorKnowledgeBaseRules', () => {
       },
     }));
 
-    const text = await readCursorKnowledgeBaseRules(TOKEN);
-    expect(text).toBe('Rule A\nRule B');
+    const items = await listCursorUserRuleItems(TOKEN);
+    expect(items).toHaveLength(2);
+    expect(items.map((i) => i.content).sort()).toEqual(['Rule A', 'Rule B']);
+    expect(items[0]!.hash).toMatch(/^sha256:/);
   });
 
-  it('returns empty string when no user rules exist', async () => {
+  it('returns empty array when no user rules exist', async () => {
     mockFetch(() => ({
       status: 200,
       body: { allResults: [{ id: 'r1', knowledge: 'auto', isGenerated: true }] },
     }));
 
-    const text = await readCursorKnowledgeBaseRules(TOKEN);
-    expect(text).toBe('');
+    const items = await listCursorUserRuleItems(TOKEN);
+    expect(items).toEqual([]);
   });
 });
 
@@ -181,7 +184,7 @@ describe('syncKnowledgeBaseItems', () => {
       return { status: 200, body: { success: true, id: 'new-1' } };
     });
 
-    const result = await syncKnowledgeBaseItems(TOKEN, ['Keep Me', 'New Line']);
+    const result = await syncKnowledgeBaseItems(TOKEN, [toRuleItem('Keep Me'), toRuleItem('New Line')]);
     expect(result).toEqual({ added: 1, removed: 1 });
 
     const addCalls = calls.filter((c) => c.method === 'KnowledgeBaseAdd');
@@ -209,9 +212,8 @@ describe('syncKnowledgeBaseItems', () => {
       };
     });
 
-    const result = await syncKnowledgeBaseItems(TOKEN, ['A', 'B']);
+    const result = await syncKnowledgeBaseItems(TOKEN, [toRuleItem('A'), toRuleItem('B')]);
     expect(result).toEqual({ added: 0, removed: 0 });
-    // 只有 List 调用, 没有 Add/Remove
     expect(calls).toEqual(['KnowledgeBaseList']);
   });
 
@@ -236,8 +238,7 @@ describe('syncKnowledgeBaseItems', () => {
       return { status: 200, body: { success: true, id: 'new' } };
     });
 
-    // desired = ["User Rule"] → 无需 add/remove
-    const result = await syncKnowledgeBaseItems(TOKEN, ['User Rule']);
+    const result = await syncKnowledgeBaseItems(TOKEN, [toRuleItem('User Rule')]);
     expect(result).toEqual({ added: 0, removed: 0 });
     expect(calls.filter((c) => c.method === 'KnowledgeBaseRemove')).toHaveLength(0);
   });

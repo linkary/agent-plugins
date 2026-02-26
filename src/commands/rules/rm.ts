@@ -1,19 +1,19 @@
 /**
- * rules rm — 行级规则移除.
+ * rules rm — item 级规则移除.
  *
- * rm 是唯一能删除规则行的操作 (collect/sync 只增不减).
+ * rm 是唯一能删除规则的操作 (collect/sync 只增不减).
  *
  * 路由:
  *   1. 无参数 + TTY → 交互式选择 (中心或目标)
  *   2. 参数是 repo URL → 按 repo 移除文件 (不变)
- *   3. --target → 从目标的全局规则中移除匹配行
+ *   3. --target → 从目标的全局规则中移除匹配 items
  *   4. 参数匹配中心规则文件 → 删除文件 (不变)
- *   5. 参数匹配中心 _global.md 行 → 移除行
+ *   5. 参数匹配中心 _global.json items → 移除 items
  */
 import path from 'node:path';
 import os from 'node:os';
 import { loadRegistry, saveRegistry, normalizeRepoUrl, removeRuleFromRepo } from '../../core/registry.js';
-import { listCentralRules, getCentralRulePath, readCentralGlobalRuleLines, writeCentralGlobalRuleLines } from '../../core/rule-store.js';
+import { listCentralRules, getCentralRulePath, readCentralGlobalRuleItems, writeCentralGlobalRuleItems } from '../../core/rule-store.js';
 import { getCentralRulesDir } from '../../util/apg-paths.js';
 import { pathExists } from '../../util/fs-utils.js';
 import {
@@ -31,10 +31,9 @@ import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { InvalidRulePathError, normalizeRulePath, removeFileAndEmptyParents } from '../../util/rule-utils.js';
 import {
   getGlobalRulesStore,
-  normalizeRuleLines,
   shortHash,
-  serializeLines,
-  type NormalizedLine,
+  displayItem,
+  type RuleItem,
 } from '../../util/global-rules-store.js';
 import { loadConfig } from '../../core/config.js';
 import type { ParsedFlags } from '../../util/options.js';
@@ -43,15 +42,18 @@ import type { CliRunContext } from '../../runner/cli.js';
 const CENTRAL_VALUE = '__central__';
 
 // ---------------------------------------------------------------------------
-// 行匹配: 精确内容 或 hash 前缀
+// Item 匹配: 精确内容 / hash 前缀 / 首行子串
 // ---------------------------------------------------------------------------
 
-function matchesLine(arg: string, line: NormalizedLine): boolean {
-  if (line.content === arg) return true;
-  const sh = shortHash(line.hash);
-  if (arg === sh || line.hash === arg) return true;
-  const hex = line.hash.indexOf(':') >= 0 ? line.hash.slice(line.hash.indexOf(':') + 1) : line.hash;
-  return arg.length >= 4 && hex.startsWith(arg);
+function matchesItem(arg: string, item: RuleItem): boolean {
+  if (item.content === arg) return true;
+  const sh = shortHash(item.hash);
+  if (arg === sh || item.hash === arg) return true;
+  const hex = item.hash.indexOf(':') >= 0 ? item.hash.slice(item.hash.indexOf(':') + 1) : item.hash;
+  if (arg.length >= 4 && hex.startsWith(arg)) return true;
+  // 首行子串匹配 (方便匹配多行 rule)
+  const firstLine = item.content.split('\n')[0] ?? '';
+  return firstLine.includes(arg);
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +72,7 @@ export async function cmdRulesRemove(positionals: string[], flags: ParsedFlags, 
     return await interactiveRemoveFromTarget(flags, ctx, dryRun);
   }
   if (args.length === 0) {
-    process.stderr.write('Usage: ap rules rm <rule|line|hash|repo>...\n');
+    process.stderr.write('Usage: ap rules rm <rule|hash|repo>...\n');
     return 1;
   }
 
@@ -92,17 +94,17 @@ export async function cmdRulesRemove(positionals: string[], flags: ParsedFlags, 
     return await removeByRepo(firstArg, registry, dryRun, interactive);
   }
 
-  // --target → 从目标全局规则中移除行
+  // --target → 从目标全局规则中移除 items
   if (targetFlag) {
     return await removeFromTarget(args, targetFlag, flags, ctx, dryRun);
   }
 
-  // 无 target: 先尝试文件路径, 再尝试全局行匹配
+  // 无 target: 先尝试文件路径, 再尝试全局 item 匹配
   return await removeFromCentral(args, dryRun);
 }
 
 // ---------------------------------------------------------------------------
-// 中心移除: 文件路径 → 全局行
+// 中心移除: 文件路径 → 全局 items
 // ---------------------------------------------------------------------------
 
 async function removeFromCentral(args: string[], dryRun: boolean): Promise<number> {
@@ -110,7 +112,7 @@ async function removeFromCentral(args: string[], dryRun: boolean): Promise<numbe
   registry.rules ??= {};
   registry.ruleRepos ??= {};
 
-  let centralLines: NormalizedLine[] | null = null;
+  let centralItems: RuleItem[] | null = null;
   let centralDirty = false;
   let removed = 0;
 
@@ -137,22 +139,22 @@ async function removeFromCentral(args: string[], dryRun: boolean): Promise<numbe
     }
     if (matchedFile) continue;
 
-    // 尝试全局行匹配
-    centralLines ??= await readCentralGlobalRuleLines();
-    const before = centralLines.length;
-    centralLines = centralLines.filter((l) => !matchesLine(raw, l));
-    const delta = before - centralLines.length;
+    // 尝试全局 item 匹配
+    centralItems ??= await readCentralGlobalRuleItems();
+    const before = centralItems.length;
+    centralItems = centralItems.filter((item) => !matchesItem(raw, item));
+    const delta = before - centralItems.length;
     if (delta === 0) {
       process.stderr.write(`Not found: ${raw}\n`);
       continue;
     }
     removed += delta;
     centralDirty = true;
-    process.stdout.write(`Removed ${delta} line(s) matching: ${raw}\n`);
+    process.stdout.write(`Removed ${delta} rule(s) matching: ${raw}\n`);
   }
 
   if (!dryRun) {
-    if (centralDirty && centralLines) await writeCentralGlobalRuleLines(centralLines);
+    if (centralDirty && centralItems) await writeCentralGlobalRuleItems(centralItems);
     await saveRegistry(registry);
   }
 
@@ -163,7 +165,7 @@ async function removeFromCentral(args: string[], dryRun: boolean): Promise<numbe
 }
 
 // ---------------------------------------------------------------------------
-// 目标移除: 全局行级
+// 目标移除: 全局 item 级
 // ---------------------------------------------------------------------------
 
 async function removeFromTarget(
@@ -192,7 +194,7 @@ async function removeFromTarget(
     currentCwd: ctx.cwd,
   });
 
-  // 全局 → 行级移除
+  // 全局 → item 级移除
   if (scope === 'global') {
     const store = getGlobalRulesStore(adapter.id, homeDir);
     if (!store) {
@@ -200,26 +202,26 @@ async function removeFromTarget(
       return 1;
     }
 
-    let lines = normalizeRuleLines((await store.read()).trim());
+    let items = await store.readItems();
     let removed = 0;
 
     for (const raw of args) {
-      const before = lines.length;
-      lines = lines.filter((l) => !matchesLine(raw, l));
-      const delta = before - lines.length;
+      const before = items.length;
+      items = items.filter((item) => !matchesItem(raw, item));
+      const delta = before - items.length;
       if (delta === 0) {
         process.stderr.write(`Not found in ${adapter.label}: ${raw}\n`);
         continue;
       }
       removed += delta;
       if (dryRun) {
-        process.stdout.write(`${ANSI.dim}[dry-run]${ANSI.reset} rm ${delta} line(s): ${raw}\n`);
+        process.stdout.write(`${ANSI.dim}[dry-run]${ANSI.reset} rm ${delta} rule(s): ${raw}\n`);
       } else {
-        process.stdout.write(`Removed ${delta} line(s) from ${adapter.label}: ${raw}\n`);
+        process.stdout.write(`Removed ${delta} rule(s) from ${adapter.label}: ${raw}\n`);
       }
     }
 
-    if (!dryRun && removed > 0) await store.write(serializeLines(lines));
+    if (!dryRun && removed > 0) await store.writeItems(items);
     return removed > 0 ? 0 : 1;
   }
 
@@ -265,7 +267,7 @@ async function removeFromTarget(
 async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext): Promise<number> {
   const adapters = filterRuleAdapters(getAdapters());
   const options = [
-    { label: 'Central (_global.md)', value: CENTRAL_VALUE },
+    { label: 'Central (_global.json)', value: CENTRAL_VALUE },
     ...adapters.map((a) => ({ label: getColoredLabel(a), value: a.id })),
   ];
 
@@ -281,43 +283,44 @@ async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext): Promis
   const hasCentral = selectedTargets.includes(CENTRAL_VALUE);
   const toolIds = selectedTargets.filter((t) => t !== CENTRAL_VALUE);
 
-  if (hasCentral) await interactiveRemoveCentralLines();
+  if (hasCentral) await interactiveRemoveCentralItems();
   if (toolIds.length > 0) {
     for (const id of toolIds) {
-      await interactiveRemoveTargetLines(id);
+      await interactiveRemoveTargetItems(id);
     }
   }
   return 0;
 }
 
-async function interactiveRemoveCentralLines(): Promise<void> {
-  const lines = await readCentralGlobalRuleLines();
-  if (lines.length === 0) {
+async function interactiveRemoveCentralItems(): Promise<void> {
+  const items = await readCentralGlobalRuleItems();
+  if (items.length === 0) {
     process.stdout.write('(no central global rules)\n');
     return;
   }
 
   const selected = await promptMultiSelect({
-    message: `Select lines to remove (${lines.length} available):`,
-    options: lines.map((l) => ({
-      label: `[${shortHash(l.hash)}] ${l.content}`,
-      value: l.content,
+    message: `Select rules to remove (${items.length} available):`,
+    options: items.map((item) => ({
+      label: `[${shortHash(item.hash)}] ${displayItem(item)}`,
+      value: item.hash,
     })),
   });
   if (selected.length === 0) return;
 
   const confirmed = await promptConfirm({
-    message: `Remove ${selected.length} line(s) from central?`,
+    message: `Remove ${selected.length} rule(s) from central?`,
     default: false,
   });
   if (!confirmed) return;
 
   const toRemove = new Set(selected);
-  const remaining = lines.filter((l) => !toRemove.has(l.content));
-  await writeCentralGlobalRuleLines(remaining);
+  const remaining = items.filter((item) => !toRemove.has(item.hash));
+  await writeCentralGlobalRuleItems(remaining);
 
-  for (const content of selected) {
-    process.stdout.write(`Removed: ${content}\n`);
+  const removedItems = items.filter((item) => toRemove.has(item.hash));
+  for (const item of removedItems) {
+    process.stdout.write(`Removed: ${displayItem(item)}\n`);
   }
   process.stdout.write(`\n${ANSI.dim}Tip: run ${ANSI.reset}${ANSI.bold}ap rules sync${ANSI.reset}${ANSI.dim} to propagate changes.${ANSI.reset}\n`);
 }
@@ -334,12 +337,12 @@ async function interactiveRemoveFromTarget(flags: ParsedFlags, ctx: CliRunContex
   if (selected.length === 0) return 1;
 
   for (const adapter of selected) {
-    await interactiveRemoveTargetLines(adapter.id);
+    await interactiveRemoveTargetItems(adapter.id);
   }
   return 0;
 }
 
-async function interactiveRemoveTargetLines(targetId: string): Promise<void> {
+async function interactiveRemoveTargetItems(targetId: string): Promise<void> {
   const homeDir = os.homedir();
   const store = getGlobalRulesStore(targetId as TargetId, homeDir);
   if (!store) {
@@ -347,33 +350,34 @@ async function interactiveRemoveTargetLines(targetId: string): Promise<void> {
     return;
   }
 
-  const lines = normalizeRuleLines((await store.read()).trim());
-  if (lines.length === 0) {
+  const items = await store.readItems();
+  if (items.length === 0) {
     process.stdout.write(`(${targetId}: empty)\n`);
     return;
   }
 
   const selected = await promptMultiSelect({
-    message: `[${targetId}] Select lines to remove (${lines.length} available):`,
-    options: lines.map((l) => ({
-      label: `[${shortHash(l.hash)}] ${l.content}`,
-      value: l.content,
+    message: `[${targetId}] Select rules to remove (${items.length} available):`,
+    options: items.map((item) => ({
+      label: `[${shortHash(item.hash)}] ${displayItem(item)}`,
+      value: item.hash,
     })),
   });
   if (selected.length === 0) return;
 
   const confirmed = await promptConfirm({
-    message: `Remove ${selected.length} line(s) from ${targetId}?`,
+    message: `Remove ${selected.length} rule(s) from ${targetId}?`,
     default: false,
   });
   if (!confirmed) return;
 
   const toRemove = new Set(selected);
-  const remaining = lines.filter((l) => !toRemove.has(l.content));
-  await store.write(serializeLines(remaining));
+  const remaining = items.filter((item) => !toRemove.has(item.hash));
+  await store.writeItems(remaining);
 
-  for (const content of selected) {
-    process.stdout.write(`Removed from ${targetId}: ${content}\n`);
+  const removedItems = items.filter((item) => toRemove.has(item.hash));
+  for (const item of removedItems) {
+    process.stdout.write(`Removed from ${targetId}: ${displayItem(item)}\n`);
   }
 }
 

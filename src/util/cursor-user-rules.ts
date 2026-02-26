@@ -5,9 +5,10 @@ import { promisify } from 'node:util';
 import { ensureDir, pathExists } from './fs-utils.js';
 import {
   readCursorAccessToken,
-  readCursorKnowledgeBaseRules,
+  listCursorUserRuleItems,
   syncKnowledgeBaseItems,
 } from './cursor-api.js';
+import { parseRuleItems, type RuleItem } from './global-rules-store.js';
 
 const execFile = promisify(execFileCallback);
 const USER_RULES_KEY = 'aicontext.personalContext';
@@ -127,29 +128,28 @@ conn.close()
  * 读取 Cursor User Rules.
  *
  * Fallback 顺序:
- *   1. AP_CURSOR_USER_RULES_FILE 环境变量覆盖
- *   2. Knowledge Base API (Cursor 2.5+)
- *   3. SQLite aicontext.personalContext (legacy)
+ *   1. AP_CURSOR_USER_RULES_FILE 环境变量覆盖 (段落分隔)
+ *   2. Knowledge Base API (Cursor 2.5+, 每条 KB item = 一条 rule)
+ *   3. SQLite aicontext.personalContext (legacy, 段落分隔)
  *
- * 返回 { text, apiToken } — apiToken 非 null 时表示 API 可用,
- * 后续 write 可直接复用该 token。
+ * 返回 { items, apiToken } — apiToken 非 null 时表示 API 可用。
  */
 export async function readCursorUserRules(
   homeDir: string,
-): Promise<{ text: string; apiToken: string | null }> {
+): Promise<{ items: RuleItem[]; apiToken: string | null }> {
   const overrideFile = getCursorUserRulesFileOverride();
   if (overrideFile) {
-    if (!(await pathExists(overrideFile))) return { text: '', apiToken: null };
+    if (!(await pathExists(overrideFile))) return { items: [], apiToken: null };
     const content = await fs.readFile(overrideFile, 'utf-8');
-    return { text: content, apiToken: null };
+    return { items: parseRuleItems(content), apiToken: null };
   }
 
-  // 尝试 Knowledge Base API
+  // 尝试 Knowledge Base API — 每个 KB item 是完整 rule
   const token = await readCursorAccessToken(homeDir);
   if (token) {
     try {
-      const text = await readCursorKnowledgeBaseRules(token);
-      return { text, apiToken: token };
+      const items = await listCursorUserRuleItems(token);
+      return { items, apiToken: token };
     } catch {
       // API 失败, 降级到 SQLite
     }
@@ -157,15 +157,15 @@ export async function readCursorUserRules(
 
   // Legacy SQLite fallback
   const dbPath = getCursorStateDbPath(homeDir);
-  if (!(await pathExists(dbPath))) return { text: '', apiToken: null };
+  if (!(await pathExists(dbPath))) return { items: [], apiToken: null };
 
   try {
     const text = (await readViaSqliteCli(dbPath)) ?? '';
-    return { text, apiToken: null };
+    return { items: parseRuleItems(text), apiToken: null };
   } catch {
     try {
       const text = (await readViaPython(dbPath)) ?? '';
-      return { text, apiToken: null };
+      return { items: parseRuleItems(text), apiToken: null };
     } catch {
       throw new Error(
         'Unable to read Cursor User Rules: Knowledge Base API, sqlite3 CLI, and python3 are all unavailable. Set AP_CURSOR_USER_RULES_FILE as a fallback.',
@@ -177,34 +177,33 @@ export async function readCursorUserRules(
 /**
  * 写入 Cursor User Rules.
  *
- * 当 apiToken 非 null 时使用 Knowledge Base API 进行行级同步;
- * 否则降级到 SQLite 或文件覆盖。
- *
- * @param lines - 期望的规则行 (已 trim, 非空)
+ * 当 apiToken 非 null 时使用 Knowledge Base API 进行 item 级同步;
+ * 否则降级到 SQLite 或文件覆盖 (段落分隔)。
  */
 export async function writeCursorUserRules(
   homeDir: string,
-  lines: string[],
+  items: RuleItem[],
   apiToken: string | null,
 ): Promise<void> {
+  const { serializeItems } = await import('./global-rules-store.js');
+
   const overrideFile = getCursorUserRulesFileOverride();
   if (overrideFile) {
     await ensureDir(path.dirname(overrideFile));
-    const text = lines.length > 0 ? lines.join('\n') + '\n' : '';
-    await fs.writeFile(overrideFile, text, 'utf-8');
+    await fs.writeFile(overrideFile, serializeItems(items), 'utf-8');
     return;
   }
 
-  // Knowledge Base API
+  // Knowledge Base API — item 级 diff sync
   if (apiToken) {
-    await syncKnowledgeBaseItems(apiToken, lines);
+    await syncKnowledgeBaseItems(apiToken, items);
     return;
   }
 
-  // Legacy SQLite fallback
+  // Legacy SQLite fallback — 段落序列化
   const dbPath = getCursorStateDbPath(homeDir);
   await ensureDir(path.dirname(dbPath));
-  const text = lines.length > 0 ? lines.join('\n') + '\n' : '';
+  const text = serializeItems(items);
 
   try {
     await writeViaSqliteCli(dbPath, text);

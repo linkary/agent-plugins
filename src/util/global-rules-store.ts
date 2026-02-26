@@ -1,13 +1,14 @@
 /**
- * Unified global-rules storage abstraction.
+ * Unified global-rules storage abstraction (item-level).
  *
- * Each target's global rules file is treated as a single text blob:
- *   - Cursor → SQLite database (state.vscdb)
- *   - Claude Code → ~/.claude/CLAUDE.md
- *   - Antigravity → ~/.gemini/GEMINI.md
+ * 每条 rule 是一个完整的条目 (可能多行), 不再按 \n 拆分。
  *
- * 行级管理工具：normalizeRuleLines / diffLines / mergeLines 提供
- * 纯函数式的行级去重、排序、diff 与合并操作。
+ *   - Cursor → Knowledge Base API (每个 KB item = 一条 rule)
+ *   - Claude Code → ~/.claude/CLAUDE.md  (段落分隔)
+ *   - Antigravity → ~/.gemini/GEMINI.md (段落分隔)
+ *
+ * 纯函数工具: parseRuleItems / diffItems / mergeItems 提供
+ * 基于 content hash 的去重、排序、diff 与合并操作。
  */
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -16,18 +17,127 @@ import { ensureDir, pathExists } from './fs-utils.js';
 import {
   getCursorUserRulesSourceLabel,
   readCursorUserRules,
-  readCursorLocalRulesFallback,
   writeCursorUserRules,
 } from './cursor-user-rules.js';
 import type { TargetId } from '../targets/adapters.js';
 
+// ---------------------------------------------------------------------------
+// RuleItem 数据模型
+// ---------------------------------------------------------------------------
+
+export type RuleItem = { readonly content: string; readonly hash: string };
+
+export function computeItemHash(content: string): string {
+  return `sha256:${crypto.createHash('sha256').update(content.trim()).digest('hex')}`;
+}
+
+/** 从 content 构造 RuleItem (trim 后 hash). */
+export function toRuleItem(content: string): RuleItem {
+  const trimmed = content.trim();
+  return { content: trimmed, hash: computeItemHash(trimmed) };
+}
+
+// ---------------------------------------------------------------------------
+// 解析: text → RuleItem[]
+// ---------------------------------------------------------------------------
+
+/**
+ * 按段落 (空行分隔) 解析文本为 RuleItem[]。
+ * 去重 (基于 trimmed content) + 按 hash 排序。
+ */
+export function parseRuleItems(text: string): RuleItem[] {
+  const blocks = text.split(/\n\n+/);
+  const seen = new Set<string>();
+  const items: RuleItem[] = [];
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    items.push(toRuleItem(trimmed));
+  }
+  items.sort((a, b) => a.hash.localeCompare(b.hash));
+  return items;
+}
+
+/** 从已有的 RuleItem[] 去重 + 排序 (用于从外部构造的 items). */
+export function dedupeAndSortItems(items: RuleItem[]): RuleItem[] {
+  const seen = new Set<string>();
+  const unique: RuleItem[] = [];
+  for (const item of items) {
+    const key = item.content.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(item);
+  }
+  unique.sort((a, b) => a.hash.localeCompare(b.hash));
+  return unique;
+}
+
+// ---------------------------------------------------------------------------
+// Diff / Merge
+// ---------------------------------------------------------------------------
+
+export type ItemsDiff = {
+  readonly onlyInA: RuleItem[];
+  readonly onlyInB: RuleItem[];
+  readonly common: RuleItem[];
+};
+
+/** 基于 content 比较两组 items 的差集与交集。 */
+export function diffItems(a: RuleItem[], b: RuleItem[]): ItemsDiff {
+  const setB = new Set(b.map((i) => i.content));
+  const setA = new Set(a.map((i) => i.content));
+  return {
+    onlyInA: a.filter((i) => !setB.has(i.content)),
+    onlyInB: b.filter((i) => !setA.has(i.content)),
+    common: a.filter((i) => setB.has(i.content)),
+  };
+}
+
+/** 合并两组 items: union → dedup → sort by hash. */
+export function mergeItems(a: RuleItem[], b: RuleItem[]): RuleItem[] {
+  return dedupeAndSortItems([...a, ...b]);
+}
+
+/** 将 RuleItem[] 序列化为文件内容 (段落间空行分隔, 末尾换行). */
+export function serializeItems(items: RuleItem[]): string {
+  if (items.length === 0) return '';
+  return items.map((i) => i.content).join('\n\n') + '\n';
+}
+
+// ---------------------------------------------------------------------------
+// 显示辅助
+// ---------------------------------------------------------------------------
+
+/** hash 短前缀 (8 hex chars). */
+export function shortHash(hash: string): string {
+  const idx = hash.indexOf(':');
+  const hex = idx >= 0 ? hash.slice(idx + 1) : hash;
+  return hex.slice(0, 8);
+}
+
+const DISPLAY_MAX_LEN = 80;
+
+/** 用于 CLI 输出的单行摘要: 首行 + 截断 + "(N lines)" 标注. */
+export function displayItem(item: RuleItem): string {
+  const lines = item.content.split('\n');
+  if (lines.length === 1) {
+    return item.content.length <= DISPLAY_MAX_LEN ? item.content : item.content.slice(0, DISPLAY_MAX_LEN - 3) + '...';
+  }
+  const firstLine = lines[0]!;
+  const truncated =
+    firstLine.length <= DISPLAY_MAX_LEN - 12 ? firstLine : firstLine.slice(0, DISPLAY_MAX_LEN - 15) + '...';
+  return `${truncated} (${lines.length} lines)`;
+}
+
+// ---------------------------------------------------------------------------
+// GlobalRulesStore (item-based)
+// ---------------------------------------------------------------------------
+
 export type GlobalRulesStore = {
-  /** Human-readable label for display (e.g. file path or db reference). */
   readonly sourceLabel: string;
-  /** Read the entire global rules content. */
-  read(): Promise<string>;
-  /** Write the entire global rules content. */
-  write(text: string): Promise<void>;
+  readItems(): Promise<RuleItem[]>;
+  writeItems(items: RuleItem[]): Promise<void>;
 };
 
 type SingleFileConfig = {
@@ -49,19 +159,19 @@ const SINGLE_FILE_CONFIGS: Partial<Record<TargetId, (homeDir: string) => SingleF
 function createFileStore(config: SingleFileConfig): GlobalRulesStore {
   return {
     sourceLabel: config.sourceLabel,
-    async read() {
-      if (!(await pathExists(config.filePath))) return '';
-      return await fs.readFile(config.filePath, 'utf-8');
+    async readItems() {
+      if (!(await pathExists(config.filePath))) return [];
+      const text = await fs.readFile(config.filePath, 'utf-8');
+      return parseRuleItems(text);
     },
-    async write(text: string) {
+    async writeItems(items: RuleItem[]) {
       await ensureDir(path.dirname(config.filePath));
-      await fs.writeFile(config.filePath, text, 'utf-8');
+      await fs.writeFile(config.filePath, serializeItems(items), 'utf-8');
     },
   };
 }
 
 function createCursorStore(homeDir: string): GlobalRulesStore {
-  // read() 时缓存 apiToken, 供 write() 复用
   let cachedApiToken: string | null = null;
   let labelResolved = false;
   let resolvedLabel = getCursorUserRulesSourceLabel(homeDir, false);
@@ -70,110 +180,24 @@ function createCursorStore(homeDir: string): GlobalRulesStore {
     get sourceLabel() {
       return resolvedLabel;
     },
-    async read() {
-      const { text, apiToken } = await readCursorUserRules(homeDir);
+    async readItems() {
+      const { items, apiToken } = await readCursorUserRules(homeDir);
       cachedApiToken = apiToken;
       if (!labelResolved) {
         resolvedLabel = getCursorUserRulesSourceLabel(homeDir, apiToken !== null);
         labelResolved = true;
       }
-      return text;
+      return items;
     },
-    async write(text: string) {
-      const lines = text
-        .split('\n')
-        .map((l) => l.trim())
-        .filter(Boolean);
-      await writeCursorUserRules(homeDir, lines, cachedApiToken);
+    async writeItems(items: RuleItem[]) {
+      await writeCursorUserRules(homeDir, items, cachedApiToken);
     },
   };
 }
 
-/**
- * Get a GlobalRulesStore for the given target, or null if the target
- * does not use single-file global rules.
- */
 export function getGlobalRulesStore(targetId: TargetId, homeDir: string): GlobalRulesStore | null {
   if (targetId === 'cursor') return createCursorStore(homeDir);
-
   const configFn = SINGLE_FILE_CONFIGS[targetId];
   if (!configFn) return null;
   return createFileStore(configFn(homeDir));
-}
-
-/**
- * Split global rules content into non-empty lines for display.
- */
-export function splitRuleLines(content: string): string[] {
-  return content.split('\n').filter((line) => line.trim().length > 0);
-}
-
-// ---------------------------------------------------------------------------
-// 行级管理
-// ---------------------------------------------------------------------------
-
-export type NormalizedLine = { readonly content: string; readonly hash: string };
-
-function computeLineHash(content: string): string {
-  return `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
-}
-
-/**
- * 纯函数: content → 去重 + 排序的行列表。
- * 管线: split('\n') → trim → filter empty → dedup by content → sort → hash.
- */
-export function normalizeRuleLines(content: string): NormalizedLine[] {
-  const seen = new Set<string>();
-  const unique: string[] = [];
-  for (const raw of content.split('\n')) {
-    const trimmed = raw.trim();
-    if (trimmed.length === 0 || seen.has(trimmed)) continue;
-    seen.add(trimmed);
-    unique.push(trimmed);
-  }
-  unique.sort();
-  return unique.map((c) => ({ content: c, hash: computeLineHash(c) }));
-}
-
-/** 显示用的 hash 短前缀 (8 hex chars). */
-export function shortHash(hash: string): string {
-  const idx = hash.indexOf(':');
-  const hex = idx >= 0 ? hash.slice(idx + 1) : hash;
-  return hex.slice(0, 8);
-}
-
-export type LinesDiff = {
-  readonly onlyInA: NormalizedLine[];
-  readonly onlyInB: NormalizedLine[];
-  readonly common: NormalizedLine[];
-};
-
-/** 计算两组行的差集与交集 (基于 content 比较). */
-export function diffLines(a: NormalizedLine[], b: NormalizedLine[]): LinesDiff {
-  const setB = new Set(b.map((l) => l.content));
-  const setA = new Set(a.map((l) => l.content));
-  return {
-    onlyInA: a.filter((l) => !setB.has(l.content)),
-    onlyInB: b.filter((l) => !setA.has(l.content)),
-    common: a.filter((l) => setB.has(l.content)),
-  };
-}
-
-/** 合并两组行: union → dedup by content → sort. */
-export function mergeLines(a: NormalizedLine[], b: NormalizedLine[]): NormalizedLine[] {
-  const seen = new Set<string>();
-  const merged: NormalizedLine[] = [];
-  for (const line of [...a, ...b]) {
-    if (seen.has(line.content)) continue;
-    seen.add(line.content);
-    merged.push(line);
-  }
-  merged.sort((x, y) => x.content.localeCompare(y.content));
-  return merged;
-}
-
-/** 将 NormalizedLine[] 序列化为文件内容 (每行一条, 末尾换行). */
-export function serializeLines(lines: NormalizedLine[]): string {
-  if (lines.length === 0) return '';
-  return lines.map((l) => l.content).join('\n') + '\n';
 }

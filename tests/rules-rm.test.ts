@@ -1,13 +1,13 @@
 /**
- * rules rm — 行级移除测试.
+ * rules rm — item 级移除测试.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { cmdRulesRemove } from '../src/commands/rules/rm.js';
-import { readCentralGlobalRuleLines, writeCentralGlobalRuleLines } from '../src/core/rule-store.js';
-import { normalizeRuleLines, shortHash } from '../src/util/global-rules-store.js';
+import { readCentralGlobalRuleItems, writeCentralGlobalRuleItems } from '../src/core/rule-store.js';
+import { toRuleItem, dedupeAndSortItems, shortHash, parseRuleItems } from '../src/util/global-rules-store.js';
 import { pathExists } from '../src/util/fs-utils.js';
 
 let tmpHomeDir = '';
@@ -15,6 +15,8 @@ let tmpApgHome = '';
 let tmpProjectRoot = '';
 let originalHome: string | undefined;
 let originalApgHome: string | undefined;
+
+const mkItems = (contents: string[]) => dedupeAndSortItems(contents.map(toRuleItem));
 
 beforeEach(async () => {
   tmpHomeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'apg-test-rules-rm-home-'));
@@ -40,49 +42,63 @@ afterEach(async () => {
 
 const ctx = { cwd: process.cwd() };
 
-describe('rules rm (line-level central)', () => {
-  it('removes a line by exact content', async () => {
-    await writeCentralGlobalRuleLines(normalizeRuleLines('A\nB\nC'));
+describe('rules rm (item-level central)', () => {
+  it('removes an item by exact content', async () => {
+    await writeCentralGlobalRuleItems(mkItems(['A', 'B', 'C']));
 
     const code = await cmdRulesRemove(['B'], {}, ctx);
     expect(code).toBe(0);
 
-    const lines = await readCentralGlobalRuleLines();
-    expect(lines.map((l) => l.content)).toEqual(['A', 'C']);
+    const items = await readCentralGlobalRuleItems();
+    expect(items.map((i) => i.content).sort()).toEqual(['A', 'C']);
   });
 
-  it('removes a line by hash prefix', async () => {
-    const all = normalizeRuleLines('Alpha\nBeta\nGamma');
-    await writeCentralGlobalRuleLines(all);
+  it('removes an item by hash prefix', async () => {
+    const all = mkItems(['Alpha', 'Beta', 'Gamma']);
+    await writeCentralGlobalRuleItems(all);
 
-    const betaHash = all.find((l) => l.content === 'Beta')!.hash;
+    const betaHash = all.find((i) => i.content === 'Beta')!.hash;
     const prefix = shortHash(betaHash);
 
     const code = await cmdRulesRemove([prefix], {}, ctx);
     expect(code).toBe(0);
 
-    const lines = await readCentralGlobalRuleLines();
-    expect(lines.map((l) => l.content)).toEqual(['Alpha', 'Gamma']);
+    const items = await readCentralGlobalRuleItems();
+    expect(items.map((i) => i.content).sort()).toEqual(['Alpha', 'Gamma']);
+  });
+
+  it('removes a multi-line item by first-line substring', async () => {
+    const items = mkItems([
+      'Prefer FP:\n- Pure functions\n- Immutability',
+      'Use single quotes',
+    ]);
+    await writeCentralGlobalRuleItems(items);
+
+    const code = await cmdRulesRemove(['Prefer FP'], {}, ctx);
+    expect(code).toBe(0);
+
+    const remaining = await readCentralGlobalRuleItems();
+    expect(remaining.map((i) => i.content)).toEqual(['Use single quotes']);
   });
 
   it('reports not found for unmatched args', async () => {
-    await writeCentralGlobalRuleLines(normalizeRuleLines('A'));
+    await writeCentralGlobalRuleItems(mkItems(['A']));
 
     const code = await cmdRulesRemove(['NONEXISTENT'], {}, ctx);
     expect(code).toBe(1);
 
-    const lines = await readCentralGlobalRuleLines();
-    expect(lines.map((l) => l.content)).toEqual(['A']);
+    const items = await readCentralGlobalRuleItems();
+    expect(items.map((i) => i.content)).toEqual(['A']);
   });
 
-  it('removes multiple lines in one call', async () => {
-    await writeCentralGlobalRuleLines(normalizeRuleLines('A\nB\nC\nD'));
+  it('removes multiple items in one call', async () => {
+    await writeCentralGlobalRuleItems(mkItems(['A', 'B', 'C', 'D']));
 
     const code = await cmdRulesRemove(['A', 'C'], {}, ctx);
     expect(code).toBe(0);
 
-    const lines = await readCentralGlobalRuleLines();
-    expect(lines.map((l) => l.content)).toEqual(['B', 'D']);
+    const items = await readCentralGlobalRuleItems();
+    expect(items.map((i) => i.content).sort()).toEqual(['B', 'D']);
   });
 });
 
@@ -114,11 +130,12 @@ describe('rules rm (target local file-based)', () => {
   });
 });
 
-describe('rules rm (target global line-level)', () => {
-  it('removes a line from target global rules by content', async () => {
+describe('rules rm (target global item-level)', () => {
+  it('removes an item from target global rules by content', async () => {
     const cursorFile = path.join(tmpHomeDir, 'cursor-rules.txt');
     process.env.AP_CURSOR_USER_RULES_FILE = cursorFile;
-    await fs.writeFile(cursorFile, 'A\nB\nC\n');
+    // 段落分隔
+    await fs.writeFile(cursorFile, 'A\n\nB\n\nC\n');
 
     try {
       const code = await cmdRulesRemove(
@@ -129,8 +146,8 @@ describe('rules rm (target global line-level)', () => {
       expect(code).toBe(0);
 
       const content = await fs.readFile(cursorFile, 'utf-8');
-      const lines = normalizeRuleLines(content);
-      expect(lines.map((l) => l.content)).toEqual(['A', 'C']);
+      const items = parseRuleItems(content);
+      expect(items.map((i) => i.content).sort()).toEqual(['A', 'C']);
     } finally {
       delete process.env.AP_CURSOR_USER_RULES_FILE;
     }

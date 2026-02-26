@@ -1,5 +1,5 @@
 /**
- * rules collect — 行级 additive merge 测试.
+ * rules collect — item 级 additive merge 测试.
  *
  * 使用 AP_CURSOR_USER_RULES_FILE 和单文件 store 模拟目标.
  */
@@ -8,8 +8,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { cmdRulesCollect } from '../src/commands/rules/collect.js';
-import { readCentralGlobalRuleLines, writeCentralGlobalRuleLines } from '../src/core/rule-store.js';
-import { normalizeRuleLines } from '../src/util/global-rules-store.js';
+import { readCentralGlobalRuleItems, writeCentralGlobalRuleItems } from '../src/core/rule-store.js';
+import { toRuleItem, dedupeAndSortItems } from '../src/util/global-rules-store.js';
 
 let tmpHome: string;
 let tmpApg: string;
@@ -44,75 +44,86 @@ afterEach(async () => {
 });
 
 const ctx = { cwd: process.cwd() };
+const mkItems = (contents: string[]) => dedupeAndSortItems(contents.map(toRuleItem));
 
-describe('rules collect (line-level)', () => {
-  it('collects lines from a single target into empty central', async () => {
-    await fs.writeFile(cursorFile, 'B\nC\nA\n');
+describe('rules collect (item-level)', () => {
+  it('collects items from a single target into empty central', async () => {
+    // 段落分隔: B 和 C 和 A 各为一个 item
+    await fs.writeFile(cursorFile, 'B\n\nC\n\nA\n');
 
-    const code = await cmdRulesCollect([], { target: 'cursor' }, ctx);
+    const code = await cmdRulesCollect([], { target: 'cursor', force: true }, ctx);
     expect(code).toBe(0);
 
-    const lines = await readCentralGlobalRuleLines();
-    expect(lines.map((l) => l.content)).toEqual(['A', 'B', 'C']);
+    const items = await readCentralGlobalRuleItems();
+    expect(items.map((i) => i.content).sort()).toEqual(['A', 'B', 'C']);
   });
 
-  it('additive merge: new lines are added, existing preserved', async () => {
-    // 中心已有 A, B, C
-    await writeCentralGlobalRuleLines(normalizeRuleLines('A\nB\nC'));
+  it('additive merge: new items are added, existing preserved', async () => {
+    await writeCentralGlobalRuleItems(mkItems(['A', 'B', 'C']));
 
-    // Cursor 有 B, C, D
-    await fs.writeFile(cursorFile, 'B\nC\nD\n');
+    // Cursor 有 B, C, D (段落分隔)
+    await fs.writeFile(cursorFile, 'B\n\nC\n\nD\n');
 
-    const code = await cmdRulesCollect([], { target: 'cursor' }, ctx);
+    const code = await cmdRulesCollect([], { target: 'cursor', force: true }, ctx);
     expect(code).toBe(0);
 
-    const lines = await readCentralGlobalRuleLines();
-    // A 保留 (不被删除), D 新增
-    expect(lines.map((l) => l.content)).toEqual(['A', 'B', 'C', 'D']);
+    const items = await readCentralGlobalRuleItems();
+    expect(items.map((i) => i.content).sort()).toEqual(['A', 'B', 'C', 'D']);
   });
 
   it('sequential collects are additive (simulates multi-target)', async () => {
-    // 第一次 collect: cursor 有 B, C, D
-    await fs.writeFile(cursorFile, 'B\nC\nD\n');
-    await writeCentralGlobalRuleLines(normalizeRuleLines('A\nB\nC'));
-    await cmdRulesCollect([], { target: 'cursor' }, ctx);
+    await fs.writeFile(cursorFile, 'B\n\nC\n\nD\n');
+    await writeCentralGlobalRuleItems(mkItems(['A', 'B', 'C']));
+    await cmdRulesCollect([], { target: 'cursor', force: true }, ctx);
 
-    let lines = await readCentralGlobalRuleLines();
-    expect(lines.map((l) => l.content)).toEqual(['A', 'B', 'C', 'D']);
+    let items = await readCentralGlobalRuleItems();
+    expect(items.map((i) => i.content).sort()).toEqual(['A', 'B', 'C', 'D']);
 
-    // 第二次 collect: cursor 内容变为 D, E, F
-    await fs.writeFile(cursorFile, 'D\nE\nF\n');
-    await cmdRulesCollect([], { target: 'cursor' }, ctx);
+    await fs.writeFile(cursorFile, 'D\n\nE\n\nF\n');
+    await cmdRulesCollect([], { target: 'cursor', force: true }, ctx);
 
-    lines = await readCentralGlobalRuleLines();
-    // 所有行都保留 (additive): A + B + C + D + E + F
-    expect(lines.map((l) => l.content)).toEqual(['A', 'B', 'C', 'D', 'E', 'F']);
+    items = await readCentralGlobalRuleItems();
+    expect(items.map((i) => i.content).sort()).toEqual(['A', 'B', 'C', 'D', 'E', 'F']);
   });
 
-  it('returns 0 with no new lines and does not rewrite file', async () => {
-    await writeCentralGlobalRuleLines(normalizeRuleLines('A\nB'));
-    await fs.writeFile(cursorFile, 'A\nB\n');
+  it('returns 0 with no new items and does not rewrite file', async () => {
+    await writeCentralGlobalRuleItems(mkItems(['A', 'B']));
+    await fs.writeFile(cursorFile, 'A\n\nB\n');
 
-    const code = await cmdRulesCollect([], { target: 'cursor' }, ctx);
+    const code = await cmdRulesCollect([], { target: 'cursor', force: true }, ctx);
     expect(code).toBe(0);
 
-    const lines = await readCentralGlobalRuleLines();
-    expect(lines.map((l) => l.content)).toEqual(['A', 'B']);
+    const items = await readCentralGlobalRuleItems();
+    expect(items.map((i) => i.content).sort()).toEqual(['A', 'B']);
   });
 
   it('handles empty target gracefully', async () => {
     await fs.writeFile(cursorFile, '');
-    const code = await cmdRulesCollect([], { target: 'cursor' }, ctx);
+    const code = await cmdRulesCollect([], { target: 'cursor', force: true }, ctx);
     expect(code).toBe(0);
   });
 
   it('dry-run does not write', async () => {
     await fs.writeFile(cursorFile, 'X\n');
 
-    const code = await cmdRulesCollect([], { target: 'cursor', 'dry-run': true }, ctx);
+    const code = await cmdRulesCollect([], { target: 'cursor', 'dry-run': true, force: true }, ctx);
     expect(code).toBe(0);
 
-    const lines = await readCentralGlobalRuleLines();
-    expect(lines).toEqual([]);
+    const items = await readCentralGlobalRuleItems();
+    expect(items).toEqual([]);
+  });
+
+  it('preserves multi-line rules from target', async () => {
+    // 两个 item: 一个多行, 一个单行, 段落分隔
+    await fs.writeFile(cursorFile, 'Prefer FP:\n- Pure functions\n- Immutability\n\nUse single quotes\n');
+
+    const code = await cmdRulesCollect([], { target: 'cursor', force: true }, ctx);
+    expect(code).toBe(0);
+
+    const items = await readCentralGlobalRuleItems();
+    expect(items).toHaveLength(2);
+    const fp = items.find((i) => i.content.includes('Prefer FP'));
+    expect(fp).toBeDefined();
+    expect(fp!.content).toBe('Prefer FP:\n- Pure functions\n- Immutability');
   });
 });

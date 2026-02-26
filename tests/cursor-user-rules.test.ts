@@ -12,6 +12,7 @@ import {
   writeCursorUserRules,
   getCursorUserRulesSourceLabel,
 } from '../src/util/cursor-user-rules.js';
+import { toRuleItem, dedupeAndSortItems } from '../src/util/global-rules-store.js';
 
 let tmpDir: string;
 let overrideFile: string;
@@ -32,28 +33,41 @@ afterEach(async () => {
 });
 
 describe('readCursorUserRules (file override)', () => {
-  it('returns empty text when file does not exist', async () => {
-    const { text, apiToken } = await readCursorUserRules(os.homedir());
-    expect(text).toBe('');
+  it('returns empty items when file does not exist', async () => {
+    const { items, apiToken } = await readCursorUserRules(os.homedir());
+    expect(items).toEqual([]);
     expect(apiToken).toBeNull();
   });
 
-  it('returns file content when file exists', async () => {
-    await fs.writeFile(overrideFile, 'Rule A\nRule B\n');
-    const { text, apiToken } = await readCursorUserRules(os.homedir());
-    expect(text).toBe('Rule A\nRule B\n');
+  it('returns parsed items when file exists (paragraph-based)', async () => {
+    await fs.writeFile(overrideFile, 'Rule A\n\nRule B\n');
+    const { items, apiToken } = await readCursorUserRules(os.homedir());
+    expect(items.map((i) => i.content).sort()).toEqual(['Rule A', 'Rule B']);
     expect(apiToken).toBeNull();
+  });
+
+  it('preserves multi-line rules as single items', async () => {
+    await fs.writeFile(overrideFile, 'Prefer FP:\n- Pure functions\n\nUse quotes\n');
+    const { items } = await readCursorUserRules(os.homedir());
+    expect(items).toHaveLength(2);
+    const fp = items.find((i) => i.content.includes('Prefer FP'));
+    expect(fp).toBeDefined();
+    expect(fp!.content).toBe('Prefer FP:\n- Pure functions');
   });
 });
 
 describe('writeCursorUserRules (file override)', () => {
-  it('writes lines joined by newline with trailing newline', async () => {
-    await writeCursorUserRules(os.homedir(), ['Line 1', 'Line 2'], null);
+  it('writes items joined by double newline with trailing newline', async () => {
+    const items = dedupeAndSortItems([toRuleItem('Line 1'), toRuleItem('Line 2')]);
+    await writeCursorUserRules(os.homedir(), items, null);
     const content = await fs.readFile(overrideFile, 'utf-8');
-    expect(content).toBe('Line 1\nLine 2\n');
+    expect(content).toContain('Line 1');
+    expect(content).toContain('Line 2');
+    expect(content).toContain('\n\n');
+    expect(content.endsWith('\n')).toBe(true);
   });
 
-  it('writes empty string for empty lines array', async () => {
+  it('writes empty string for empty items array', async () => {
     await writeCursorUserRules(os.homedir(), [], null);
     const content = await fs.readFile(overrideFile, 'utf-8');
     expect(content).toBe('');
@@ -63,9 +77,10 @@ describe('writeCursorUserRules (file override)', () => {
     const nestedFile = path.join(tmpDir, 'sub', 'dir', 'rules.txt');
     process.env.AP_CURSOR_USER_RULES_FILE = nestedFile;
 
-    await writeCursorUserRules(os.homedir(), ['Rule X'], null);
+    const items = [toRuleItem('Rule X')];
+    await writeCursorUserRules(os.homedir(), items, null);
     const content = await fs.readFile(nestedFile, 'utf-8');
-    expect(content).toBe('Rule X\n');
+    expect(content).toContain('Rule X');
   });
 });
 

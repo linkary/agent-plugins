@@ -147,27 +147,28 @@ export async function removeKnowledgeBase(token: string, id: string): Promise<vo
 }
 
 // ---------------------------------------------------------------------------
-// 高层辅助: 读取全部 user rules (排除 isGenerated)
+// 高层辅助
 // ---------------------------------------------------------------------------
 
-/** 从 Knowledge Base 读取所有用户创建的 rule, 合并为单字符串 (每条一行). */
-export async function readCursorKnowledgeBaseRules(token: string): Promise<string> {
+import type { RuleItem } from './global-rules-store.js';
+
+/** 从 Knowledge Base 读取所有用户创建的 rule 作为 RuleItem[]. */
+export async function listCursorUserRuleItems(token: string): Promise<RuleItem[]> {
+  const { toRuleItem } = await import('./global-rules-store.js');
   const items = await listKnowledgeBase(token);
-  const userItems = items.filter((i) => !i.isGenerated);
-  if (userItems.length === 0) return '';
-  return userItems.map((i) => i.knowledge).join('\n');
+  return items.filter((i) => !i.isGenerated).map((i) => toRuleItem(i.knowledge));
 }
 
 /**
- * 行级同步: 将 desiredLines 与当前 Knowledge Base 对齐。
+ * Item 级同步: 将 desiredItems 与当前 Knowledge Base 对齐。
  *
- * - 已存在的 item (按 knowledge 内容匹配) 保留不动
- * - desiredLines 中新出现的行 → addKnowledgeBase
- * - 当前 item 中不在 desiredLines 里的 → removeKnowledgeBase
+ * - 已存在的 item (按 trimmed knowledge 内容匹配) 保留不动
+ * - 新出现的 item → addKnowledgeBase
+ * - 不在 desired 里的 → removeKnowledgeBase
  */
 export async function syncKnowledgeBaseItems(
   token: string,
-  desiredLines: string[],
+  desiredItems: RuleItem[],
 ): Promise<{ added: number; removed: number }> {
   const currentItems = (await listKnowledgeBase(token)).filter((i) => !i.isGenerated);
   const currentSet = new Map<string, CursorKnowledgeItem>();
@@ -175,15 +176,14 @@ export async function syncKnowledgeBaseItems(
     currentSet.set(item.knowledge.trim(), item);
   }
 
-  const desiredSet = new Set(desiredLines.map((l) => l.trim()).filter(Boolean));
+  const desiredSet = new Set(desiredItems.map((i) => i.content.trim()).filter(Boolean));
 
-  // 需要添加的: 在 desired 但不在 current
-  const toAdd = [...desiredSet].filter((line) => !currentSet.has(line));
-  // 需要删除的: 在 current 但不在 desired
+  const toAdd = [...desiredSet].filter((content) => !currentSet.has(content));
   const toRemove = currentItems.filter((item) => !desiredSet.has(item.knowledge.trim()));
 
-  for (const line of toAdd) {
-    await addKnowledgeBase(token, { title: '[Untitled]', knowledge: line });
+  for (const content of toAdd) {
+    const firstLine = content.split('\n')[0] ?? '[Untitled]';
+    await addKnowledgeBase(token, { title: firstLine, knowledge: content });
   }
   for (const item of toRemove) {
     await removeKnowledgeBase(token, item.id);
