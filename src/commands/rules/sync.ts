@@ -41,11 +41,7 @@ export async function cmdRulesSync(
     return 1;
   }
 
-  process.stdout.write(`\n${ANSI.bold}Central global rules (${centralItems.length} items):${ANSI.reset}\n`);
-  for (const item of centralItems) {
-    process.stdout.write(`  ${ANSI.dim}[${shortHash(item.hash)}]${ANSI.reset} ${displayItem(item)}\n`);
-  }
-  process.stdout.write('\n');
+  process.stdout.write(`\n${ANSI.bold}Central global rules: ${centralItems.length} items${ANSI.reset}\n\n`);
 
   const adapters = filterRuleAdapters(getAdapters());
   const selected = await selectTargetAdapters({
