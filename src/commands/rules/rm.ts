@@ -66,7 +66,7 @@ export async function cmdRulesRemove(positionals: string[], flags: ParsedFlags, 
   const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
   if (args.length === 0 && !flags.target && interactive) {
-    return await interactiveRemove(flags, ctx);
+    return await interactiveRemove(flags, ctx, dryRun);
   }
   if (args.length === 0 && flags.target && interactive) {
     return await interactiveRemoveFromTarget(flags, ctx, dryRun);
@@ -264,7 +264,7 @@ async function removeFromTarget(
 // 交互式: 中心 / 目标选择
 // ---------------------------------------------------------------------------
 
-async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext): Promise<number> {
+async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext, dryRun: boolean): Promise<number> {
   const adapters = filterRuleAdapters(getAdapters());
   const options = [
     { label: 'Central (_global.json)', value: CENTRAL_VALUE },
@@ -283,16 +283,16 @@ async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext): Promis
   const hasCentral = selectedTargets.includes(CENTRAL_VALUE);
   const toolIds = selectedTargets.filter((t) => t !== CENTRAL_VALUE);
 
-  if (hasCentral) await interactiveRemoveCentralItems();
+  if (hasCentral) await interactiveRemoveCentralItems(dryRun);
   if (toolIds.length > 0) {
     for (const id of toolIds) {
-      await interactiveRemoveTargetItems(id);
+      await interactiveRemoveTargetItems(id, dryRun);
     }
   }
   return 0;
 }
 
-async function interactiveRemoveCentralItems(): Promise<void> {
+async function interactiveRemoveCentralItems(dryRun: boolean): Promise<void> {
   const items = await readCentralGlobalRuleItems();
   if (items.length === 0) {
     process.stdout.write('(no central global rules)\n');
@@ -316,11 +316,12 @@ async function interactiveRemoveCentralItems(): Promise<void> {
 
   const toRemove = new Set(selected);
   const remaining = items.filter((item) => !toRemove.has(item.hash));
-  await writeCentralGlobalRuleItems(remaining);
+  if (!dryRun) await writeCentralGlobalRuleItems(remaining);
 
   const removedItems = items.filter((item) => toRemove.has(item.hash));
+  const prefix = dryRun ? `${ANSI.dim}[dry-run]${ANSI.reset} ` : '';
   for (const item of removedItems) {
-    process.stdout.write(`Removed: ${displayItem(item)}\n`);
+    process.stdout.write(`${prefix}Removed: ${displayItem(item)}\n`);
   }
   process.stdout.write(`\n${ANSI.dim}Tip: run ${ANSI.reset}${ANSI.bold}ap rules sync${ANSI.reset}${ANSI.dim} to propagate changes.${ANSI.reset}\n`);
 }
@@ -337,12 +338,12 @@ async function interactiveRemoveFromTarget(flags: ParsedFlags, ctx: CliRunContex
   if (selected.length === 0) return 1;
 
   for (const adapter of selected) {
-    await interactiveRemoveTargetItems(adapter.id);
+    await interactiveRemoveTargetItems(adapter.id, dryRun);
   }
   return 0;
 }
 
-async function interactiveRemoveTargetItems(targetId: string): Promise<void> {
+async function interactiveRemoveTargetItems(targetId: string, dryRun: boolean): Promise<void> {
   const homeDir = os.homedir();
   const store = getGlobalRulesStore(targetId as TargetId, homeDir);
   if (!store) {
@@ -373,11 +374,12 @@ async function interactiveRemoveTargetItems(targetId: string): Promise<void> {
 
   const toRemove = new Set(selected);
   const remaining = items.filter((item) => !toRemove.has(item.hash));
-  await store.writeItems(remaining);
+  if (!dryRun) await store.writeItems(remaining);
 
+  const prefix = dryRun ? `${ANSI.dim}[dry-run]${ANSI.reset} ` : '';
   const removedItems = items.filter((item) => toRemove.has(item.hash));
   for (const item of removedItems) {
-    process.stdout.write(`Removed from ${targetId}: ${displayItem(item)}\n`);
+    process.stdout.write(`${prefix}Removed from ${targetId}: ${displayItem(item)}\n`);
   }
 }
 
