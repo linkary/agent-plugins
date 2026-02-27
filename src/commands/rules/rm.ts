@@ -150,7 +150,11 @@ async function removeFromCentral(args: string[], dryRun: boolean): Promise<numbe
     }
     removed += delta;
     centralDirty = true;
-    process.stdout.write(`Removed ${delta} rule(s) matching: ${raw}\n`);
+    if (dryRun) {
+      process.stdout.write(`${ANSI.dim}[dry-run]${ANSI.reset} rm ${delta} rule(s) matching: ${raw}\n`);
+    } else {
+      process.stdout.write(`Removed ${delta} rule(s) matching: ${raw}\n`);
+    }
   }
 
   if (!dryRun) {
