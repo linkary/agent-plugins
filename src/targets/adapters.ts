@@ -36,8 +36,11 @@ export type TargetAdapter = {
 
 const SKILLS_ONLY_TARGET_IDS = new Set<TargetId>(['openskills', 'agents']);
 
-/** Targets that do not support agents, commands, or rules sync (directory-based). */
-const NO_AGENTS_COMMANDS_IDS = new Set<TargetId>(['openskills', 'agents', 'antigravity']);
+/** Targets that do not support agents sync. */
+const NO_AGENTS_IDS = new Set<TargetId>(['openskills', 'agents', 'antigravity']);
+
+/** Targets that do not support commands sync. */
+const NO_COMMANDS_IDS = new Set<TargetId>(['openskills', 'agents']);
 
 function getCodexHomeDir(homeDir: string): string {
   const override = process.env.CODEX_HOME;
@@ -157,9 +160,13 @@ const adapters: TargetAdapter[] = [
       scope === 'global'
         ? path.join(homeDir, '.gemini', 'antigravity', 'skills')
         : path.join(projectRoot, '.agent', 'skills'),
-    // Antigravity 不支持 agents/commands 同步（官方文档未定义这些路径）
+    // Antigravity 不支持 agents 同步
     resolveAgentsDir: () => '',
-    resolveCommandsDir: () => '',
+    // Antigravity 的 commands 对应 workflows
+    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global'
+        ? path.join(homeDir, '.gemini', 'antigravity', 'global_workflows')
+        : path.join(projectRoot, '.agent', 'workflows'),
     // Global rules 为单文件 (~/.gemini/GEMINI.md)，不兼容目录模式；local rules 使用 .agent/rules/
     resolveRulesDir: ({ scope, projectRoot }) =>
       scope === 'global' ? '' : path.join(projectRoot, '.agent', 'rules'),
@@ -248,11 +255,11 @@ export function getAdapters(): TargetAdapter[] {
 }
 
 export function filterCommandAdapters(adapters: TargetAdapter[]): TargetAdapter[] {
-  return adapters.filter((adapter) => !NO_AGENTS_COMMANDS_IDS.has(adapter.id));
+  return adapters.filter((adapter) => !NO_COMMANDS_IDS.has(adapter.id));
 }
 
 export function filterAgentAdapters(adapters: TargetAdapter[]): TargetAdapter[] {
-  return adapters.filter((adapter) => !NO_AGENTS_COMMANDS_IDS.has(adapter.id));
+  return adapters.filter((adapter) => !NO_AGENTS_IDS.has(adapter.id));
 }
 
 export function filterRuleAdapters(adapters: TargetAdapter[]): TargetAdapter[] {

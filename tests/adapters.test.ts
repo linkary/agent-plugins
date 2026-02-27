@@ -141,9 +141,13 @@ describe('adapters', () => {
         expect(adapter.resolveAgentsDir({ scope: 'local', projectRoot, homeDir })).toBe('');
       });
 
-      it('should return empty commands path (unsupported)', () => {
-        expect(adapter.resolveCommandsDir({ scope: 'global', projectRoot, homeDir })).toBe('');
-        expect(adapter.resolveCommandsDir({ scope: 'local', projectRoot, homeDir })).toBe('');
+      it('should resolve commands path to workflows dirs', () => {
+        expect(adapter.resolveCommandsDir({ scope: 'global', projectRoot, homeDir })).toBe(
+          path.join(homeDir, '.gemini', 'antigravity', 'global_workflows'),
+        );
+        expect(adapter.resolveCommandsDir({ scope: 'local', projectRoot, homeDir })).toBe(
+          path.join(projectRoot, '.agent', 'workflows'),
+        );
       });
 
       it('should return empty global rules path but valid local rules path', () => {
@@ -351,8 +355,8 @@ describe('adapters', () => {
       expect(agents).not.toContain('agents');
       expect(rules).not.toContain('openskills');
       expect(rules).not.toContain('agents');
-      // antigravity does not support agents/commands sync, but DOES support rules
-      expect(commands).not.toContain('antigravity');
+      // antigravity does not support agents sync, but DOES support commands (workflows) and rules
+      expect(commands).toContain('antigravity');
       expect(agents).not.toContain('antigravity');
       expect(rules).toContain('antigravity');
     });
