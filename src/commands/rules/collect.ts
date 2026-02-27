@@ -1,10 +1,11 @@
 /**
  * rules collect — 从目标工具收集全局规则到中心存储 (additive merge).
  *
- * item 级管理: 读取各目标的全局规则 → 与中心已有 items 做并集 →
- * 用户选择 → 写入 ~/.agent-plugins/rules/_global.json.
- *
- * collect 只增不减 — item 仅通过 rm 删除.
+ * Phased workflow (mirrors skills/collect.ts):
+ *   Phase 1: Gather — read rules from all selected targets
+ *   Phase 2: Status — diff each item against central store
+ *   Phase 3: Preview + Select — aggregated summary, unified multi-select
+ *   Phase 4: Write — merge selected items into central store
  */
 import os from 'node:os';
 import { filterRuleAdapters, getAdapters, getColoredLabel } from '../../targets/adapters.js';
@@ -18,10 +19,21 @@ import {
   displayItem,
   type RuleItem,
 } from '../../util/global-rules-store.js';
-import { readCentralGlobalRuleItems, writeCentralGlobalRuleItems } from '../../core/rule-store.js';
-import { promptMultiSelect, promptConfirm } from '../../util/prompt.js';
+import {
+  readCentralGlobalRuleItems,
+  writeCentralGlobalRuleItems,
+  getCentralGlobalRulesPath,
+} from '../../core/rule-store.js';
+import { promptMultiSelect } from '../../util/prompt.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
+
+type CollectStatus = 'new' | 'identical' | 'duplicate';
+
+type RuleWithStatus = RuleItem & {
+  source: string;
+  status: CollectStatus;
+};
 
 export async function cmdRulesCollect(
   positionals: string[],
@@ -44,9 +56,12 @@ export async function cmdRulesCollect(
 
   if (selected.length === 0) return 0;
 
-  let accumulated: RuleItem[] = await readCentralGlobalRuleItems();
-  // 收集各目标的新 items (source 保存带颜色的 label)
-  const allNew: Array<RuleItem & { source: string }> = [];
+  // ── Phase 1: Gather all items from all targets ────────────────────────
+  const centralItems = await readCentralGlobalRuleItems();
+  const centralSet = new Set(centralItems.map((i) => i.content));
+  const seenContents = new Set<string>();
+
+  const allItems: RuleWithStatus[] = [];
 
   for (const adapter of selected) {
     const store = getGlobalRulesStore(adapter.id, homeDir);
@@ -57,73 +72,108 @@ export async function cmdRulesCollect(
 
     const targetItems = await store.readItems();
     if (targetItems.length === 0) {
-      process.stdout.write(`${ANSI.dim}${getColoredLabel(adapter)}: (empty)${ANSI.reset}\n`);
+      process.stderr.write(`${ANSI.dim}${getColoredLabel(adapter)}: (empty)${ANSI.reset}\n`);
       continue;
     }
 
-    const { onlyInA: newItems, common } = diffItems(targetItems, accumulated);
+    // ── Phase 2: Determine status for each item ───────────────────────
+    for (const item of targetItems) {
+      const isDuplicate = seenContents.has(item.content);
+      seenContents.add(item.content);
 
-    process.stdout.write(
-      `\n${getColoredLabel(adapter)}: ${ANSI.green}${newItems.length} new${ANSI.reset}, ${ANSI.dim}${common.length} identical${ANSI.reset}\n`,
-    );
+      let status: CollectStatus;
+      if (isDuplicate) {
+        status = 'duplicate';
+      } else if (centralSet.has(item.content)) {
+        status = 'identical';
+      } else {
+        status = 'new';
+      }
 
-    for (const item of newItems) {
-      allNew.push({ ...item, source: getColoredLabel(adapter) });
+      allItems.push({ ...item, source: getColoredLabel(adapter), status });
     }
-    // 为后续目标的 diff 预合并
-    accumulated = mergeItems(accumulated, targetItems);
   }
 
-  if (allNew.length === 0) {
-    process.stdout.write(`\n${ANSI.dim}No new rules to collect. Central has ${accumulated.length} items.${ANSI.reset}\n`);
+  if (allItems.length === 0) {
+    process.stderr.write(`${ANSI.dim}No rules found from selected targets.${ANSI.reset}\n`);
     return 0;
   }
 
-  // 交互式选择
-  let selectedNew = allNew;
-  if (interactive && !force && allNew.length > 1) {
+  // ── Phase 3: Preview + Select ─────────────────────────────────────────
+  const newCount = allItems.filter((i) => i.status === 'new').length;
+  const identicalCount = allItems.filter((i) => i.status === 'identical').length;
+  const dupCount = allItems.filter((i) => i.status === 'duplicate').length;
+
+  if (newCount === 0 && !interactive) {
+    process.stderr.write(
+      `${ANSI.dim}No new rules to collect. Central has ${centralItems.length} items.${ANSI.reset}\n`,
+    );
+    return 0;
+  }
+
+  const STATUS_LABELS: Record<CollectStatus, string> = {
+    new: `${ANSI.green}new${ANSI.reset}`,
+    identical: `${ANSI.gray}identical${ANSI.reset}`,
+    duplicate: `${ANSI.dim}dup${ANSI.reset}`,
+  };
+
+  let selectedItems: RuleWithStatus[];
+
+  if (interactive && !force) {
+    // Preview line (on stderr to avoid Ink re-display)
+    process.stderr.write(
+      `Preview: ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.gray}${identicalCount} identical${ANSI.reset}` +
+        (dupCount > 0 ? `, ${ANSI.dim}${dupCount} duplicates${ANSI.reset}` : '') +
+        '\n',
+    );
+
+    // Default: only 'new' items pre-selected
+    const defaultSelected = allItems
+      .map((item, i) => (item.status === 'new' ? String(i) : null))
+      .filter((v): v is string => v !== null);
+
+    const centralStorePath = getCentralGlobalRulesPath();
     const chosen = await promptMultiSelect({
-      message: `Select rules to collect (${allNew.length} new):`,
-      options: allNew.map((item) => ({
-        label: `[${shortHash(item.hash)}] ${displayItem(item)} (${item.source})`,
-        value: item.hash,
+      message: `Select rules to collect (${centralStorePath}):`,
+      options: allItems.map((item, i) => ({
+        label: `[${shortHash(item.hash)}] ${displayItem(item)} (${item.source}) [${STATUS_LABELS[item.status]}]`,
+        value: String(i),
       })),
-      defaultSelected: 'all',
-      searchable: allNew.length > 10,
+      defaultSelected,
+      searchable: allItems.length > 10,
     });
+
     if (chosen.length === 0) {
       process.stdout.write('Cancelled.\n');
       return 0;
     }
+
     const chosenSet = new Set(chosen);
-    selectedNew = allNew.filter((item) => chosenSet.has(item.hash));
+    selectedItems = allItems.filter((_, i) => chosenSet.has(String(i)));
+  } else {
+    // Non-interactive or --force: collect only 'new' items
+    selectedItems = allItems.filter((item) => item.status === 'new');
   }
 
-  if (dryRun) {
-    process.stdout.write(
-      `\n${ANSI.dim}[dry-run]${ANSI.reset} Would collect ${selectedNew.length} new rules (total ${accumulated.length})\n`,
+  if (selectedItems.length === 0) {
+    process.stderr.write(
+      `${ANSI.dim}No new rules to collect. Central has ${centralItems.length} items.${ANSI.reset}\n`,
     );
     return 0;
   }
 
-  // 确认
-  if (interactive && !force) {
-    const confirmed = await promptConfirm({
-      message: `Collect ${selectedNew.length} new rule(s) into central store?`,
-      default: true,
-    });
-    if (!confirmed) {
-      process.stdout.write('Cancelled.\n');
-      return 0;
-    }
+  // ── Phase 4: Write ────────────────────────────────────────────────────
+  if (dryRun) {
+    process.stdout.write(
+      `${ANSI.dim}[dry-run]${ANSI.reset} Would collect ${selectedItems.length} new rules (total ${centralItems.length + selectedItems.length})\n`,
+    );
+    return 0;
   }
 
-  // 写入 — 将选中的新 items 与原有 central items 合并
-  const centralItems = await readCentralGlobalRuleItems();
-  const merged = mergeItems(centralItems, selectedNew);
+  const merged = mergeItems(centralItems, selectedItems);
   await writeCentralGlobalRuleItems(merged);
   process.stdout.write(
-    `\n${ANSI.green}Collected${ANSI.reset} +${selectedNew.length} new rules (total ${merged.length})\n`,
+    `${ANSI.green}Collected${ANSI.reset} +${selectedItems.length} new rules (total ${merged.length})\n`,
   );
   return 0;
 }
