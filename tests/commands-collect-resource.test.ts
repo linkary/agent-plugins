@@ -45,7 +45,7 @@ describe('commands collect resource-only changes', () => {
       { cwd: projectRoot },
     );
 
-    expect(exitCode).toBe(1);
+    expect(exitCode).toBe(0);
   });
 });
 

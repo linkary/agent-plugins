@@ -59,7 +59,7 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
 
     const available = await listDirNames(sourceSkillsDir);
     if (available.length === 0) {
-      process.stdout.write(`(no skills found in ${getColoredLabel(adapter)} ${scope})\n`);
+      process.stderr.write(`${ANSI.dim}(no skills found in ${getColoredLabel(adapter)} ${scope})${ANSI.reset}\n`);
       continue;
     }
 
@@ -81,34 +81,11 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
   }
 
   if (allSkills.length === 0) {
-    process.stdout.write('No skills available to collect.\n');
+    process.stderr.write(`${ANSI.dim}No skills available to collect.${ANSI.reset}\n`);
     return 0;
   }
 
-  // Phase 2: Show unified selection list (all skills from all targets)
-  let selectedSkills: SkillEntry[];
-  if (positionals.length > 0) {
-    // Positionals already filtered above
-    selectedSkills = allSkills;
-  } else if (interactive && !force) {
-    const selectedKeys = await promptMultiSelect({
-      message: 'Select skills to collect:',
-      options: allSkills.map((s, i) => ({
-        label: `${s.name} (${getColoredLabel(s.adapter)})`,
-        value: String(i),
-      })),
-      defaultSelected: 'all',
-    });
-    if (selectedKeys.length === 0) {
-      process.stdout.write('No skills selected.\n');
-      return 0;
-    }
-    selectedSkills = selectedKeys.map((i) => allSkills[Number(i)]!);
-  } else {
-    selectedSkills = allSkills;
-  }
-
-  // Phase 3: Detect status for each skill
+  // Phase 2: Detect status for each skill (skip selection — go directly to status analysis)
   // Status definitions:
   // - isDuplicate: name appeared in previous source (deduplicated)
   // - status: 'new' (no dest), 'identical' (hashes match), 'conflict' (hashes differ), 'overwrite' (force mode)
@@ -122,8 +99,9 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
 
   const seenSkillNames = new Set<string>();
   const skillsWithStatus: SkillWithStatus[] = [];
+  const selectedSkills = allSkills;
 
-  process.stdout.write('Analyzing skills...\n');
+  process.stderr.write(`${ANSI.dim}Analyzing skills...${ANSI.reset}\n`);
 
   for (const s of selectedSkills) {
     const lowerName = s.name.toLowerCase();
@@ -153,8 +131,8 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
   const dedupCount = skillsWithStatus.filter((s) => s.isDuplicate).length;
 
   if (interactive && !force) {
-    process.stdout.write(
-      `\nPreview: ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.red}${conflictCount} conflict${ANSI.reset}, ${ANSI.gray}${identicalCount} identical${ANSI.reset}` +
+    process.stderr.write(
+      `Preview: ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.red}${conflictCount} conflict${ANSI.reset}, ${ANSI.gray}${identicalCount} identical${ANSI.reset}` +
         (dedupCount > 0 ? `, ${ANSI.dim}${dedupCount} duplicates${ANSI.reset}` : '') +
         '\n',
     );
