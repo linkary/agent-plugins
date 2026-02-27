@@ -1,4 +1,4 @@
-import { listCentralAgents, getCentralAgentPath } from '../../core/agent-store.js';
+import { listCentralAgentItems } from '../../core/agent-store.js';
 import { ANSI } from '../../util/ansi.js';
 import { getBooleanFlag, getPositiveIntFlag } from '../../util/flag-utils.js';
 import { searchRemoteForGroup } from '../../util/remote-find.js';
@@ -17,12 +17,12 @@ export async function cmdAgentsFind(positionals: string[], flags: ParsedFlags, _
       ? searchRemoteForGroup('agents', query, { limit })
       : Promise.resolve({ results: [], error: undefined } as const);
 
-  const agents = await listCentralAgents();
+  const agents = await listCentralAgentItems();
   const localRows = await Promise.all(
-    agents.map(async (name) => {
-      const desc = await readAgentDescription(getCentralAgentPath(name));
-      const haystack = `${name}\n${desc ?? ''}`.toLowerCase();
-      return { name, desc, haystack };
+    agents.map(async (agent) => {
+      const desc = await readAgentDescription(agent.path);
+      const haystack = `${agent.name}\n${desc ?? ''}`.toLowerCase();
+      return { name: agent.name, desc, haystack };
     }),
   );
 

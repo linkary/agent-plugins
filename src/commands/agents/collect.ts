@@ -3,7 +3,13 @@ import { loadConfig } from '../../core/config.js';
 import { loadRegistry, saveRegistry } from '../../core/registry.js';
 import { ensureCentralAgentStore, getCentralAgentPath } from '../../core/agent-store.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
-import { type Scope, getAdapters, getColoredLabel, type TargetAdapter } from '../../targets/adapters.js';
+import {
+  type Scope,
+  filterAgentAdapters,
+  getAdapters,
+  getColoredLabel,
+  type TargetAdapter,
+} from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { getCentralAgentsDir } from '../../util/apg-paths.js';
 import { ANSI } from '../../util/ansi.js';
@@ -32,7 +38,7 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
   const scopeFlag = typeof flags.scope === 'string' ? flags.scope : undefined;
   const cwdFlag = typeof flags.cwd === 'string' ? flags.cwd : undefined;
 
-  const adapters = getAdapters();
+  const adapters = filterAgentAdapters(getAdapters());
   const selectedAdapters = await selectTargetAdapters({
     adapters,
     flags,
@@ -57,7 +63,7 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
 
     const available = await listDirNames(sourceAgentsDir);
     if (available.length === 0) {
-      process.stdout.write(`(no agents found in ${getColoredLabel(adapter)} ${scope})\n`);
+      process.stderr.write(`${ANSI.dim}(no agents found in ${getColoredLabel(adapter)} ${scope})${ANSI.reset}\n`);
       continue;
     }
 
@@ -76,29 +82,8 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
   }
 
   if (allAgents.length === 0) {
-    process.stdout.write('No agents available to collect.\n');
+    process.stderr.write(`${ANSI.dim}No agents available to collect.${ANSI.reset}\n`);
     return 0;
-  }
-
-  let selectedAgents: AgentEntry[];
-  if (positionals.length > 0) {
-    selectedAgents = allAgents;
-  } else if (interactive && !force) {
-    const selectedKeys = await promptMultiSelect({
-      message: 'Select agents to collect:',
-      options: allAgents.map((a, i) => ({
-        label: `${a.name} (${getColoredLabel(a.adapter)})`,
-        value: String(i),
-      })),
-      defaultSelected: 'all',
-    });
-    if (selectedKeys.length === 0) {
-      process.stdout.write('No agents selected.\n');
-      return 0;
-    }
-    selectedAgents = selectedKeys.map((i) => allAgents[Number(i)]!);
-  } else {
-    selectedAgents = allAgents;
   }
 
   type CollectStatus = 'new' | 'identical' | 'conflict' | 'overwrite';
@@ -110,7 +95,9 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
 
   const seenNames = new Set<string>();
   const agentsWithStatus: AgentWithStatus[] = [];
-  process.stdout.write('Analyzing agents...\n');
+  const selectedAgents = allAgents;
+
+  process.stderr.write(`${ANSI.dim}Analyzing agents...${ANSI.reset}\n`);
 
   for (const agent of selectedAgents) {
     const lower = agent.name.toLowerCase();
@@ -135,8 +122,8 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
   const dedupCount = agentsWithStatus.filter((s) => s.isDuplicate).length;
 
   if (interactive && !force) {
-    process.stdout.write(
-      `\nPreview: ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.red}${conflictCount} conflict${ANSI.reset}, ${ANSI.gray}${identicalCount} identical${ANSI.reset}` +
+    process.stderr.write(
+      `Preview: ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.red}${conflictCount} conflict${ANSI.reset}, ${ANSI.gray}${identicalCount} identical${ANSI.reset}` +
         (dedupCount > 0 ? `, ${ANSI.dim}${dedupCount} duplicates${ANSI.reset}` : '') +
         '\n',
     );

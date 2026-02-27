@@ -1,5 +1,11 @@
 import path from 'node:path';
-import { getColoredLabel, getAdapters, type TargetAdapter, type Scope } from '../../targets/adapters.js';
+import {
+  filterCommandAdapters,
+  getColoredLabel,
+  getAdapters,
+  type TargetAdapter,
+  type Scope,
+} from '../../targets/adapters.js';
 import { pathExists } from '../../util/fs-utils.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { detectTargetCommands } from '../../util/command-transform.js';
@@ -85,7 +91,7 @@ export async function findSyncedCommandCopies(params: {
   currentCwd: string;
 }): Promise<SyncedCommandCopy[]> {
   const { commandNames, config, currentCwd } = params;
-  const adapters = getAdapters();
+  const adapters = filterCommandAdapters(getAdapters());
   const copies: SyncedCommandCopy[] = [];
 
   for (const adapter of adapters) {

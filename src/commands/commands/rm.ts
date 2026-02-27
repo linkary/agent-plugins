@@ -10,7 +10,12 @@ import { loadConfig } from '../../core/config.js';
 import { loadRegistry, saveRegistry, normalizeRepoUrl, removeCommandFromRepo } from '../../core/registry.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
 import { pathExists, removeDir, ensureDir } from '../../util/fs-utils.js';
-import { getAdapters, getColoredLabel, resolveAdapter } from '../../targets/adapters.js';
+import {
+  filterCommandAdapters,
+  getAdapters,
+  getColoredLabel,
+  resolveAdapter,
+} from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { promptConfirm, promptMultiSelect, promptSelect } from '../../util/prompt.js';
@@ -124,7 +129,7 @@ export async function cmdCommandsRemove(positionals: string[], flags: ParsedFlag
 // ─── 全交互模式：多选目标（含 Central）──────────────────────────────────
 
 async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext): Promise<number> {
-  const adapters = getAdapters();
+  const adapters = filterCommandAdapters(getAdapters());
 
   const targetOptions = [
     { label: 'Central', value: CENTRAL_VALUE },
@@ -278,7 +283,7 @@ async function interactiveRemoveFromTools(
   flags: ParsedFlags,
   ctx: CliRunContext,
 ): Promise<void> {
-  const adapters = getAdapters();
+  const adapters = filterCommandAdapters(getAdapters());
   const selectedAdapters = adapters.filter((a) => toolTargetIds.includes(a.id));
 
   const config = await loadConfig();
@@ -335,7 +340,7 @@ async function interactiveRemoveFromTools(
 // ─── --target + TTY（无参数时交互选择 command）───────────────────────────
 
 async function interactiveRemoveFromTarget(flags: ParsedFlags, ctx: CliRunContext): Promise<number> {
-  const adapters = getAdapters();
+  const adapters = filterCommandAdapters(getAdapters());
   const config = await loadConfig();
   const selectedAdapters = await selectTargetAdapters({
     adapters,
@@ -491,8 +496,9 @@ async function removeFromTargetDirect(
   ctx: CliRunContext,
   dryRun: boolean,
 ): Promise<number> {
-  const adapters = getAdapters();
-  const adapter = resolveAdapter(targetFlag);
+  const adapters = filterCommandAdapters(getAdapters());
+  const resolved = resolveAdapter(targetFlag);
+  const adapter = resolved && adapters.find((candidate) => candidate.id === resolved.id);
   if (!adapter) {
     process.stderr.write(`Unknown target: ${targetFlag}\n`);
     process.stderr.write(`Known targets: ${adapters.map((a) => a.id).join(', ')}\n`);

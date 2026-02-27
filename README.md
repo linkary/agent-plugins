@@ -19,6 +19,8 @@ A CLI tool for centralized management and cross-tool synchronization of **LLM Ag
 - `sync`: Central -> Target tool (one-way copy, supports conflict resolution).
 - `collect`: Target tool -> Central (collects items scattered across different tools, supports conflict resolution).
 - Commands support two forms: **file-form** (single `.md` file) and **directory-form** (a directory containing multiple files).
+- Rules use a canonical prompt-rule model. Sync/collect converts between Cursor (`.mdc`) and Claude/Qoder (`.md`) formats automatically.
+- MCP sync/collect now uses target-aware conversion. Unsupported transport/fields are marked as `incompatible`/`lossy` before write.
 
 You can override the default directories using environment variables:
 
@@ -49,7 +51,7 @@ Interactive features (selection, conflict resolution, browsing) use an ink-based
 
 ## Command Overview
 
-`skills`, `agents`, and `commands` share the same lifecycle-style subcommands (`add/rm/update/sync/collect/list`).
+`skills`, `agents`, `commands`, and `rules` share lifecycle-style subcommands (`add/rm/sync/collect/list/find`).
 
 ### Skills
 
@@ -134,6 +136,41 @@ ap agents collect [<agent>...] --target <target> [--scope local|global] [--all] 
 ap agents rm [<agent>...] [--target <...>] [--scope local|global] [--dry-run]
 ```
 
+### Rules
+
+```bash
+# List central rules
+ap rules list
+
+# Find rules (local + remote)
+ap rules find [query]
+
+# Browse and inspect rules (interactive TUI)
+ap rules show [rule]
+ap rules show --target cursor --scope local
+
+# Add rules from git URL, local path, or rule file
+ap rules add <git-url|local-path|rule-file> [--name <rule>] [--ref <ref>] [--force]
+
+# Sync: Central -> Target Tool
+ap rules sync [<rule>...] --target <target> [--scope local|global] [--dry-run] [--force]
+
+# Collect: Target Tool -> Central
+ap rules collect [<rule>...] --target <target> [--scope local|global] [--dry-run] [--force]
+
+# Remove rules
+ap rules rm [<rule>...] [--target <...>] [--scope local|global] [--dry-run]
+
+# Validate rules (empty files / basename conflicts)
+ap rules validate
+```
+
+Note: `ap rules sync/collect/rm --target cursor --scope global` now operates on Cursor **User Rules (Settings text)** using managed blocks.  
+Storage backend defaults to:
+
+- `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` (`ItemTable[aicontext.personalContext]`)
+- Optional override for automation/testing: `AP_CURSOR_USER_RULES_FILE=/path/to/text-file`
+
 ### Aliases
 
 Root groups support abbreviations:
@@ -143,6 +180,7 @@ Root groups support abbreviations:
 | `skills`   | `skill`, `sk`, `s`    |
 | `agents`   | `ag`                  |
 | `commands` | `command`, `cmd`, `c` |
+| `rules`    | `rule`, `rl`          |
 
 Subcommands also support abbreviations (parsed by position):
 
@@ -191,12 +229,38 @@ Supported targets: `cursor`, `gemini`, `codex`, `claude-code`, `antigravity`, `o
 | OpenCode             | `<project>/.opencode/commands/` | `~/.opencode/commands/`               |
 | Qoder                | `<project>/.qoder/commands/`    | `~/.qoder/commands/`                  |
 
+### Rules Paths
+
+| Target               | local                      | global                                |
+| -------------------- | -------------------------- | ------------------------------------- |
+| Cursor               | `<project>/.cursor/rules/` | `~/.cursor/rules/`                    |
+| Gemini CLI           | `<project>/.gemini/rules/` | `~/.gemini/rules/`                    |
+| Codex                | `<project>/.codex/rules/`  | `$CODEX_HOME/rules/`                  |
+| Claude Code          | `<project>/.claude/rules/` | `~/.claude/rules/`                    |
+| Antigravity          | `<project>/.agent/rules/`  | `~/.gemini/antigravity/global_rules/` |
+| Openskills           | `<project>/.agent/rules/`  | `~/.agent/rules/`                     |
+| Agents (Vercel Labs) | `<project>/.agents/rules/` | `~/.agents/rules/`                    |
+| OpenCode             | `<project>/.opencode/rules/` | `~/.opencode/rules/`                |
+| Qoder                | `<project>/.qoder/rules/`    | `~/.qoder/rules/`                   |
+
+Cursor special case (global scope):
+
+- `sync/collect/rm` for `cursor` + `global` uses Cursor User Rules text storage (Settings) instead of only relying on `~/.cursor/rules/`.
+
+### Rules Compatibility
+
+- Prompt-rule sync/collect with conversion: `cursor`, `claude-code`, `qoder`
+- Skipped as incompatible for prompt rules:
+  - `codex` (uses execution-policy `.rules`)
+  - `gemini`, `antigravity`, `openskills`, `agents`, `opencode`
+
 ## Configuration and State Files
 
 - Configuration: `$APG_HOME/config.json`
   - `defaultScope` (local/global) for each target.
   - `include` for each target (skills to sync; supports `["*"]` for all).
   - `includeCommands` for each target (commands to sync; supports `["*"]` for all).
+  - `includeRules` for each target (rules to sync; supports `["*"]` for all).
 - State: `$APG_HOME/sync-state.json`
   - Records the last synced hash for each target/scope (and projectRoot for local). Used to determine if "the target side has been manually modified" and optimize conflict resolution.
 

@@ -2,7 +2,7 @@ import path from 'node:path';
 import { getApgHomeDir } from './apg-paths.js';
 import { pathExists, readJsonFile, writeJsonFileAtomic } from './fs-utils.js';
 
-type FindGroup = 'skills' | 'agents' | 'commands' | 'mcp';
+type FindGroup = 'skills' | 'agents' | 'commands' | 'rules' | 'mcp';
 
 type FetchLike = (
   url: string,
@@ -322,15 +322,13 @@ async function searchSkills(query: string, limit: number, fetcher: FetchLike): P
     .filter((item): item is RemoteFindResult => Boolean(item));
 }
 
-async function searchGitHubCode(
+async function searchGitHubCodeQuery(
   query: string,
-  filename: 'AGENT.md' | 'COMMAND.md' | 'SKILL.md',
-  addPrefix: 'agents' | 'commands' | 'skills',
+  addPrefix: 'agents' | 'commands' | 'skills' | 'rules',
   limit: number,
   fetcher: FetchLike,
 ): Promise<RemoteFindResult[]> {
-  const q = `${query} filename:${filename}`;
-  const url = `${GITHUB_API_BASE}/search/code?q=${encodeURIComponent(q)}&per_page=${limit}`;
+  const url = `${GITHUB_API_BASE}/search/code?q=${encodeURIComponent(query)}&per_page=${limit}`;
   const data = await fetchJson<GitHubCodeSearchResponse>(fetcher, url, getGitHubHeaders());
   const items = Array.isArray(data.items) ? data.items : [];
 
@@ -347,15 +345,25 @@ async function searchGitHubCode(
         source: repoName,
         description: item.repository?.description,
         url: item.html_url ?? repoUrl,
-        addHint: `ap ${addPrefix} add ${repoUrl}`,
+        addHint: addPrefix === 'rules' ? `ap rules add ${repoUrl}` : `ap ${addPrefix} add ${repoUrl}`,
       } satisfies RemoteFindResult;
     })
     .filter((item): item is RemoteFindResult => Boolean(item));
 }
 
+async function searchGitHubCode(
+  query: string,
+  filename: 'AGENT.md' | 'COMMAND.md' | 'SKILL.md',
+  addPrefix: 'agents' | 'commands' | 'skills' | 'rules',
+  limit: number,
+  fetcher: FetchLike,
+): Promise<RemoteFindResult[]> {
+  return searchGitHubCodeQuery(`${query} filename:${filename}`, addPrefix, limit, fetcher);
+}
+
 async function searchGitHubRepos(
   query: string,
-  addPrefix: 'agents' | 'commands' | 'mcp',
+  addPrefix: 'agents' | 'commands' | 'rules' | 'mcp',
   limit: number,
   fetcher: FetchLike,
 ): Promise<RemoteFindResult[]> {
@@ -434,6 +442,22 @@ export async function searchRemoteForGroup(
         response = { results: dedupeByUrlOrName(primary).slice(0, limit) };
       } else {
         const fallback = await searchGitHubRepos(`${q} prompt command`, 'commands', limit, fetcher);
+        response = { results: dedupeByUrlOrName(fallback).slice(0, limit) };
+      }
+      if (useCache) await setCachedResponse(cacheKey, response);
+      return response;
+    }
+
+    if (group === 'rules') {
+      const codeCandidates = await Promise.all([
+        searchGitHubCodeQuery(`${q} path:rules extension:mdc`, 'rules', limit, fetcher),
+        searchGitHubCodeQuery(`${q} path:rules extension:md`, 'rules', limit, fetcher),
+      ]);
+      const merged = dedupeByUrlOrName(codeCandidates.flat()).slice(0, limit);
+      if (merged.length > 0) {
+        response = { results: merged };
+      } else {
+        const fallback = await searchGitHubRepos(`${q} rules mdc`, 'rules', limit, fetcher);
         response = { results: dedupeByUrlOrName(fallback).slice(0, limit) };
       }
       if (useCache) await setCachedResponse(cacheKey, response);

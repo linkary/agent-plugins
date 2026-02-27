@@ -144,6 +144,12 @@ export const AGENT_SUBCOMMANDS = {
     aliases: ['ls'],
     options: ['verbose'],
   },
+  show: {
+    desc: 'Browse and inspect agents',
+    args: '[agent]',
+    aliases: ['info', 's'],
+    options: ['target', 'scope', 'global', 'local', 'cwd'],
+  },
 } as const satisfies Record<string, SubcommandDef>;
 
 /** Subcommands under `commands` */
@@ -194,6 +200,56 @@ export const COMMAND_SUBCOMMANDS = {
     args: '[command]',
     aliases: ['info', 's'],
     options: ['target', 'scope', 'global', 'local', 'cwd'],
+  },
+} as const satisfies Record<string, SubcommandDef>;
+
+/** Subcommands under `rules` */
+export const RULE_SUBCOMMANDS = {
+  add: {
+    desc: 'Add rule(s) from git URL, local path, or rule file',
+    args: '<source>',
+    aliases: ['a', 'install', 'i'],
+    options: ['name', 'ref', 'force', 'dry-run'],
+  },
+  rm: {
+    desc: 'Remove rule(s)',
+    args: '[rule...]',
+    aliases: ['remove', 'del', 'delete'],
+    options: ['target', 'scope', 'global', 'local', 'cwd', 'dry-run'],
+  },
+  sync: {
+    desc: 'Sync central rules → target tools',
+    args: '[rule...]',
+    aliases: ['sy'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+  },
+  collect: {
+    desc: 'Collect rules from target tools → central',
+    args: '[rule...]',
+    aliases: ['col', 'c'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+  },
+  find: {
+    desc: 'Find rules by keyword (local + remote)',
+    args: '[query]',
+    aliases: ['fd'],
+    options: ['limit', 'offline', 'verbose'],
+  },
+  list: {
+    desc: 'List central rules',
+    aliases: ['ls'],
+    options: ['verbose'],
+  },
+  show: {
+    desc: 'Browse and inspect rules',
+    args: '[rule]',
+    aliases: ['info', 's'],
+    options: ['target', 'scope', 'global', 'local', 'cwd'],
+  },
+  validate: {
+    desc: 'Validate rule format and conflict risks',
+    aliases: ['check', 'vld'],
+    options: ['verbose'],
   },
 } as const satisfies Record<string, SubcommandDef>;
 
@@ -261,6 +317,10 @@ export const ROOT_ALIASES: Record<string, string> = {
   command: 'commands',
   cmd: 'commands',
   c: 'commands',
+  rules: 'rules',
+  rule: 'rules',
+  rl: 'rules',
+  r: 'rules',
   mcp: 'mcp',
   m: 'mcp',
 };

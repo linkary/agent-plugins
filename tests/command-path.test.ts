@@ -25,14 +25,20 @@ describe('command-path', () => {
 
   it('applies group-specific subcommand rules', () => {
     const result = resolveCommandPath(['agents', 'show']);
-    expect(result.error).toBe('Unknown action for agents: show');
-    expect(result.path).toEqual(['agents']);
+    expect(result.error).toBeNull();
+    expect(result.path).toEqual(['agents', 'show']);
   });
 
   it('resolves find for all groups', () => {
     expect(resolveCommandPath(['skills', 'find', 'foo']).path).toEqual(['skills', 'find']);
     expect(resolveCommandPath(['agents', 'find', 'foo']).path).toEqual(['agents', 'find']);
     expect(resolveCommandPath(['commands', 'find', 'foo']).path).toEqual(['commands', 'find']);
+    expect(resolveCommandPath(['rules', 'find', 'foo']).path).toEqual(['rules', 'find']);
     expect(resolveCommandPath(['mcp', 'find', 'foo']).path).toEqual(['mcp', 'find']);
+  });
+
+  it('resolves rules-specific actions', () => {
+    expect(resolveCommandPath(['rules', 'validate']).path).toEqual(['rules', 'validate']);
+    expect(resolveCommandPath(['rule', 'list']).path).toEqual(['rules', 'list']);
   });
 });

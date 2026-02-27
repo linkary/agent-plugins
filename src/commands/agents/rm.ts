@@ -2,9 +2,15 @@ import path from 'node:path';
 import { loadConfig } from '../../core/config.js';
 import { loadRegistry, saveRegistry, normalizeRepoUrl, removeAgentFromRepo } from '../../core/registry.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
-import { listCentralAgents, getCentralAgentPath } from '../../core/agent-store.js';
-import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
-import { getAdapters, getColoredLabel, resolveAdapter } from '../../targets/adapters.js';
+import { listCentralAgentItems, resolveCentralAgentPath } from '../../core/agent-store.js';
+import { ensureDir, pathExists } from '../../util/fs-utils.js';
+import { removeItem } from '../../util/item-utils.js';
+import {
+  filterAgentAdapters,
+  getAdapters,
+  getColoredLabel,
+  resolveAdapter,
+} from '../../targets/adapters.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { promptConfirm, promptMultiSelect, promptSelect } from '../../util/prompt.js';
 import { isProbablyGitUrl, isGitHubShorthand } from '../../util/git-utils.js';
@@ -15,6 +21,15 @@ import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
 const CENTRAL_VALUE = '__central__';
+
+async function resolveTargetAgentPath(destAgentsDir: string, name: string): Promise<string | null> {
+  const dirPath = path.join(destAgentsDir, name);
+  const mdPath = path.join(destAgentsDir, `${name}.md`);
+  const [dirExists, fileExists] = await Promise.all([pathExists(dirPath), pathExists(mdPath)]);
+  if (dirExists) return dirPath;
+  if (fileExists) return mdPath;
+  return null;
+}
 
 export async function cmdAgentsRemove(positionals: string[], flags: ParsedFlags, ctx: CliRunContext) {
   const args = positionals;
@@ -60,8 +75,8 @@ export async function cmdAgentsRemove(positionals: string[], flags: ParsedFlags,
   }
 
   for (const name of args) {
-    const agentPath = getCentralAgentPath(name);
-    if (!(await pathExists(agentPath))) {
+    const agentPath = await resolveCentralAgentPath(name);
+    if (!agentPath) {
       process.stderr.write(`Not found: ${name}\n`);
       continue;
     }
@@ -70,7 +85,7 @@ export async function cmdAgentsRemove(positionals: string[], flags: ParsedFlags,
       removed++;
       continue;
     }
-    await removeDir(agentPath);
+    await removeItem(agentPath);
     delete registry.agents[name];
     const repoDeleted = removeAgentFromRepo(registry, name);
     if (repoDeleted) process.stdout.write('(Removed empty repo record)\n');
@@ -83,7 +98,7 @@ export async function cmdAgentsRemove(positionals: string[], flags: ParsedFlags,
 }
 
 async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext): Promise<number> {
-  const adapters = getAdapters();
+  const adapters = filterAgentAdapters(getAdapters());
   const targetOptions = [
     { label: 'Central', value: CENTRAL_VALUE },
     ...adapters.map((a) => ({ label: getColoredLabel(a), value: a.id })),
@@ -107,7 +122,7 @@ async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext): Promis
 }
 
 async function interactiveRemoveCentral(ctx: CliRunContext, pendingToolTargets: string[]): Promise<void> {
-  const agents = await listCentralAgents();
+  const agents = await listCentralAgentItems();
   if (agents.length === 0) {
     process.stdout.write('(no central agents installed)\n');
     return;
@@ -115,7 +130,7 @@ async function interactiveRemoveCentral(ctx: CliRunContext, pendingToolTargets: 
 
   const selected = await promptMultiSelect({
     message: `Select central agents to remove (${agents.length} available):`,
-    options: agents.map((n) => ({ label: n, value: n })),
+    options: agents.map((agent) => ({ label: agent.name, value: agent.name })),
   });
   if (selected.length === 0) return;
 
@@ -130,9 +145,9 @@ async function interactiveRemoveCentral(ctx: CliRunContext, pendingToolTargets: 
   registry.agentRepos ??= {};
 
   for (const name of selected) {
-    const agentPath = getCentralAgentPath(name);
-    if (!(await pathExists(agentPath))) continue;
-    await removeDir(agentPath);
+    const agentPath = await resolveCentralAgentPath(name);
+    if (!agentPath) continue;
+    await removeItem(agentPath);
     delete registry.agents[name];
     removeAgentFromRepo(registry, name);
     process.stdout.write(`Removed: ${name}\n`);
@@ -193,7 +208,7 @@ async function promptCascadeDelete(
   const syncState = await loadSyncState();
   for (const c of toRemove) {
     if (!(await pathExists(c.path))) continue;
-    await removeDir(c.path);
+    await removeItem(c.path);
 
     const contextId = makeContextId({
       target: c.adapterId,
@@ -213,7 +228,7 @@ async function interactiveRemoveFromTools(
   flags: ParsedFlags,
   ctx: CliRunContext,
 ): Promise<void> {
-  const adapters = getAdapters();
+  const adapters = filterAgentAdapters(getAdapters());
   const selectedAdapters = adapters.filter((a) => toolTargetIds.includes(a.id));
 
   const config = await loadConfig();
@@ -250,7 +265,7 @@ async function interactiveRemoveFromTools(
   for (const idx of selected) {
     const agent = allAgents[Number(idx)]!;
     if (!(await pathExists(agent.path))) continue;
-    await removeDir(agent.path);
+    await removeItem(agent.path);
 
     const contextId = makeContextId({
       target: agent.adapterId,
@@ -266,7 +281,7 @@ async function interactiveRemoveFromTools(
 }
 
 async function interactiveRemoveFromTarget(flags: ParsedFlags, ctx: CliRunContext): Promise<number> {
-  const adapters = getAdapters();
+  const adapters = filterAgentAdapters(getAdapters());
   const config = await loadConfig();
   const selectedAdapters = await selectTargetAdapters({
     adapters,
@@ -309,7 +324,7 @@ async function interactiveRemoveFromTarget(flags: ParsedFlags, ctx: CliRunContex
   for (const idx of selected) {
     const agent = allAgents[Number(idx)]!;
     if (!(await pathExists(agent.path))) continue;
-    await removeDir(agent.path);
+    await removeItem(agent.path);
 
     const contextId = makeContextId({
       target: agent.adapterId,
@@ -366,8 +381,8 @@ async function removeByRepo(
 
   let removed = 0;
   for (const name of agentsToRemove) {
-    const agentPath = getCentralAgentPath(name);
-    if (!(await pathExists(agentPath))) {
+    const agentPath = await resolveCentralAgentPath(name);
+    if (!agentPath) {
       process.stderr.write(`Not found: ${name}\n`);
       continue;
     }
@@ -376,7 +391,7 @@ async function removeByRepo(
       removed++;
       continue;
     }
-    await removeDir(agentPath);
+    await removeItem(agentPath);
     delete registry.agents?.[name];
     removed++;
     process.stdout.write(`Removed: ${name}\n`);
@@ -403,8 +418,9 @@ async function removeFromTargetDirect(
   ctx: CliRunContext,
   dryRun: boolean,
 ): Promise<number> {
-  const adapters = getAdapters();
-  const adapter = resolveAdapter(targetFlag);
+  const adapters = filterAgentAdapters(getAdapters());
+  const resolved = resolveAdapter(targetFlag);
+  const adapter = resolved && adapters.find((candidate) => candidate.id === resolved.id);
   if (!adapter) {
     process.stderr.write(`Unknown target: ${targetFlag}\n`);
     process.stderr.write(`Known targets: ${adapters.map((a) => a.id).join(', ')}\n`);
@@ -435,8 +451,8 @@ async function removeFromTargetDirect(
   const context = syncState.contexts[contextId];
 
   for (const name of agents) {
-    const agentPath = path.join(destAgentsDir, name);
-    if (!(await pathExists(agentPath))) {
+    const agentPath = await resolveTargetAgentPath(destAgentsDir, name);
+    if (!agentPath) {
       process.stderr.write(`Not found in ${targetFlag}: ${name}\n`);
       continue;
     }
@@ -445,7 +461,7 @@ async function removeFromTargetDirect(
       removed++;
       continue;
     }
-    await removeDir(agentPath);
+    await removeItem(agentPath);
     if (context?.agents) delete context.agents[name];
     removed++;
     process.stdout.write(`Removed: ${name} (${getColoredLabel(adapter)})\n`);

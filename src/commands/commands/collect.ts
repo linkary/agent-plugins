@@ -13,7 +13,13 @@ import {
 } from '../../core/command-store.js';
 import { getCentralCommandsDir } from '../../util/apg-paths.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
-import { type Scope, getAdapters, getColoredLabel, type TargetAdapter } from '../../targets/adapters.js';
+import {
+  type Scope,
+  filterCommandAdapters,
+  getAdapters,
+  getColoredLabel,
+  type TargetAdapter,
+} from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { ANSI } from '../../util/ansi.js';
 import { resolveTargetContext } from '../../util/scope.js';
@@ -64,7 +70,7 @@ export async function cmdCommandsCollect(
   const scopeFlag = typeof flags.scope === 'string' ? flags.scope : undefined;
   const cwdFlag = typeof flags.cwd === 'string' ? flags.cwd : undefined;
 
-  const adapters = getAdapters();
+  const adapters = filterCommandAdapters(getAdapters());
   const selectedAdapters = await selectTargetAdapters({
     adapters,
     flags,
@@ -91,7 +97,7 @@ export async function cmdCommandsCollect(
 
     const targets = await detectTargetCommands(sourceDir);
     if (targets.length === 0) {
-      process.stdout.write(`(no commands found in ${getColoredLabel(adapter)} ${scope})\n`);
+      process.stderr.write(`${ANSI.dim}(no commands found in ${getColoredLabel(adapter)} ${scope})${ANSI.reset}\n`);
       continue;
     }
 
@@ -118,33 +124,11 @@ export async function cmdCommandsCollect(
   }
 
   if (allCommands.length === 0) {
-    process.stdout.write('No commands available to collect.\n');
+    process.stderr.write(`${ANSI.dim}No commands available to collect.${ANSI.reset}\n`);
     return 0;
   }
 
-  // Phase 2: 统一选择列表
-  let selectedCommands: CommandEntry[];
-  if (positionals.length > 0) {
-    selectedCommands = allCommands;
-  } else if (interactive && !force) {
-    const selectedKeys = await promptMultiSelect({
-      message: 'Select commands to collect:',
-      options: allCommands.map((s, i) => ({
-        label: `${s.name} (${getColoredLabel(s.adapter)})`,
-        value: String(i),
-      })),
-      defaultSelected: 'all',
-    });
-    if (selectedKeys.length === 0) {
-      process.stdout.write('No commands selected.\n');
-      return 0;
-    }
-    selectedCommands = selectedKeys.map((i) => allCommands[Number(i)]!);
-  } else {
-    selectedCommands = allCommands;
-  }
-
-  // Phase 3: 检测每个命令的状态
+  // Phase 2: 检测每个命令的状态 (skip selection — go directly to status analysis)
   type CollectStatus = 'new' | 'identical' | 'conflict' | 'overwrite';
   type CommandWithStatus = CommandEntry & {
     status: CollectStatus;
@@ -156,8 +140,9 @@ export async function cmdCommandsCollect(
 
   const seenNames = new Set<string>();
   const commandsWithStatus: CommandWithStatus[] = [];
+  const selectedCommands = allCommands;
 
-  process.stdout.write('Analyzing commands...\n');
+  process.stderr.write(`${ANSI.dim}Analyzing commands...${ANSI.reset}\n`);
 
   for (const c of selectedCommands) {
     const lowerName = c.name.toLowerCase();
@@ -212,8 +197,8 @@ export async function cmdCommandsCollect(
   const dedupCount = commandsWithStatus.filter((c) => c.isDuplicate).length;
 
   if (interactive && !force) {
-    process.stdout.write(
-      `\nPreview: ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.red}${conflictCount} conflict${ANSI.reset}, ` +
+    process.stderr.write(
+      `Preview: ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.red}${conflictCount} conflict${ANSI.reset}, ` +
         `${ANSI.gray}${identicalCount} identical${ANSI.reset}` +
         (dedupCount > 0 ? `, ${ANSI.dim}${dedupCount} duplicates${ANSI.reset}` : '') +
         '\n',
@@ -276,7 +261,7 @@ export async function cmdCommandsCollect(
     }
   }
 
-  if (conflicts.length > 0 && interactive) {
+  if (conflicts.length > 0 && interactive && !force) {
     process.stdout.write(`\n${ANSI.red}Conflicts detected for ${conflicts.length} command(s).${ANSI.reset}\n`);
 
     const batchAction = await promptChoice({

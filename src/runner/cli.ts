@@ -16,6 +16,7 @@ import { cmdAgentsList } from '../commands/agents/list.js';
 import { cmdAgentsRemove } from '../commands/agents/rm.js';
 import { cmdAgentsSync } from '../commands/agents/sync.js';
 import { cmdAgentsUpdate } from '../commands/agents/update.js';
+import { cmdAgentsShow } from '../commands/agents/show.js';
 import { cmdCommandsAdd } from '../commands/commands/add.js';
 import { cmdCommandsCollect } from '../commands/commands/collect.js';
 import { cmdCommandsFind } from '../commands/commands/find.js';
@@ -24,6 +25,14 @@ import { cmdCommandsRemove } from '../commands/commands/rm.js';
 import { cmdCommandsSync } from '../commands/commands/sync.js';
 import { cmdCommandsUpdate } from '../commands/commands/update.js';
 import { cmdCommandsShow } from '../commands/commands/show.js';
+import { cmdRulesAdd } from '../commands/rules/add.js';
+import { cmdRulesCollect } from '../commands/rules/collect.js';
+import { cmdRulesFind } from '../commands/rules/find.js';
+import { cmdRulesList } from '../commands/rules/list.js';
+import { cmdRulesRemove } from '../commands/rules/rm.js';
+import { cmdRulesShow } from '../commands/rules/show.js';
+import { cmdRulesSync } from '../commands/rules/sync.js';
+import { cmdRulesValidate } from '../commands/rules/validate.js';
 import { cmdMcpAdd } from '../commands/mcp/add.js';
 import { cmdMcpCollect } from '../commands/mcp/collect.js';
 import { cmdMcpFind } from '../commands/mcp/find.js';
@@ -73,6 +82,10 @@ export async function runCli(argv: string[], ctx: CliRunContext): Promise<number
 
   if (group === 'mcp') {
     return await dispatchMcp(cmd, positionals, flags, ctx);
+  }
+
+  if (group === 'rules') {
+    return await dispatchRules(cmd, positionals, flags, ctx);
   }
 
   process.stderr.write(`Unknown group: ${group}\n\n`);
@@ -161,6 +174,8 @@ async function dispatchAgents(
       return await cmdAgentsFind(positionals, flags, ctx);
     case 'list':
       return await cmdAgentsList(positionals, flags, ctx);
+    case 'show':
+      return await cmdAgentsShow(positionals, flags, ctx);
     case 'help':
     default:
       process.stdout.write(formatHelp('agents'));
@@ -194,6 +209,36 @@ async function dispatchMcp(
     case 'help':
     default:
       process.stdout.write(formatHelp('mcp'));
+      return cmd === 'help' ? 0 : 1;
+  }
+}
+
+async function dispatchRules(
+  cmd: string,
+  positionals: string[],
+  flags: Record<string, string | boolean>,
+  ctx: CliRunContext,
+): Promise<number> {
+  switch (cmd) {
+    case 'add':
+      return await cmdRulesAdd(positionals, flags, ctx);
+    case 'rm':
+      return await cmdRulesRemove(positionals, flags, ctx);
+    case 'sync':
+      return await cmdRulesSync(positionals, flags, ctx);
+    case 'collect':
+      return await cmdRulesCollect(positionals, flags, ctx);
+    case 'find':
+      return await cmdRulesFind(positionals, flags, ctx);
+    case 'list':
+      return await cmdRulesList(positionals, flags, ctx);
+    case 'show':
+      return await cmdRulesShow(positionals, flags, ctx);
+    case 'validate':
+      return await cmdRulesValidate(positionals, flags, ctx);
+    case 'help':
+    default:
+      process.stdout.write(formatHelp('rules'));
       return cmd === 'help' ? 0 : 1;
   }
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'bun:test';
-import { getAdapters, resolveAdapter } from '../src/targets/adapters.js';
+import {
+  filterAgentAdapters,
+  filterCommandAdapters,
+  filterRuleAdapters,
+  getAdapters,
+  resolveAdapter,
+} from '../src/targets/adapters.js';
 import path from 'node:path';
 
 describe('adapters', () => {
@@ -120,14 +126,45 @@ describe('adapters', () => {
     describe('antigravity', () => {
       const adapter = resolveAdapter('antigravity')!;
 
-      it('should resolve global path to ~/.gemini/antigravity/global_skills', () => {
+      it('should resolve global path to ~/.gemini/antigravity/skills', () => {
         const dir = adapter.resolveSkillsDir({ scope: 'global', projectRoot, homeDir });
-        expect(dir).toBe(path.join(homeDir, '.gemini', 'antigravity', 'global_skills'));
+        expect(dir).toBe(path.join(homeDir, '.gemini', 'antigravity', 'skills'));
       });
 
       it('should resolve local path to .agent/skills', () => {
         const dir = adapter.resolveSkillsDir({ scope: 'local', projectRoot, homeDir });
         expect(dir).toBe(path.join(projectRoot, '.agent', 'skills'));
+      });
+
+      it('should return empty agents path (unsupported)', () => {
+        expect(adapter.resolveAgentsDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+        expect(adapter.resolveAgentsDir({ scope: 'local', projectRoot, homeDir })).toBe('');
+      });
+
+      it('should resolve commands path to workflows dirs', () => {
+        expect(adapter.resolveCommandsDir({ scope: 'global', projectRoot, homeDir })).toBe(
+          path.join(homeDir, '.gemini', 'antigravity', 'global_workflows'),
+        );
+        expect(adapter.resolveCommandsDir({ scope: 'local', projectRoot, homeDir })).toBe(
+          path.join(projectRoot, '.agent', 'workflows'),
+        );
+      });
+
+      it('should return empty global rules path but valid local rules path', () => {
+        expect(adapter.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+        expect(adapter.resolveRulesDir({ scope: 'local', projectRoot, homeDir })).toBe(
+          path.join(projectRoot, '.agent', 'rules'),
+        );
+      });
+
+      it('should resolve MCP config for global only', () => {
+        const globalSpec = adapter.resolveMcpConfig?.({ scope: 'global', projectRoot, homeDir });
+        const localSpec = adapter.resolveMcpConfig?.({ scope: 'local', projectRoot, homeDir });
+        expect(globalSpec?.configPath).toBe(
+          path.join(homeDir, '.gemini', 'antigravity', 'mcp_config.json'),
+        );
+        expect(globalSpec?.serversKey).toBe('mcpServers');
+        expect(localSpec).toBeNull();
       });
     });
 
@@ -212,12 +249,26 @@ describe('adapters', () => {
         );
       });
 
-      it('should resolve MCP config paths', () => {
+      it('should resolve MCP config paths (platform-aware)', () => {
         const globalSpec = adapter.resolveMcpConfig?.({ scope: 'global', projectRoot, homeDir });
         const localSpec = adapter.resolveMcpConfig?.({ scope: 'local', projectRoot, homeDir });
-        expect(globalSpec?.configPath).toBe(path.join(homeDir, '.qoder', 'mcp.json'));
-        expect(localSpec?.configPath).toBe(path.join(projectRoot, '.qoder', 'mcp.json'));
+
+        // Global path is platform-dependent (macOS in dev/CI)
+        const expectedAppData =
+          process.platform === 'darwin'
+            ? path.join(homeDir, 'Library', 'Application Support', 'Qoder')
+            : process.platform === 'win32'
+              ? path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'Qoder')
+              : path.join(homeDir, '.config', 'Qoder');
+
+        expect(globalSpec?.configPath).toBe(
+          path.join(expectedAppData, 'SharedClientCache', 'mcp.json'),
+        );
         expect(globalSpec?.serversKey).toBe('mcpServers');
+
+        // Local path is always <project>/.mcp.json
+        expect(localSpec?.configPath).toBe(path.join(projectRoot, '.mcp.json'));
+        expect(localSpec?.serversKey).toBe('mcpServers');
       });
     });
   });
@@ -241,6 +292,73 @@ describe('adapters', () => {
       expect(adapter.resolveAgentsDir({ scope: 'local', projectRoot, homeDir })).toBe(
         path.join(projectRoot, '.opencode', 'agents'),
       );
+    });
+
+    it('should return empty agents path for skills-only targets', () => {
+      expect(resolveAdapter('openskills')!.resolveAgentsDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+      expect(resolveAdapter('agents')!.resolveAgentsDir({ scope: 'local', projectRoot, homeDir })).toBe('');
+    });
+  });
+
+  describe('resolveCommandsDir', () => {
+    it('should return empty command paths for skills-only targets', () => {
+      expect(resolveAdapter('openskills')!.resolveCommandsDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+      expect(resolveAdapter('agents')!.resolveCommandsDir({ scope: 'local', projectRoot, homeDir })).toBe('');
+    });
+  });
+
+  describe('resolveRulesDir', () => {
+    it('should resolve cursor rule paths', () => {
+      const adapter = resolveAdapter('cursor')!;
+      // Global rules handled by GlobalRulesStore (SQLite), not directory
+      expect(adapter.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+      expect(adapter.resolveRulesDir({ scope: 'local', projectRoot, homeDir })).toBe(
+        path.join(projectRoot, '.cursor', 'rules'),
+      );
+    });
+
+    it('should resolve claude-code rule paths', () => {
+      const adapter = resolveAdapter('claude-code')!;
+      // Global rules handled by GlobalRulesStore (CLAUDE.md), not directory
+      expect(adapter.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+      expect(adapter.resolveRulesDir({ scope: 'local', projectRoot, homeDir })).toBe(
+        path.join(projectRoot, '.claude', 'rules'),
+      );
+    });
+
+    it('should resolve qoder rule paths', () => {
+      const adapter = resolveAdapter('qoder')!;
+      expect(adapter.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe(
+        path.join(homeDir, '.qoder', 'rules'),
+      );
+      expect(adapter.resolveRulesDir({ scope: 'local', projectRoot, homeDir })).toBe(
+        path.join(projectRoot, '.qoder', 'rules'),
+      );
+    });
+
+    it('should return empty rule paths for skills-only targets', () => {
+      expect(resolveAdapter('openskills')!.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+      expect(resolveAdapter('agents')!.resolveRulesDir({ scope: 'local', projectRoot, homeDir })).toBe('');
+    });
+  });
+
+  describe('group filters', () => {
+    it('should exclude skills-only targets from non-skill groups', () => {
+      const all = getAdapters();
+      const commands = filterCommandAdapters(all).map((adapter) => adapter.id);
+      const agents = filterAgentAdapters(all).map((adapter) => adapter.id);
+      const rules = filterRuleAdapters(all).map((adapter) => adapter.id);
+      // openskills and agents are skills-only
+      expect(commands).not.toContain('openskills');
+      expect(commands).not.toContain('agents');
+      expect(agents).not.toContain('openskills');
+      expect(agents).not.toContain('agents');
+      expect(rules).not.toContain('openskills');
+      expect(rules).not.toContain('agents');
+      // antigravity does not support agents sync, but DOES support commands (workflows) and rules
+      expect(commands).toContain('antigravity');
+      expect(agents).not.toContain('antigravity');
+      expect(rules).toContain('antigravity');
     });
   });
 });

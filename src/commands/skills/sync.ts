@@ -5,7 +5,8 @@ import { listCentralSkills, getCentralSkillPath } from '../../core/skill-store.j
 import { ANSI } from '../../util/ansi.js';
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { computeDirHash } from '../../util/hash-dir.js';
-import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
+import { promptMultiSelect } from '../../util/prompt.js';
+import { createConflictResolver } from '../../util/sync-conflict.js';
 import { getAdapters, getColoredLabel, type Scope, type TargetAdapter } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { getCentralSkillsDir } from '../../util/apg-paths.js';
@@ -14,6 +15,14 @@ import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-sta
 import { loadConfig } from '../../core/config.js';
 import { copyDir } from '../../util/copy-dir.js';
 import { fsRenameOrCopy, timestampId } from '../../util/sync-utils.js';
+import {
+  countByStatus,
+  formatCountSummary,
+  formatScopeTitle,
+  formatStatusLabel,
+  groupEntriesByName,
+  type StatusStyle,
+} from '../../util/sync-preview.js';
 
 type SyncEntry = {
   name: string;
@@ -25,39 +34,12 @@ type SyncEntry = {
 };
 
 type EntryStatus = 'new' | 'replace' | 'same';
-
-function groupEntriesByName<T extends { name: string }>(entries: T[]): Map<string, T[]> {
-  const map = new Map<string, T[]>();
-  for (const entry of entries) {
-    const list = map.get(entry.name);
-    if (list) list.push(entry);
-    else map.set(entry.name, [entry]);
-  }
-  return map;
-}
-
-function formatStatusLabel(status: EntryStatus): string {
-  if (status === 'new') return `${ANSI.green}new${ANSI.reset}`;
-  if (status === 'replace') return `${ANSI.yellow}replace${ANSI.reset}`;
-  return `${ANSI.dim}same${ANSI.reset}`;
-}
-
-function formatCountSummary(counts: { newCount: number; replaceCount: number; sameCount: number }): string {
-  const parts: string[] = [];
-  if (counts.newCount > 0) parts.push(`${ANSI.green}${counts.newCount} new${ANSI.reset}`);
-  if (counts.replaceCount > 0) parts.push(`${ANSI.yellow}${counts.replaceCount} replace${ANSI.reset}`);
-  if (counts.sameCount > 0) parts.push(`${ANSI.dim}${counts.sameCount} same${ANSI.reset}`);
-  return parts.join(', ');
-}
-
-function formatScopeTitle(scopes: Scope[]): string {
-  const uniqueScopes = [...new Set(scopes)];
-  if (uniqueScopes.length === 1) {
-    if (uniqueScopes[0] === 'global') return `${ANSI.bold}${ANSI.brightBlue}global${ANSI.reset}`;
-    return `${ANSI.bold}${ANSI.brightMagenta}local${ANSI.reset}`;
-  }
-  return `${ANSI.bold}${ANSI.yellow}mixed${ANSI.reset}`;
-}
+const ENTRY_STATUS_ORDER = ['new', 'replace', 'same'] as const;
+const ENTRY_STATUS_STYLES: StatusStyle<EntryStatus> = {
+  new: { color: 'green' },
+  replace: { color: 'yellow' },
+  same: { color: 'dim' },
+};
 
 export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags, _ctx: CliRunContext) {
   const positionals = _positionals;
@@ -152,32 +134,29 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   if (positionals.length > 0) {
     finalEntries = entriesWithStatus;
   } else if (interactive && !force) {
-    const replaceCount = entriesWithStatus.filter((s) => s.status === 'replace').length;
-    const newCount = entriesWithStatus.filter((s) => s.status === 'new').length;
-    const sameCount = entriesWithStatus.filter((s) => s.status === 'same').length;
-    process.stdout.write(`\nPreview: ${formatCountSummary({ newCount, replaceCount, sameCount })}\n`);
+    const previewCounts = countByStatus(entriesWithStatus, ENTRY_STATUS_ORDER);
+    process.stdout.write(`\nPreview: ${formatCountSummary(previewCounts, ENTRY_STATUS_ORDER, ENTRY_STATUS_STYLES)}\n`);
 
     const grouped = groupEntriesByName(entriesWithStatus);
     const groupedItems = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
-    const defaultSelected = groupedItems
-      .filter(([, entries]) => entries.some((entry) => entry.status === 'new'))
-      .map(([name]) => name);
-
     const selectedNames = await promptMultiSelect({
       message: `Confirm skills to sync (${scopeTitle}, source: ${srcBaseDir}):`,
       options: groupedItems.map(([name, entries]) => {
-        const replace = entries.filter((entry) => entry.status === 'replace').length;
-        const fresh = entries.filter((entry) => entry.status === 'new').length;
-        const same = entries.filter((entry) => entry.status === 'same').length;
-        const status = formatCountSummary({ newCount: fresh, replaceCount: replace, sameCount: same });
+        const status = formatCountSummary(
+          countByStatus(entries, ENTRY_STATUS_ORDER),
+          ENTRY_STATUS_ORDER,
+          ENTRY_STATUS_STYLES,
+        );
         return {
           label: `${name} -> ${entries
-            .map((entry) => `${getColoredLabel(entry.adapter)} (${formatStatusLabel(entry.status)})`)
+            .map((entry) => `${getColoredLabel(entry.adapter)} (${formatStatusLabel(entry.status, ENTRY_STATUS_STYLES)})`)
             .join(', ')} [${status}]`,
           value: name,
         };
       }),
-      defaultSelected,
+      defaultSelected: groupedItems
+        .filter(([, entries]) => entries.some((e) => e.status === 'replace'))
+        .map(([name]) => name),
       searchable: true,
     });
 
@@ -191,7 +170,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
     // Non-interactive: show preview
     process.stdout.write(`\nSync ${entriesWithStatus.length} skill(s) from ${srcBaseDir} (${scopeTitle}):\n`);
     for (const s of entriesWithStatus) {
-      const status = formatStatusLabel(s.status);
+      const status = formatStatusLabel(s.status, ENTRY_STATUS_STYLES);
       process.stdout.write(`  ${s.name} -> ${getColoredLabel(s.adapter)} [${status}]\n`);
     }
     finalEntries = entriesWithStatus;
@@ -201,7 +180,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
 
   // Phase 4: Execute sync
   const syncState = await loadSyncState();
-  let conflictMode: 'ask' | 'overwrite' | 'backup' | 'skip' = force ? 'overwrite' : 'ask';
+  const conflictResolver = createConflictResolver({ interactive, force });
 
   // Ensure all destination directories exist
   const destDirs = new Set(entriesToExecute.map((e) => path.dirname(e.destDir)));
@@ -225,7 +204,8 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
       projectRoot: scope === 'local' ? projectRoot : undefined,
     });
     const context =
-      syncState.contexts[contextId] ?? ({ skills: {} as Record<string, { hash: string; syncedAt: string }> } as const);
+      syncState.contexts[contextId] ?? ({ skills: {} as Record<string, { hash: string; syncedAt: string }> });
+    if (!context.skills) context.skills = {};
     syncState.contexts[contextId] = context;
 
     const srcHash = await computeDirHash(srcDir, { ignoreNames: ['.git'] });
@@ -250,47 +230,20 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
     }
 
     const last = context.skills[name];
-    const isManagedClean = last?.hash === destHash;
-    let mode = conflictMode;
-    if (mode === 'ask' && isManagedClean) {
-      mode = 'overwrite';
-    }
+    const action = await conflictResolver.resolve(name, adapter, last?.hash, destHash);
+    if (action === 'quit') return 1;
 
-    if (mode === 'ask') {
-      if (!interactive) {
-        process.stderr.write(`Conflict detected for ${name}. Re-run with --force or in an interactive terminal.\n`);
-        return 1;
-      }
-      const choice = await promptChoice({
-        message: `Conflict for ${name} in ${getColoredLabel(adapter)}.`,
-        options: [
-          { key: 'o', label: 'Overwrite' },
-          { key: 'b', label: 'Backup & overwrite' },
-          { key: 's', label: 'Skip' },
-          { key: 'O', label: 'Overwrite all' },
-          { key: 'B', label: 'Backup all' },
-          { key: 'S', label: 'Skip all' },
-          { key: 'q', label: 'Quit' },
-        ],
-      });
-      if (choice === 'q') return 1;
-      if (choice === 'O') conflictMode = 'overwrite';
-      if (choice === 'B') conflictMode = 'backup';
-      if (choice === 'S') conflictMode = 'skip';
-      mode = choice === 'o' || choice === 'O' ? 'overwrite' : choice === 'b' || choice === 'B' ? 'backup' : 'skip';
-    }
-
-    if (mode === 'skip') {
+    if (action === 'skip') {
       process.stdout.write(`Skipped: ${name}\n`);
       continue;
     }
 
     if (dryRun) {
-      process.stdout.write(`[dry-run] ${mode} ${name} -> ${destDir}\n`);
+      process.stdout.write(`[dry-run] ${action} ${name} -> ${destDir}\n`);
       continue;
     }
 
-    if (mode === 'backup') {
+    if (action === 'backup') {
       const backupDir = path.join(path.dirname(destDir), `${name}.bak-${timestampId()}`);
       await fsRenameOrCopy(destDir, backupDir);
     } else {

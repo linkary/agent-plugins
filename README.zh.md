@@ -19,6 +19,8 @@
 - `sync`：central -> 目标工具（单向复制，支持冲突处理）
 - `collect`：目标工具 -> central（用于把分散在各处的条目收集回来，支持冲突处理）
 - Commands 支持两种形式：**file-form**（单个 `.md` 文件）和 **directory-form**（包含多个文件的目录）
+- Rules 使用统一的 prompt-rule 模型；`sync/collect` 会在 Cursor（`.mdc`）与 Claude/Qoder（`.md`）之间自动转换
+- MCP 的 `sync/collect` 也使用 target-aware 转换；不支持的传输/字段会在写入前标记为 `incompatible` 或 `lossy`
 
 可通过环境变量覆盖默认目录：
 
@@ -49,7 +51,7 @@ node dist/cli.mjs --help
 
 ## 命令概览
 
-`skills`、`agents` 和 `commands` 共用相同生命周期子命令（`add/rm/update/sync/collect/list`）。
+`skills`、`agents`、`commands` 与 `rules` 共用生命周期子命令（`add/rm/sync/collect/list/find`）。
 
 ### Skills
 
@@ -134,6 +136,41 @@ ap agents collect [<agent>...] --target <target> [--scope local|global] [--all] 
 ap agents rm [<agent>...] [--target <...>] [--scope local|global] [--dry-run]
 ```
 
+### Rules
+
+```bash
+# 列出 central rules
+ap rules list
+
+# 查找 rules（本地 + 在线）
+ap rules find [query]
+
+# 浏览与查看 rules（交互式 TUI）
+ap rules show [rule]
+ap rules show --target cursor --scope local
+
+# 添加 rule（git / 本地路径 / 单文件）
+ap rules add <git-url|local-path|rule-file> [--name <rule>] [--ref <ref>] [--force]
+
+# 同步 central -> 目标工具
+ap rules sync [<rule>...] --target <target> [--scope local|global] [--dry-run] [--force]
+
+# 从目标工具收集 -> central
+ap rules collect [<rule>...] --target <target> [--scope local|global] [--dry-run] [--force]
+
+# 删除 rule
+ap rules rm [<rule>...] [--target <...>] [--scope local|global] [--dry-run]
+
+# 校验规则（空文件/同名冲突）
+ap rules validate
+```
+
+说明：`ap rules sync/collect/rm --target cursor --scope global` 现在会操作 Cursor **User Rules（Settings 文本）**，并使用受控标记块管理。  
+默认存储后端：
+
+- `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`（`ItemTable[aicontext.personalContext]`）
+- 可选覆盖（自动化/测试）：`AP_CURSOR_USER_RULES_FILE=/path/to/text-file`
+
 ### 别名
 
 根命令组支持简写：
@@ -143,6 +180,7 @@ ap agents rm [<agent>...] [--target <...>] [--scope local|global] [--dry-run]
 | `skills`   | `skill`, `sk`, `s`    |
 | `agents`   | `ag`                  |
 | `commands` | `command`, `cmd`, `c` |
+| `rules`    | `rule`, `rl`          |
 
 子命令也支持简写（按位置解析）：
 
@@ -191,12 +229,38 @@ ap c show         # commands show
 | OpenCode             | `<project>/.opencode/commands/` | `~/.opencode/commands/`               |
 | Qoder                | `<project>/.qoder/commands/`    | `~/.qoder/commands/`                  |
 
+### Rules 路径
+
+| 目标                 | local                      | global                                |
+| -------------------- | -------------------------- | ------------------------------------- |
+| Cursor               | `<project>/.cursor/rules/` | `~/.cursor/rules/`                    |
+| Gemini CLI           | `<project>/.gemini/rules/` | `~/.gemini/rules/`                    |
+| Codex                | `<project>/.codex/rules/`  | `$CODEX_HOME/rules/`                  |
+| Claude Code          | `<project>/.claude/rules/` | `~/.claude/rules/`                    |
+| Antigravity          | `<project>/.agent/rules/`  | `~/.gemini/antigravity/global_rules/` |
+| Openskills           | `<project>/.agent/rules/`  | `~/.agent/rules/`                     |
+| Agents (Vercel Labs) | `<project>/.agents/rules/` | `~/.agents/rules/`                    |
+| OpenCode             | `<project>/.opencode/rules/` | `~/.opencode/rules/`                |
+| Qoder                | `<project>/.qoder/rules/`    | `~/.qoder/rules/`                   |
+
+Cursor 特殊说明（global）：
+
+- 对 `cursor` + `global` 执行 `sync/collect/rm` 时，会使用 Cursor User Rules 文本存储，而不是仅依赖 `~/.cursor/rules/`。
+
+### Rules 兼容性
+
+- 支持 prompt-rule 并带转换：`cursor`、`claude-code`、`qoder`
+- 对 prompt-rule 判定为不兼容并跳过：
+  - `codex`（使用执行策略 `.rules`）
+  - `gemini`、`antigravity`、`openskills`、`agents`、`opencode`
+
 ## 配置与状态文件
 
 - 配置：`$APG_HOME/config.json`
   - 每个 target 的 `defaultScope`（local/global）
   - 每个 target 的 `include`（要同步的 skills；支持 `["*"]` 表示全部）
   - 每个 target 的 `includeCommands`（要同步的 commands；支持 `["*"]` 表示全部）
+  - 每个 target 的 `includeRules`（要同步的 rules；支持 `["*"]` 表示全部）
 - 状态：`$APG_HOME/sync-state.json`
   - 记录每个 target/scope（以及 local 的 projectRoot）上次对齐的 hash，用于判断"目标端是否被手动修改过"并优化冲突处理
 
