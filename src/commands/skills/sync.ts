@@ -153,6 +153,9 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
           value: name,
         };
       }),
+      defaultSelected: groupedItems
+        .filter(([, entries]) => entries.some((e) => e.status === 'replace'))
+        .map(([name]) => name),
       searchable: true,
     });
 

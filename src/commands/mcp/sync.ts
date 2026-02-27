@@ -185,6 +185,9 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
           value: name,
         };
       }),
+      defaultSelected: groupedItems
+        .filter(([, entries]) => entries.some((e) => e.status === 'replace'))
+        .map(([name]) => name),
     });
 
     if (selectedNames.length === 0) {

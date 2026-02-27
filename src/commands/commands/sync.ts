@@ -181,6 +181,9 @@ export async function cmdCommandsSync(
           value: name,
         };
       }),
+      defaultSelected: groupedItems
+        .filter(([, entries]) => entries.some((e) => e.status === 'replace'))
+        .map(([name]) => name),
       searchable: true,
     });
 
