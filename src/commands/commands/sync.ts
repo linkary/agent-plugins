@@ -10,7 +10,8 @@ import { getCentralCommandsDir } from '../../util/apg-paths.js';
 import { ANSI } from '../../util/ansi.js';
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { computeCommandHash } from '../../util/item-utils.js';
-import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
+import { promptMultiSelect } from '../../util/prompt.js';
+import { createConflictResolver } from '../../util/sync-conflict.js';
 import {
   filterCommandAdapters,
   getAdapters,
@@ -204,7 +205,7 @@ export async function cmdCommandsSync(
 
   // Phase 4: 执行同步
   const syncState = await loadSyncState();
-  let conflictMode: 'ask' | 'overwrite' | 'backup' | 'skip' = force ? 'overwrite' : 'ask';
+  const conflictResolver = createConflictResolver({ interactive, force });
 
   if (!dryRun) {
     for (const dir of new Set(finalEntries.map((e) => e.destCommandsDir))) {
@@ -286,50 +287,21 @@ export async function cmdCommandsSync(
     }
 
     const last = context.commands[name];
-    const isManagedClean = last?.hash === destHash;
-    let mode = conflictMode;
-    if (mode === 'ask' && isManagedClean) {
-      mode = 'overwrite';
-    }
+    const action = await conflictResolver.resolve(name, adapter, last?.hash, destHash);
+    if (action === 'quit') return 1;
 
-    if (mode === 'ask') {
-      if (!interactive) {
-        process.stderr.write(
-          `Conflict detected for ${name}. Re-run with --force or in an interactive terminal.\n`,
-        );
-        return 1;
-      }
-      const choice = await promptChoice({
-        message: `Conflict for ${name} in ${getColoredLabel(adapter)}.`,
-        options: [
-          { key: 'o', label: 'Overwrite' },
-          { key: 'b', label: 'Backup & overwrite' },
-          { key: 's', label: 'Skip' },
-          { key: 'O', label: 'Overwrite all' },
-          { key: 'B', label: 'Backup all' },
-          { key: 'S', label: 'Skip all' },
-          { key: 'q', label: 'Quit' },
-        ],
-      });
-      if (choice === 'q') return 1;
-      if (choice === 'O') conflictMode = 'overwrite';
-      if (choice === 'B') conflictMode = 'backup';
-      if (choice === 'S') conflictMode = 'skip';
-      mode = choice === 'o' || choice === 'O' ? 'overwrite' : choice === 'b' || choice === 'B' ? 'backup' : 'skip';
-    }
-
-    if (mode === 'skip') {
+    if (action === 'skip') {
       process.stdout.write(`Skipped: ${name}\n`);
       continue;
     }
 
     if (dryRun) {
-      process.stdout.write(`[dry-run] ${mode} ${name} -> ${destCommandsDir}\n`);
+      process.stdout.write(`[dry-run] ${action} ${name} -> ${destCommandsDir}\n`);
       continue;
     }
 
     const ts = timestampId();
-    if (mode === 'backup') {
+    if (action === 'backup') {
       const backupDir = path.join(destCommandsDir, `${name}.bak-${ts}`);
       await ensureDir(backupDir);
       await fs.copyFile(targetMd, path.join(backupDir, `${name}.md`));

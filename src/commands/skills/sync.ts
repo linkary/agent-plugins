@@ -5,7 +5,8 @@ import { listCentralSkills, getCentralSkillPath } from '../../core/skill-store.j
 import { ANSI } from '../../util/ansi.js';
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { computeDirHash } from '../../util/hash-dir.js';
-import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
+import { promptMultiSelect } from '../../util/prompt.js';
+import { createConflictResolver } from '../../util/sync-conflict.js';
 import { getAdapters, getColoredLabel, type Scope, type TargetAdapter } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { getCentralSkillsDir } from '../../util/apg-paths.js';
@@ -179,7 +180,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
 
   // Phase 4: Execute sync
   const syncState = await loadSyncState();
-  let conflictMode: 'ask' | 'overwrite' | 'backup' | 'skip' = force ? 'overwrite' : 'ask';
+  const conflictResolver = createConflictResolver({ interactive, force });
 
   // Ensure all destination directories exist
   const destDirs = new Set(entriesToExecute.map((e) => path.dirname(e.destDir)));
@@ -229,47 +230,20 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
     }
 
     const last = context.skills[name];
-    const isManagedClean = last?.hash === destHash;
-    let mode = conflictMode;
-    if (mode === 'ask' && isManagedClean) {
-      mode = 'overwrite';
-    }
+    const action = await conflictResolver.resolve(name, adapter, last?.hash, destHash);
+    if (action === 'quit') return 1;
 
-    if (mode === 'ask') {
-      if (!interactive) {
-        process.stderr.write(`Conflict detected for ${name}. Re-run with --force or in an interactive terminal.\n`);
-        return 1;
-      }
-      const choice = await promptChoice({
-        message: `Conflict for ${name} in ${getColoredLabel(adapter)}.`,
-        options: [
-          { key: 'o', label: 'Overwrite' },
-          { key: 'b', label: 'Backup & overwrite' },
-          { key: 's', label: 'Skip' },
-          { key: 'O', label: 'Overwrite all' },
-          { key: 'B', label: 'Backup all' },
-          { key: 'S', label: 'Skip all' },
-          { key: 'q', label: 'Quit' },
-        ],
-      });
-      if (choice === 'q') return 1;
-      if (choice === 'O') conflictMode = 'overwrite';
-      if (choice === 'B') conflictMode = 'backup';
-      if (choice === 'S') conflictMode = 'skip';
-      mode = choice === 'o' || choice === 'O' ? 'overwrite' : choice === 'b' || choice === 'B' ? 'backup' : 'skip';
-    }
-
-    if (mode === 'skip') {
+    if (action === 'skip') {
       process.stdout.write(`Skipped: ${name}\n`);
       continue;
     }
 
     if (dryRun) {
-      process.stdout.write(`[dry-run] ${mode} ${name} -> ${destDir}\n`);
+      process.stdout.write(`[dry-run] ${action} ${name} -> ${destDir}\n`);
       continue;
     }
 
-    if (mode === 'backup') {
+    if (action === 'backup') {
       const backupDir = path.join(path.dirname(destDir), `${name}.bak-${timestampId()}`);
       await fsRenameOrCopy(destDir, backupDir);
     } else {

@@ -9,7 +9,8 @@ import { getAdapters, getColoredLabel, type Scope, type TargetAdapter } from '..
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { readMcpServers, writeMcpServer } from '../../util/mcp-config-io.js';
-import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
+import { promptMultiSelect } from '../../util/prompt.js';
+import { createConflictResolver } from '../../util/sync-conflict.js';
 import { ANSI } from '../../util/ansi.js';
 import { getCentralMcpDir } from '../../util/apg-paths.js';
 import { filterMcpAdapters } from './manage-utils.js';
@@ -206,7 +207,7 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
 
   // Phase 4: 执行同步
   const syncState = await loadSyncState();
-  let conflictMode: 'ask' | 'overwrite' | 'skip' = force ? 'overwrite' : 'ask';
+  const conflictResolver = createConflictResolver({ interactive, force, supportBackup: false });
 
   for (const entry of finalEntries) {
     const { name, targetDef, targetHash, lossy, lossyReasons, mcpSpec, adapter, scope, projectRoot, existingDef } = entry;
@@ -250,34 +251,10 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
 
     // 冲突处理
     const lastSync = context.mcp[name];
-    const isManagedClean = lastSync?.hash === existingHash;
-    let mode = conflictMode;
-    if (mode === 'ask' && isManagedClean) {
-      mode = 'overwrite';
-    }
+    const action = await conflictResolver.resolve(name, adapter, lastSync?.hash, existingHash);
+    if (action === 'quit') return 1;
 
-    if (mode === 'ask') {
-      if (!interactive) {
-        process.stderr.write(`Conflict for ${name}. Re-run with --force or in an interactive terminal.\n`);
-        return 1;
-      }
-      const choice = await promptChoice({
-        message: `Conflict for ${name} in ${getColoredLabel(adapter)}.`,
-        options: [
-          { key: 'o', label: 'Overwrite' },
-          { key: 's', label: 'Skip' },
-          { key: 'O', label: 'Overwrite all' },
-          { key: 'S', label: 'Skip all' },
-          { key: 'q', label: 'Quit' },
-        ],
-      });
-      if (choice === 'q') return 1;
-      if (choice === 'O') conflictMode = 'overwrite';
-      if (choice === 'S') conflictMode = 'skip';
-      mode = choice === 'o' || choice === 'O' ? 'overwrite' : 'skip';
-    }
-
-    if (mode === 'skip') {
+    if (action === 'skip') {
       process.stdout.write(`Skipped: ${name}\n`);
       continue;
     }
