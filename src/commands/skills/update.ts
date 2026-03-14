@@ -137,24 +137,42 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
 
     // Execute updates
     const affectedRepos = new Set<string>();
-    
+    let failedUpdates = 0;
+    let missingDuringUpdate = 0;
+
     for (const update of toUpdate) {
       const { skillName, srcDir, repoKey } = update;
       const destDir = getCentralSkillPath(skillName);
-      
+
+      if (!(await pathExists(srcDir)) || !(await isSkillDir(srcDir))) {
+        process.stderr.write(
+          `${ANSI.red}Missing in repo (skipped): ${skillName}${ANSI.reset}\n`,
+        );
+        missingDuringUpdate++;
+        continue;
+      }
+
       if (dryRun) {
         process.stdout.write(`[dry-run] update ${skillName}\n`);
         totalUpdated++;
         continue;
       }
 
-      await removeDir(destDir);
-      await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
-      
+      try {
+        await removeDir(destDir);
+        await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
+      } catch (err) {
+        process.stderr.write(
+          `${ANSI.red}Failed to update ${skillName}: ${String(err)}${ANSI.reset}\n`,
+        );
+        failedUpdates++;
+        continue;
+      }
+
       if (registry.skills[skillName]) {
         registry.skills[skillName]!.updatedAt = new Date().toISOString();
       }
-      
+
       affectedRepos.add(repoKey);
       process.stdout.write(`${ANSI.green}Updated: ${skillName}${ANSI.reset}\n`);
       totalUpdated++;
@@ -182,7 +200,13 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
 
   if (!dryRun && totalUpdated > 0) await saveRegistry(registry);
   process.stdout.write(`\n${totalUpdated} skill(s) updated.\n`);
-  return 0;
+  if (missingDuringUpdate > 0) {
+    process.stdout.write(`${missingDuringUpdate} skill(s) missing in repo and skipped.\n`);
+  }
+  if (failedUpdates > 0) {
+    process.stderr.write(`${failedUpdates} skill(s) failed to update.\n`);
+  }
+  return totalUpdated > 0 ? 0 : failedUpdates > 0 ? 1 : 0;
 }
 
 async function updateSpecificSkills(
@@ -248,4 +272,3 @@ async function updateSpecificSkills(
   if (!dryRun) await saveRegistry(registry);
   return updated > 0 ? 0 : 1;
 }
-
