@@ -15,12 +15,13 @@ import { getCentralAgentsDir } from '../../util/apg-paths.js';
 import { ANSI } from '../../util/ansi.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { copyDir } from '../../util/copy-dir.js';
-import { fsRenameOrCopy } from '../../util/sync-utils.js';
-import { ensureDir, listDirNames, pathExists, removeDir } from '../../util/fs-utils.js';
+import { ensureDir, listDirNames, pathExists, removeDirContents } from '../../util/fs-utils.js';
 import { computeDirHash } from '../../util/hash-dir.js';
 import type { ParsedFlags } from '../../util/options.js';
 import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
+
+const IGNORED_DIR_NAMES = ['.git'];
 
 type AgentEntry = {
   name: string;
@@ -104,10 +105,10 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
     const isDuplicate = seenNames.has(lower);
     seenNames.add(lower);
 
-    const srcHash = await computeDirHash(agent.srcDir, { ignoreNames: ['.git'] });
+    const srcHash = await computeDirHash(agent.srcDir, { ignoreNames: IGNORED_DIR_NAMES });
     let status: CollectStatus = 'new';
     if (await pathExists(agent.destDir)) {
-      const destHash = await computeDirHash(agent.destDir, { ignoreNames: ['.git'] });
+      const destHash = await computeDirHash(agent.destDir, { ignoreNames: IGNORED_DIR_NAMES });
       status = destHash === srcHash ? 'identical' : 'conflict';
     }
     agentsWithStatus.push({ ...agent, status, isDuplicate, srcHash });
@@ -266,12 +267,15 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
     if (action === 'backup') {
       const backupDir = `${destDir}.bak-${Date.now()}`;
       await ensureDir(path.dirname(backupDir));
-      await fsRenameOrCopy(destDir, backupDir);
+      if (await pathExists(destDir)) {
+        await copyDir(destDir, backupDir, { ignoreNames: IGNORED_DIR_NAMES });
+        await removeDirContents(destDir, IGNORED_DIR_NAMES);
+      }
     } else if (action === 'overwrite' && (await pathExists(destDir))) {
-      await removeDir(destDir);
+      await removeDirContents(destDir, IGNORED_DIR_NAMES);
     }
 
-    await copyDir(srcDir, targetDest, { ignoreNames: ['.git'] });
+    await copyDir(srcDir, targetDest, { ignoreNames: IGNORED_DIR_NAMES });
     const now = new Date().toISOString();
     registry.agents[targetName] = registry.agents[targetName] ?? {
       name: targetName,

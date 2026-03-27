@@ -41,6 +41,21 @@ export async function removeDir(dirPath: string): Promise<void> {
   await fs.rm(dirPath, { recursive: true, force: true });
 }
 
+export async function removeDirContents(dirPath: string, ignoreNames: string[] = []): Promise<void> {
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.readdir(dirPath, { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw err;
+  }
+
+  for (const entry of entries) {
+    if (ignoreNames.includes(entry.name)) continue;
+    await fs.rm(path.join(dirPath, entry.name), { recursive: true, force: true });
+  }
+}
+
 export function formatPath(p: string): string {
   return p.replace(/^([A-Za-z]):\\/g, '$1:\\\\');
 }

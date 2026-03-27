@@ -7,10 +7,13 @@ export type CopyDirOptions = {
 };
 
 export async function copyDir(srcDir: string, destDir: string, opts: CopyDirOptions = {}): Promise<void> {
-  const entries = await fs.readdir(srcDir, { withFileTypes: true });
+  if (opts.ignoreNames?.includes(path.basename(srcDir))) return;
+  const entries = (await fs.readdir(srcDir, { withFileTypes: true })).filter(
+    (entry) => !opts.ignoreNames?.includes(entry.name),
+  );
+  if (entries.length === 0) return;
   await ensureDir(destDir);
   for (const entry of entries) {
-    if (opts.ignoreNames?.includes(entry.name)) continue;
     const srcPath = path.join(srcDir, entry.name);
     const destPath = path.join(destDir, entry.name);
 

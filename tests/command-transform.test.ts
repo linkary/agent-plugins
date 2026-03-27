@@ -154,6 +154,34 @@ describe('command-transform', () => {
       expect(centralResource).toBe('core');
     });
 
+    it('should skip .git directories when collecting resources', async () => {
+      const targetDir = path.join(tmpDir, 'target');
+      await fs.mkdir(targetDir, { recursive: true });
+      await fs.writeFile(path.join(targetDir, 'migrate.md'), '# Migrate');
+
+      const resourceDir = path.join(targetDir, 'migrate');
+      await fs.mkdir(path.join(resourceDir, '.git'), { recursive: true });
+      await fs.writeFile(path.join(resourceDir, 'core.mdx'), 'core');
+      await fs.writeFile(path.join(resourceDir, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+
+      const destDir = path.join(tmpDir, 'central', 'migrate');
+
+      await collectToDirectory({
+        mdFilePath: path.join(targetDir, 'migrate.md'),
+        resourceDirPath: resourceDir,
+        destDir,
+        commandName: 'migrate',
+      });
+
+      const gitDirExists = await fs
+        .access(path.join(destDir, '.git'))
+        .then(() => true)
+        .catch(() => false);
+
+      expect(await fs.readFile(path.join(destDir, 'core.mdx'), 'utf-8')).toBe('core');
+      expect(gitDirExists).toBe(false);
+    });
+
     it('should handle .md without resource dir', async () => {
       const targetDir = path.join(tmpDir, 'target');
       await fs.mkdir(targetDir, { recursive: true });

@@ -23,14 +23,16 @@ import {
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { ANSI } from '../../util/ansi.js';
 import { resolveTargetContext } from '../../util/scope.js';
-import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
+import { ensureDir, pathExists, removeDirContents } from '../../util/fs-utils.js';
 import { computeCommandHash } from '../../util/item-utils.js';
 import { detectTargetCommands, collectToDirectory, collectToFile } from '../../util/command-transform.js';
-import { fsRenameOrCopy } from '../../util/sync-utils.js';
+import { copyDir } from '../../util/copy-dir.js';
 import type { ParsedFlags } from '../../util/options.js';
 import { promptChoice, promptConfirm, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
 import { parseCommandMeta } from '../../util/command-meta.js';
+
+const IGNORED_DIR_NAMES = ['.git'];
 
 type CommandEntry = {
   name: string;
@@ -365,14 +367,15 @@ export async function cmdCommandsCollect(
       if (form === 'directory' && (await pathExists(targetDest))) {
         const backupDir = `${targetDest}.bak-${Date.now()}`;
         await ensureDir(path.dirname(backupDir));
-        await fsRenameOrCopy(targetDest, backupDir);
+        await copyDir(targetDest, backupDir, { ignoreNames: IGNORED_DIR_NAMES });
+        await removeDirContents(targetDest, IGNORED_DIR_NAMES);
       } else if (form === 'file' && (await pathExists(targetMd))) {
         const backupPath = `${targetMd}.bak-${Date.now()}`;
         await fs.copyFile(targetMd, backupPath);
       }
     } else if (action === 'overwrite') {
       if (form === 'directory' && (await pathExists(targetDest))) {
-        await removeDir(targetDest);
+        await removeDirContents(targetDest, IGNORED_DIR_NAMES);
       } else if (form === 'file' && (await pathExists(targetMd))) {
         await fs.rm(targetMd, { force: true });
       }

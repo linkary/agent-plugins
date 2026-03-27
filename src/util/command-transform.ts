@@ -18,6 +18,15 @@ import { copyDir } from './copy-dir.js';
 import { ensureDir, pathExists } from './fs-utils.js';
 import { findEntryMd } from '../core/command-store.js';
 
+const IGNORED_COMMAND_RESOURCE_NAMES = ['.git'];
+
+function hasIgnoredPathSegment(filePath: string, ignoreNames: string[]): boolean {
+  return path
+    .normalize(filePath)
+    .split(path.sep)
+    .some((part) => ignoreNames.includes(part));
+}
+
 // ─── Sync: Central -> Target ────────────────────────────────────────────
 
 /**
@@ -48,7 +57,9 @@ export async function syncDirectoryCommand(params: {
   // 复制其余文件到 targetDir/<commandName>/
   const entries = await fs.readdir(srcDir, { withFileTypes: true });
   const entryMdName = path.basename(entryMd);
-  const hasResources = entries.some((e) => e.name !== entryMdName);
+  const hasResources = entries.some(
+    (e) => e.name !== entryMdName && !IGNORED_COMMAND_RESOURCE_NAMES.includes(e.name),
+  );
 
   if (hasResources) {
     const targetResourceDir = path.join(targetDir, commandName);
@@ -56,11 +67,12 @@ export async function syncDirectoryCommand(params: {
 
     for (const entry of entries) {
       if (entry.name === entryMdName) continue; // 跳过入口 .md
+      if (IGNORED_COMMAND_RESOURCE_NAMES.includes(entry.name)) continue;
       const srcPath = path.join(srcDir, entry.name);
       const destPath = path.join(targetResourceDir, entry.name);
 
       if (entry.isDirectory()) {
-        await copyDir(srcPath, destPath);
+        await copyDir(srcPath, destPath, { ignoreNames: IGNORED_COMMAND_RESOURCE_NAMES });
       } else if (entry.isFile()) {
         await fs.copyFile(srcPath, destPath);
       }
@@ -88,13 +100,14 @@ export async function syncFileCommand(params: {
 
   // 复制声明的共享资源
   for (const res of sharedResources) {
+    if (hasIgnoredPathSegment(res, IGNORED_COMMAND_RESOURCE_NAMES)) continue;
     const srcPath = path.join(centralRoot, res);
     if (!(await pathExists(srcPath))) continue;
 
     const destPath = path.join(targetDir, res);
     const stat = await fs.stat(srcPath);
     if (stat.isDirectory()) {
-      await copyDir(srcPath, destPath);
+      await copyDir(srcPath, destPath, { ignoreNames: IGNORED_COMMAND_RESOURCE_NAMES });
     } else {
       await ensureDir(path.dirname(destPath));
       await fs.copyFile(srcPath, destPath);
@@ -128,10 +141,11 @@ export async function collectToDirectory(params: {
   if (resourceDirPath && (await pathExists(resourceDirPath))) {
     const entries = await fs.readdir(resourceDirPath, { withFileTypes: true });
     for (const entry of entries) {
+      if (IGNORED_COMMAND_RESOURCE_NAMES.includes(entry.name)) continue;
       const srcPath = path.join(resourceDirPath, entry.name);
       const destPath = path.join(destDir, entry.name);
       if (entry.isDirectory()) {
-        await copyDir(srcPath, destPath);
+        await copyDir(srcPath, destPath, { ignoreNames: IGNORED_COMMAND_RESOURCE_NAMES });
       } else if (entry.isFile()) {
         await fs.copyFile(srcPath, destPath);
       }

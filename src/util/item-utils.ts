@@ -10,6 +10,16 @@ import { copyDir } from './copy-dir.js';
 import { ensureDir, pathExists, removeDir } from './fs-utils.js';
 import type { CommandForm } from '../core/command-store.js';
 
+const IGNORED_COMMAND_RESOURCE_NAMES = ['.git'];
+const EMPTY_DIR_HASH = `sha256:${crypto.createHash('sha256').digest('hex')}`;
+
+function hasIgnoredPathSegment(filePath: string, ignoreNames: string[]): boolean {
+  return path
+    .normalize(filePath)
+    .split(path.sep)
+    .some((part) => ignoreNames.includes(part));
+}
+
 /**
  * 计算文件或目录的 hash。
  * 文件 -> SHA256(content)
@@ -38,7 +48,7 @@ export async function computeCommandHash(params: {
   const { commandName, commandsDir, form, sharedResources } = params;
 
   if (form === 'directory') {
-    return computeDirHash(path.join(commandsDir, commandName));
+    return computeDirHash(path.join(commandsDir, commandName), { ignoreNames: IGNORED_COMMAND_RESOURCE_NAMES });
   }
 
   // file-form: 组合 .md 文件 + 声明的共享资源
@@ -52,9 +62,14 @@ export async function computeCommandHash(params: {
   if (sharedResources?.length) {
     const sorted = [...sharedResources].sort();
     for (const res of sorted) {
+      if (hasIgnoredPathSegment(res, IGNORED_COMMAND_RESOURCE_NAMES)) continue;
       const resPath = path.join(commandsDir, res);
       if (await pathExists(resPath)) {
-        const resHash = await computeItemHash(resPath);
+        const stat = await fs.stat(resPath);
+        const resHash = stat.isDirectory()
+          ? await computeDirHash(resPath, { ignoreNames: IGNORED_COMMAND_RESOURCE_NAMES })
+          : await computeItemHash(resPath);
+        if (stat.isDirectory() && resHash === EMPTY_DIR_HASH) continue;
         hash.update(`res:${res}:${resHash}`);
         hash.update('\0');
       }
