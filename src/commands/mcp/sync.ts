@@ -189,6 +189,7 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
       defaultSelected: groupedItems
         .filter(([, entries]) => entries.some((e) => e.status === 'replace'))
         .map(([name]) => name),
+      sortDefaultSelectedToTop: true,
     });
 
     if (selectedNames.length === 0) {

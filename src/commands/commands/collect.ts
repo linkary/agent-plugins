@@ -224,6 +224,7 @@ export async function cmdCommandsCollect(
         };
       }),
       defaultSelected,
+      sortDefaultSelectedToTop: true,
     });
 
     if (selectedKeys.length === 0) {

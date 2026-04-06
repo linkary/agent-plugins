@@ -39,6 +39,8 @@ export async function promptMultiSelect<T extends string>(params: {
   options: MultiSelectOption<T>[];
   /** Values to pre-select; if 'all', all options are selected */
   defaultSelected?: T[] | 'all';
+  /** Keep initially selected values at the top of the list */
+  sortDefaultSelectedToTop?: boolean;
   /** Enable real-time filter for large lists (>20 items) */
   searchable?: boolean;
 }): Promise<T[]> {
@@ -52,6 +54,7 @@ export async function promptMultiSelect<T extends string>(params: {
       message: params.message,
       options: params.options,
       defaultSelected: params.defaultSelected,
+      sortDefaultSelectedToTop: params.sortDefaultSelectedToTop,
     }),
   );
 }

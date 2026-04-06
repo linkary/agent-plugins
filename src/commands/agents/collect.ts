@@ -150,6 +150,7 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
         };
       }),
       defaultSelected,
+      sortDefaultSelectedToTop: true,
     });
 
     if (selectedKeys.length === 0) {

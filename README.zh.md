@@ -180,7 +180,7 @@ ap rules validate
 | `skills`   | `skill`, `sk`, `s`    |
 | `agents`   | `ag`                  |
 | `commands` | `command`, `cmd`, `c` |
-| `rules`    | `rule`, `rl`          |
+| `rules`    | `rule`, `rl`, `r`     |
 
 子命令也支持简写（按位置解析）：
 
@@ -200,6 +200,7 @@ ap c show         # commands show
 ## 同步目标与默认路径（macOS）
 
 `--scope global` 是默认值。`--scope local` 默认以 git root 为项目根目录（找不到 git root 则使用当前目录）。
+Qoder 的 rules 是例外：`ap rules sync --target qoder` 会默认使用 `local`，因为 Qoder 官方文档只描述了项目级 rules。
 
 ### Skills 路径
 
@@ -241,11 +242,16 @@ ap c show         # commands show
 | Openskills           | `<project>/.agent/rules/`  | `~/.agent/rules/`                     |
 | Agents (Vercel Labs) | `<project>/.agents/rules/` | `~/.agents/rules/`                    |
 | OpenCode             | `<project>/.opencode/rules/` | `~/.opencode/rules/`                |
-| Qoder                | `<project>/.qoder/rules/`    | `~/.qoder/rules/`                   |
+| Qoder                | `<project>/.qoder/rules/`    | `-`                                |
 
 Cursor 特殊说明（global）：
 
 - 对 `cursor` + `global` 执行 `sync/collect/rm` 时，会使用 Cursor User Rules 文本存储，而不是仅依赖 `~/.cursor/rules/`。
+
+Qoder 特殊说明（local）：
+
+- `sync` 会写入受管的 always-apply 文件到 `<project>/.qoder/rules/agent-plugins-global.md`。
+- Qoder rules 的 `global` scope 会被跳过，因为官方文档只描述了项目级 rules。
 
 ### Rules 兼容性
 

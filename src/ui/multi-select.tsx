@@ -11,6 +11,7 @@ type MultiSelectProps<T extends string = string> = {
   message: string;
   options: MultiSelectOption<T>[];
   defaultSelected?: T[] | 'all';
+  sortDefaultSelectedToTop?: boolean;
 };
 
 const CHECKED = '◉';
@@ -18,14 +19,41 @@ const UNCHECKED = '◯';
 const POINTER = '>';
 const PAGE_SIZE = 15;
 
+export function orderMultiSelectOptions<T extends string>(
+  options: MultiSelectOption<T>[],
+  defaultSelected?: T[] | 'all',
+  sortDefaultSelectedToTop?: boolean,
+): MultiSelectOption<T>[] {
+  if (!sortDefaultSelectedToTop || !defaultSelected || defaultSelected === 'all') return options;
+
+  const selectedSet = new Set(defaultSelected);
+  if (selectedSet.size === 0) return options;
+
+  const prioritized: MultiSelectOption<T>[] = [];
+  const rest: MultiSelectOption<T>[] = [];
+
+  for (const option of options) {
+    if (selectedSet.has(option.value)) prioritized.push(option);
+    else rest.push(option);
+  }
+
+  if (prioritized.length === 0) return options;
+  return [...prioritized, ...rest];
+}
+
 export function MultiSelect<T extends string>(props: MultiSelectProps<T>) {
-  const { message, options, defaultSelected } = props;
+  const { message, options, defaultSelected, sortDefaultSelectedToTop } = props;
   const resolve = useResolve<T[]>();
+
+  const orderedOptions = useMemo(
+    () => orderMultiSelectOptions(options, defaultSelected, sortDefaultSelectedToTop),
+    [options, defaultSelected, sortDefaultSelectedToTop],
+  );
 
   const initialSet = useMemo(() => {
     if (defaultSelected === 'all') return new Set(options.map((o) => o.value));
     return new Set(defaultSelected ?? []);
-  }, []);
+  }, [defaultSelected, options]);
 
   const [selected, setSelected] = useState<Set<T>>(initialSet);
   const [cursor, setCursor] = useState(0);
@@ -33,12 +61,12 @@ export function MultiSelect<T extends string>(props: MultiSelectProps<T>) {
 
   // 搜索过滤
   const filtered = useMemo(() => {
-    if (!searchTerm) return options;
+    if (!searchTerm) return orderedOptions;
     const term = searchTerm.toLowerCase();
-    return options.filter(
+    return orderedOptions.filter(
       (o) => o.label.toLowerCase().includes(term) || o.value.toLowerCase().includes(term),
     );
-  }, [options, searchTerm]);
+  }, [orderedOptions, searchTerm]);
 
   // 分页
   const safeCursor = Math.min(cursor, Math.max(0, filtered.length - 1));

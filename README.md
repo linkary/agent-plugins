@@ -180,7 +180,7 @@ Root groups support abbreviations:
 | `skills`   | `skill`, `sk`, `s`    |
 | `agents`   | `ag`                  |
 | `commands` | `command`, `cmd`, `c` |
-| `rules`    | `rule`, `rl`          |
+| `rules`    | `rule`, `rl`, `r`     |
 
 Subcommands also support abbreviations (parsed by position):
 
@@ -200,6 +200,7 @@ Supported targets: `cursor`, `gemini`, `codex`, `claude-code`, `antigravity`, `o
 ## Sync Targets and Default Paths (macOS)
 
 `--scope global` is the default. `--scope local` defaults to the git root as the project root (uses current directory if git root is not found).
+Qoder rules are the exception: `ap rules sync --target qoder` defaults to `local` because Qoder documents project-specific rules only.
 
 ### Skills Paths
 
@@ -241,11 +242,16 @@ Supported targets: `cursor`, `gemini`, `codex`, `claude-code`, `antigravity`, `o
 | Openskills           | `<project>/.agent/rules/`  | `~/.agent/rules/`                     |
 | Agents (Vercel Labs) | `<project>/.agents/rules/` | `~/.agents/rules/`                    |
 | OpenCode             | `<project>/.opencode/rules/` | `~/.opencode/rules/`                |
-| Qoder                | `<project>/.qoder/rules/`    | `~/.qoder/rules/`                   |
+| Qoder                | `<project>/.qoder/rules/`    | `-`                                |
 
 Cursor special case (global scope):
 
 - `sync/collect/rm` for `cursor` + `global` uses Cursor User Rules text storage (Settings) instead of only relying on `~/.cursor/rules/`.
+
+Qoder special case (local scope):
+
+- `sync` writes a managed always-apply file to `<project>/.qoder/rules/agent-plugins-global.md`.
+- `global` scope is skipped for Qoder rules because the official Qoder rules docs describe project-local rules only.
 
 ### Rules Compatibility
 

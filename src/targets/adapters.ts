@@ -234,7 +234,7 @@ const adapters: TargetAdapter[] = [
     resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.qoder', 'commands') : path.join(projectRoot, '.qoder', 'commands'),
     resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global' ? path.join(homeDir, '.qoder', 'rules') : path.join(projectRoot, '.qoder', 'rules'),
+      scope === 'global' ? '' : path.join(projectRoot, '.qoder', 'rules'),
     resolveMcpConfig: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
         ? {

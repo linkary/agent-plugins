@@ -162,6 +162,7 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
         };
       }),
       defaultSelected,
+      sortDefaultSelectedToTop: true,
     });
 
     if (selectedKeys.length === 0) {

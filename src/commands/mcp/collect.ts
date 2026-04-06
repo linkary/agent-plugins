@@ -175,6 +175,7 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
       message: 'Select MCP servers to collect:',
       options,
       defaultSelected,
+      sortDefaultSelectedToTop: true,
     });
 
     if (selectedKeys.length === 0) {

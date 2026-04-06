@@ -328,9 +328,7 @@ describe('adapters', () => {
 
     it('should resolve qoder rule paths', () => {
       const adapter = resolveAdapter('qoder')!;
-      expect(adapter.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe(
-        path.join(homeDir, '.qoder', 'rules'),
-      );
+      expect(adapter.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe('');
       expect(adapter.resolveRulesDir({ scope: 'local', projectRoot, homeDir })).toBe(
         path.join(projectRoot, '.qoder', 'rules'),
       );

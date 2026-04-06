@@ -64,6 +64,13 @@ export async function cmdRulesCollect(
   const allItems: RuleWithStatus[] = [];
 
   for (const adapter of selected) {
+    if (adapter.id === 'qoder') {
+      process.stderr.write(
+        `${ANSI.dim}Skipped ${getColoredLabel(adapter)}: global rules are not supported; collect from --scope local is not implemented${ANSI.reset}\n`,
+      );
+      continue;
+    }
+
     const store = getGlobalRulesStore(adapter.id, homeDir);
     if (!store) {
       process.stderr.write(`${ANSI.dim}Skipped ${getColoredLabel(adapter)}: no global rules store${ANSI.reset}\n`);
@@ -140,6 +147,7 @@ export async function cmdRulesCollect(
         value: String(i),
       })),
       defaultSelected,
+      sortDefaultSelectedToTop: true,
       searchable: allItems.length > 10,
     });
 

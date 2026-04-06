@@ -200,6 +200,11 @@ async function removeFromTarget(
 
   // 全局 → item 级移除
   if (scope === 'global') {
+    if (adapter.id === 'qoder') {
+      process.stderr.write('Qoder global rules are not supported. Use --scope local.\n');
+      return 1;
+    }
+
     const store = getGlobalRulesStore(adapter.id, homeDir);
     if (!store) {
       process.stderr.write(`${adapter.label} has no global rules store.\n`);
