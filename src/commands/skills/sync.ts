@@ -14,10 +14,12 @@ import { resolveTargetContext } from '../../util/scope.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
 import { loadConfig } from '../../core/config.js';
 import { copyDir } from '../../util/copy-dir.js';
+import { computeItemStats } from '../../util/item-utils.js';
 import { fsRenameOrCopy, timestampId } from '../../util/sync-utils.js';
 import {
   countByStatus,
   formatCountSummary,
+  formatSyncPromptOption,
   formatScopeTitle,
   formatStatusLabel,
   groupEntriesByName,
@@ -113,18 +115,40 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   const scopeTitle = formatScopeTitle(allEntries.map((entry) => entry.scope));
 
   // Phase 2: Check overwrite status and show multi-select preview
-  type EntryWithStatus = SyncEntry & { status: EntryStatus };
+  type EntryWithStatus = SyncEntry & {
+    status: EntryStatus;
+    sourceMeta?: Awaited<ReturnType<typeof computeItemStats>>;
+    targetMeta?: Awaited<ReturnType<typeof computeItemStats>>;
+  };
+  const sourceStatsCache = new Map<string, Promise<Awaited<ReturnType<typeof computeItemStats>>>>();
+  const getSourceMeta = (srcDir: string) => {
+    let cached = sourceStatsCache.get(srcDir);
+    if (!cached) {
+      cached = computeItemStats(srcDir, { ignoreNames: ['.git'] });
+      sourceStatsCache.set(srcDir, cached);
+    }
+    return cached;
+  };
   const entriesWithStatus: EntryWithStatus[] = await Promise.all(
     allEntries.map(async (s) => {
       const destExists = await pathExists(s.destDir);
       if (!destExists) {
-        return { ...s, status: 'new' as const };
+        return {
+          ...s,
+          status: 'new' as const,
+          sourceMeta: await getSourceMeta(s.srcDir),
+        };
       }
       const [srcHash, destHash] = await Promise.all([
         computeDirHash(s.srcDir, { ignoreNames: ['.git'] }),
         computeDirHash(s.destDir, { ignoreNames: ['.git'] }),
       ]);
-      return { ...s, status: destHash === srcHash ? ('same' as const) : ('replace' as const) };
+      if (destHash === srcHash) return { ...s, status: 'same' as const };
+      const [sourceMeta, targetMeta] = await Promise.all([
+        getSourceMeta(s.srcDir),
+        computeItemStats(s.destDir, { ignoreNames: ['.git'] }),
+      ]);
+      return { ...s, status: 'replace' as const, sourceMeta, targetMeta };
     }),
   );
 
@@ -142,15 +166,21 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
     const selectedNames = await promptMultiSelect({
       message: `Confirm skills to sync (${scopeTitle}, source: ${srcBaseDir}):`,
       options: groupedItems.map(([name, entries]) => {
-        const status = formatCountSummary(
-          countByStatus(entries, ENTRY_STATUS_ORDER),
-          ENTRY_STATUS_ORDER,
-          ENTRY_STATUS_STYLES,
-        );
+        const promptOption = formatSyncPromptOption({
+          name,
+          entries: entries.map((entry) => ({
+            targetLabel: getColoredLabel(entry.adapter),
+            status: entry.status,
+            sourceMeta: entry.sourceMeta,
+            targetMeta: entry.targetMeta,
+          })),
+          orderedStatuses: ENTRY_STATUS_ORDER,
+          styles: ENTRY_STATUS_STYLES,
+          unchangedStatus: 'same',
+        });
         return {
-          label: `${name} -> ${entries
-            .map((entry) => `${getColoredLabel(entry.adapter)} (${formatStatusLabel(entry.status, ENTRY_STATUS_STYLES)})`)
-            .join(', ')} [${status}]`,
+          label: promptOption.label,
+          detailLines: promptOption.detailLines,
           value: name,
         };
       }),

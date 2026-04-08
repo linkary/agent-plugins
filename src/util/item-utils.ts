@@ -13,11 +13,50 @@ import type { CommandForm } from '../core/command-store.js';
 const IGNORED_COMMAND_RESOURCE_NAMES = ['.git'];
 const EMPTY_DIR_HASH = `sha256:${crypto.createHash('sha256').digest('hex')}`;
 
+export type ItemStats = {
+  sizeBytes: number;
+  changedAtMs: number;
+};
+
 function hasIgnoredPathSegment(filePath: string, ignoreNames: string[]): boolean {
   return path
     .normalize(filePath)
     .split(path.sep)
     .some((part) => ignoreNames.includes(part));
+}
+
+function mergeItemStats(current: ItemStats | null, next: ItemStats | null): ItemStats | null {
+  if (!next) return current;
+  if (!current) return { ...next };
+  return {
+    sizeBytes: current.sizeBytes + next.sizeBytes,
+    changedAtMs: Math.max(current.changedAtMs, next.changedAtMs),
+  };
+}
+
+async function collectItemStats(
+  itemPath: string,
+  ignoreNames: string[],
+): Promise<ItemStats | null> {
+  if (hasIgnoredPathSegment(itemPath, ignoreNames)) return null;
+
+  const stat = await fs.stat(itemPath).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  });
+  if (!stat) return null;
+
+  if (!stat.isDirectory()) {
+    return { sizeBytes: stat.size, changedAtMs: stat.mtimeMs };
+  }
+
+  let combined: ItemStats = { sizeBytes: 0, changedAtMs: stat.mtimeMs };
+  const entries = await fs.readdir(itemPath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (ignoreNames.includes(entry.name)) continue;
+    combined = mergeItemStats(combined, await collectItemStats(path.join(itemPath, entry.name), ignoreNames)) ?? combined;
+  }
+  return combined;
 }
 
 /**
@@ -77,6 +116,25 @@ export async function computeCommandHash(params: {
   }
 
   return `sha256:${hash.digest('hex')}`;
+}
+
+export async function computeItemStats(
+  itemPath: string,
+  options?: { ignoreNames?: string[] },
+): Promise<ItemStats | null> {
+  return collectItemStats(itemPath, options?.ignoreNames ?? []);
+}
+
+export async function computeCombinedItemStats(
+  itemPaths: string[],
+  options?: { ignoreNames?: string[] },
+): Promise<ItemStats | null> {
+  const ignoreNames = options?.ignoreNames ?? [];
+  let combined: ItemStats | null = null;
+  for (const itemPath of new Set(itemPaths)) {
+    combined = mergeItemStats(combined, await collectItemStats(itemPath, ignoreNames));
+  }
+  return combined;
 }
 
 /**

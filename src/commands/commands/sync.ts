@@ -9,7 +9,7 @@ import { listCentralCommands, getCentralCommandDir } from '../../core/command-st
 import { getCentralCommandsDir } from '../../util/apg-paths.js';
 import { ANSI } from '../../util/ansi.js';
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
-import { computeCommandHash } from '../../util/item-utils.js';
+import { computeCombinedItemStats, computeCommandHash, type ItemStats } from '../../util/item-utils.js';
 import { promptMultiSelect } from '../../util/prompt.js';
 import { createConflictResolver } from '../../util/sync-conflict.js';
 import {
@@ -30,6 +30,7 @@ import { copyDir } from '../../util/copy-dir.js';
 import {
   countByStatus,
   formatCountSummary,
+  formatSyncPromptOption,
   formatScopeTitle,
   formatStatusLabel,
   groupEntriesByName,
@@ -129,16 +130,63 @@ export async function cmdCommandsSync(
   // Phase 2: 检查目标状态并显示预览
   const targetMdPath = (e: SyncEntry) => path.join(e.destCommandsDir, `${e.name}.md`);
   const srcBaseDir = getCentralCommandsDir();
-  type EntryWithStatus = SyncEntry & { status: EntryStatus };
+  const sharedResourcesCache = new Map<string, Promise<string[]>>();
+  const getSharedResources = (mdPath: string) => {
+    let cached = sharedResourcesCache.get(mdPath);
+    if (!cached) {
+      cached = parseCommandMeta(mdPath).then((meta) => meta.resources ?? []);
+      sharedResourcesCache.set(mdPath, cached);
+    }
+    return cached;
+  };
+
+  const sourceStatsCache = new Map<string, Promise<ItemStats | null>>();
+  const getSourceMeta = (entry: SyncEntry) => {
+    const cacheKey = `${entry.form}:${entry.mdPath}`;
+    let cached = sourceStatsCache.get(cacheKey);
+    if (!cached) {
+      cached = (async () => {
+        if (entry.form === 'directory') {
+          return computeCombinedItemStats([getCentralCommandDir(entry.name)], { ignoreNames: ['.git'] });
+        }
+        const sharedResources = await getSharedResources(entry.mdPath);
+        return computeCombinedItemStats(
+          [entry.mdPath, ...sharedResources.map((resource) => path.join(srcBaseDir, resource))],
+          { ignoreNames: ['.git'] },
+        );
+      })();
+      sourceStatsCache.set(cacheKey, cached);
+    }
+    return cached;
+  };
+
+  const getTargetMeta = async (entry: SyncEntry): Promise<ItemStats | null> => {
+    if (entry.form === 'directory') {
+      return computeCombinedItemStats([targetMdPath(entry), path.join(entry.destCommandsDir, entry.name)], {
+        ignoreNames: ['.git'],
+      });
+    }
+    const sharedResources = await getSharedResources(entry.mdPath);
+    return computeCombinedItemStats(
+      [targetMdPath(entry), ...sharedResources.map((resource) => path.join(entry.destCommandsDir, resource))],
+      { ignoreNames: ['.git'] },
+    );
+  };
+
+  type EntryWithStatus = SyncEntry & { status: EntryStatus; sourceMeta?: ItemStats | null; targetMeta?: ItemStats | null };
   const entriesWithStatus: EntryWithStatus[] = await Promise.all(
     allEntries.map(async (s) => {
       const targetMd = targetMdPath(s);
       if (!(await pathExists(targetMd))) {
-        return { ...s, status: 'new' as const };
+        return {
+          ...s,
+          status: 'new' as const,
+          sourceMeta: await getSourceMeta(s),
+        };
       }
 
       const targetResourceDir = path.join(s.destCommandsDir, s.name);
-      const sharedResources = s.form === 'file' ? (await parseCommandMeta(s.mdPath)).resources : undefined;
+      const sharedResources = s.form === 'file' ? await getSharedResources(s.mdPath) : undefined;
       const srcHash = await computeCommandHash({
         commandName: s.name,
         commandsDir: srcBaseDir,
@@ -153,7 +201,9 @@ export async function cmdCommandsSync(
         sharedResources: destSharedResources,
       });
 
-      return { ...s, status: destHash === srcHash ? ('same' as const) : ('replace' as const) };
+      if (destHash === srcHash) return { ...s, status: 'same' as const };
+      const [sourceMeta, targetMeta] = await Promise.all([getSourceMeta(s), getTargetMeta(s)]);
+      return { ...s, status: 'replace' as const, sourceMeta, targetMeta };
     }),
   );
 
@@ -170,15 +220,21 @@ export async function cmdCommandsSync(
     const selectedNames = await promptMultiSelect({
       message: `Confirm commands to sync (${scopeTitle}, source: ${srcBaseDir}):`,
       options: groupedItems.map(([name, entries]) => {
-        const status = formatCountSummary(
-          countByStatus(entries, ENTRY_STATUS_ORDER),
-          ENTRY_STATUS_ORDER,
-          ENTRY_STATUS_STYLES,
-        );
+        const promptOption = formatSyncPromptOption({
+          name,
+          entries: entries.map((entry) => ({
+            targetLabel: getColoredLabel(entry.adapter),
+            status: entry.status,
+            sourceMeta: entry.sourceMeta,
+            targetMeta: entry.targetMeta,
+          })),
+          orderedStatuses: ENTRY_STATUS_ORDER,
+          styles: ENTRY_STATUS_STYLES,
+          unchangedStatus: 'same',
+        });
         return {
-          label: `${name} -> ${entries
-            .map((entry) => `${getColoredLabel(entry.adapter)} (${formatStatusLabel(entry.status, ENTRY_STATUS_STYLES)})`)
-            .join(', ')} [${status}]`,
+          label: promptOption.label,
+          detailLines: promptOption.detailLines,
           value: name,
         };
       }),

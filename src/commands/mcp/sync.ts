@@ -2,7 +2,14 @@
  * ap mcp sync — 将中央 MCP 服务器定义同步到目标工具配置文件。
  * 核心操作是 readConfig -> merge entry -> writeConfig。
  */
-import { listCentralMcpServers, readCentralMcpServer, computeMcpHash } from '../../core/mcp-store.js';
+import fs from 'node:fs/promises';
+import {
+  listCentralMcpServers,
+  readCentralMcpServer,
+  computeMcpHash,
+  computeMcpSerializedSize,
+  getCentralMcpPath,
+} from '../../core/mcp-store.js';
 import { loadConfig } from '../../core/config.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
 import { getAdapters, getColoredLabel, type Scope, type TargetAdapter } from '../../targets/adapters.js';
@@ -18,9 +25,11 @@ import { parseMcpToCanonical, serializeCanonicalMcpForTarget } from '../../util/
 import {
   countByStatus,
   formatCountSummary,
+  formatSyncPromptOption,
   formatScopeTitle,
   formatStatusLabel,
   groupEntriesByName,
+  type SyncItemMetadata,
   type StatusStyle,
 } from '../../util/sync-preview.js';
 import type { McpConfigSpec, McpServerDef } from '../../core/mcp-types.js';
@@ -46,6 +55,18 @@ const ENTRY_STATUS_STYLES: StatusStyle<EntryStatus> = {
   replace: { color: 'yellow' },
   same: { color: 'dim' },
 };
+
+async function computeMcpMetadata(configPath: string, def: McpServerDef): Promise<SyncItemMetadata | null> {
+  const stat = await fs.stat(configPath).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  });
+  if (!stat) return null;
+  return {
+    sizeBytes: computeMcpSerializedSize(def),
+    changedAtMs: stat.mtimeMs,
+  };
+}
 
 export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx: CliRunContext) {
   const dryRun = flags['dry-run'] === true;
@@ -147,16 +168,51 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
   const scopeTitle = formatScopeTitle(allEntries.map((entry) => entry.scope));
 
   // Phase 2: 检查目标状态并分类
-  type EntryWithStatus = SyncEntry & { existingDef: McpServerDef | null; status: EntryStatus };
+  type EntryWithStatus = SyncEntry & {
+    existingDef: McpServerDef | null;
+    status: EntryStatus;
+    sourceMeta?: SyncItemMetadata | null;
+    targetMeta?: SyncItemMetadata | null;
+  };
+  const targetServersCache = new Map<string, Promise<Record<string, McpServerDef>>>();
+  const getTargetServers = (spec: McpConfigSpec) => {
+    let cached = targetServersCache.get(spec.configPath);
+    if (!cached) {
+      cached = readMcpServers(spec);
+      targetServersCache.set(spec.configPath, cached);
+    }
+    return cached;
+  };
+
+  const sourceMetaCache = new Map<string, Promise<SyncItemMetadata | null>>();
+  const getSourceMeta = (entry: SyncEntry) => {
+    const cacheKey = `${entry.adapter.id}:${entry.name}`;
+    let cached = sourceMetaCache.get(cacheKey);
+    if (!cached) {
+      cached = computeMcpMetadata(getCentralMcpPath(entry.name), entry.targetDef);
+      sourceMetaCache.set(cacheKey, cached);
+    }
+    return cached;
+  };
   const entriesWithStatus: EntryWithStatus[] = await Promise.all(
     allEntries.map(async (entry) => {
-      const targetServers = await readMcpServers(entry.mcpSpec);
+      const targetServers = await getTargetServers(entry.mcpSpec);
       const existingDef = targetServers[entry.name] ?? null;
       const existingHash = existingDef ? computeMcpHash(existingDef) : '';
+      const status = !existingDef ? ('new' as const) : existingHash === entry.targetHash ? ('same' as const) : ('replace' as const);
+      if (status === 'same') {
+        return {
+          ...entry,
+          existingDef,
+          status,
+        };
+      }
       return {
         ...entry,
         existingDef,
-        status: !existingDef ? ('new' as const) : existingHash === entry.targetHash ? ('same' as const) : ('replace' as const),
+        status,
+        sourceMeta: await getSourceMeta(entry),
+        targetMeta: existingDef ? await computeMcpMetadata(entry.mcpSpec.configPath, existingDef) : undefined,
       };
     }),
   );
@@ -174,15 +230,21 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
     const selectedNames = await promptMultiSelect({
       message: `Confirm MCP servers to sync (${scopeTitle}, source: ${srcBaseDir}):`,
       options: groupedItems.map(([name, entries]) => {
-        const status = formatCountSummary(
-          countByStatus(entries, ENTRY_STATUS_ORDER),
-          ENTRY_STATUS_ORDER,
-          ENTRY_STATUS_STYLES,
-        );
+        const promptOption = formatSyncPromptOption({
+          name,
+          entries: entries.map((entry) => ({
+            targetLabel: getColoredLabel(entry.adapter),
+            status: entry.status,
+            sourceMeta: entry.sourceMeta,
+            targetMeta: entry.targetMeta,
+          })),
+          orderedStatuses: ENTRY_STATUS_ORDER,
+          styles: ENTRY_STATUS_STYLES,
+          unchangedStatus: 'same',
+        });
         return {
-          label: `${name} -> ${entries
-            .map((entry) => `${getColoredLabel(entry.adapter)} (${formatStatusLabel(entry.status, ENTRY_STATUS_STYLES)})`)
-            .join(', ')} [${status}]`,
+          label: promptOption.label,
+          detailLines: promptOption.detailLines,
           value: name,
         };
       }),

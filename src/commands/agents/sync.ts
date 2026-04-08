@@ -18,11 +18,12 @@ import { getCentralAgentsDir } from '../../util/apg-paths.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
 import { loadConfig } from '../../core/config.js';
-import { computeItemHash, copyItem, removeItem } from '../../util/item-utils.js';
+import { computeItemHash, computeItemStats, copyItem, removeItem } from '../../util/item-utils.js';
 import { fsRenameOrCopy, timestampId } from '../../util/sync-utils.js';
 import {
   countByStatus,
   formatCountSummary,
+  formatSyncPromptOption,
   formatScopeTitle,
   formatStatusLabel,
   groupEntriesByName,
@@ -126,14 +127,35 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
   const scopeTitle = formatScopeTitle(allEntries.map((entry) => entry.scope));
   const srcBaseDir = getCentralAgentsDir();
 
-  type EntryWithStatus = SyncEntry & { status: EntryStatus };
+  type EntryWithStatus = SyncEntry & {
+    status: EntryStatus;
+    sourceMeta?: Awaited<ReturnType<typeof computeItemStats>>;
+    targetMeta?: Awaited<ReturnType<typeof computeItemStats>>;
+  };
+  const sourceStatsCache = new Map<string, Promise<Awaited<ReturnType<typeof computeItemStats>>>>();
+  const getSourceMeta = (srcPath: string) => {
+    let cached = sourceStatsCache.get(srcPath);
+    if (!cached) {
+      cached = computeItemStats(srcPath);
+      sourceStatsCache.set(srcPath, cached);
+    }
+    return cached;
+  };
   const entriesWithStatus: EntryWithStatus[] = await Promise.all(
     allEntries.map(async (s) => {
       const existingPath = await resolveExistingPath(s.destPath, s.altDestPath);
-      if (!existingPath) return { ...s, status: 'new' as const };
+      if (!existingPath) {
+        return {
+          ...s,
+          status: 'new' as const,
+          sourceMeta: await getSourceMeta(s.srcPath),
+        };
+      }
       const srcHash = await computeItemHash(s.srcPath);
       const existingHash = await computeItemHash(existingPath);
-      return { ...s, status: existingHash === srcHash ? ('same' as const) : ('replace' as const) };
+      if (existingHash === srcHash) return { ...s, status: 'same' as const };
+      const [sourceMeta, targetMeta] = await Promise.all([getSourceMeta(s.srcPath), computeItemStats(existingPath)]);
+      return { ...s, status: 'replace' as const, sourceMeta, targetMeta };
     }),
   );
 
@@ -149,15 +171,21 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
     const selectedNames = await promptMultiSelect({
       message: `Confirm agents to sync (${scopeTitle}, source: ${srcBaseDir}):`,
       options: groupedItems.map(([name, entries]) => {
-        const status = formatCountSummary(
-          countByStatus(entries, ENTRY_STATUS_ORDER),
-          ENTRY_STATUS_ORDER,
-          ENTRY_STATUS_STYLES,
-        );
+        const promptOption = formatSyncPromptOption({
+          name,
+          entries: entries.map((entry) => ({
+            targetLabel: getColoredLabel(entry.adapter),
+            status: entry.status,
+            sourceMeta: entry.sourceMeta,
+            targetMeta: entry.targetMeta,
+          })),
+          orderedStatuses: ENTRY_STATUS_ORDER,
+          styles: ENTRY_STATUS_STYLES,
+          unchangedStatus: 'same',
+        });
         return {
-          label: `${name} -> ${entries
-            .map((entry) => `${getColoredLabel(entry.adapter)} (${formatStatusLabel(entry.status, ENTRY_STATUS_STYLES)})`)
-            .join(', ')} [${status}]`,
+          label: promptOption.label,
+          detailLines: promptOption.detailLines,
           value: name,
         };
       }),

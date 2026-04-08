@@ -74,12 +74,20 @@ function deepSortKeys(value: unknown): unknown {
   return sorted;
 }
 
+export function serializeMcpDef(def: McpServerDef): string {
+  return JSON.stringify(deepSortKeys(def));
+}
+
 /**
  * 计算 MCP 服务器定义的 hash。
  * 使用递归排序键的 JSON 序列化确保一致性，
  * 包括 env / headers 等嵌套对象的键。
  */
 export function computeMcpHash(def: McpServerDef): string {
-  const canonical = JSON.stringify(deepSortKeys(def));
+  const canonical = serializeMcpDef(def);
   return `sha256:${crypto.createHash('sha256').update(canonical).digest('hex')}`;
+}
+
+export function computeMcpSerializedSize(def: McpServerDef): number {
+  return Buffer.byteLength(serializeMcpDef(def));
 }
