@@ -4,6 +4,7 @@ import { useResolve } from './render.js';
 
 export type MultiSelectOption<T extends string = string> = {
   label: string;
+  detailLines?: string[];
   value: T;
 };
 
@@ -18,6 +19,7 @@ const CHECKED = '◉';
 const UNCHECKED = '◯';
 const POINTER = '>';
 const PAGE_SIZE = 15;
+const DETAIL_INDENT = '     ';
 
 export function orderMultiSelectOptions<T extends string>(
   options: MultiSelectOption<T>[],
@@ -64,7 +66,10 @@ export function MultiSelect<T extends string>(props: MultiSelectProps<T>) {
     if (!searchTerm) return orderedOptions;
     const term = searchTerm.toLowerCase();
     return orderedOptions.filter(
-      (o) => o.label.toLowerCase().includes(term) || o.value.toLowerCase().includes(term),
+      (o) =>
+        o.label.toLowerCase().includes(term) ||
+        o.value.toLowerCase().includes(term) ||
+        o.detailLines?.some((line) => line.toLowerCase().includes(term)),
     );
   }, [orderedOptions, searchTerm]);
 
@@ -168,12 +173,17 @@ export function MultiSelect<T extends string>(props: MultiSelectProps<T>) {
           const isActive = realIndex === safeCursor;
           const isChecked = selected.has(opt.value);
           return (
-            <Box key={opt.value}>
+            <Box key={opt.value} flexDirection="column">
               <Text color={isActive ? 'cyan' : undefined}>
                 {isActive ? POINTER : ' '}
                 <Text color={isChecked ? 'green' : undefined}>{isChecked ? CHECKED : UNCHECKED}</Text>
                 {' '}{opt.label}
               </Text>
+              {opt.detailLines?.map((line, index) => (
+                <Text key={`${opt.value}-detail-${index}`} color={isActive ? 'cyan' : undefined}>
+                  {DETAIL_INDENT}{line}
+                </Text>
+              ))}
             </Box>
           );
         })

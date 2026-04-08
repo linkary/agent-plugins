@@ -3,7 +3,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {
+  computeCombinedItemStats,
   computeItemHash,
+  computeItemStats,
   computeCommandHash,
   copyItem,
   removeItem,
@@ -110,6 +112,66 @@ describe('item-utils', () => {
       });
 
       expect(hashWith).not.toBe(hashWithout);
+    });
+  });
+
+  describe('computeItemStats', () => {
+    it('should collect recursive size and latest change time for a directory', async () => {
+      const dirPath = path.join(tmpDir, 'skill');
+      const nestedDir = path.join(dirPath, 'docs');
+      await fs.mkdir(nestedDir, { recursive: true });
+
+      const readmePath = path.join(dirPath, 'README.md');
+      const guidePath = path.join(nestedDir, 'guide.md');
+      await fs.writeFile(readmePath, 'hello');
+      await fs.writeFile(guidePath, 'world!!!');
+
+      const early = new Date('2026-04-01T09:12:00.000Z');
+      const late = new Date('2026-04-06T14:33:00.000Z');
+      await fs.utimes(readmePath, early, early);
+      await fs.utimes(guidePath, late, late);
+      await fs.utimes(nestedDir, late, late);
+      await fs.utimes(dirPath, early, early);
+
+      const stats = await computeItemStats(dirPath);
+      expect(stats).toEqual({
+        sizeBytes: 13,
+        changedAtMs: late.getTime(),
+      });
+    });
+
+    it('should ignore configured path segments', async () => {
+      const dirPath = path.join(tmpDir, 'command');
+      const gitDir = path.join(dirPath, '.git');
+      await fs.mkdir(gitDir, { recursive: true });
+      await fs.writeFile(path.join(dirPath, 'command.md'), 'abc');
+      await fs.writeFile(path.join(gitDir, 'config'), 'ignore-me');
+
+      const stats = await computeItemStats(dirPath, { ignoreNames: ['.git'] });
+      expect(stats).toEqual({
+        sizeBytes: 3,
+        changedAtMs: expect.any(Number),
+      });
+    });
+  });
+
+  describe('computeCombinedItemStats', () => {
+    it('should merge multiple paths without double counting duplicates', async () => {
+      const first = path.join(tmpDir, 'first.md');
+      const second = path.join(tmpDir, 'second.md');
+      await fs.writeFile(first, 'abcd');
+      await fs.writeFile(second, 'xy');
+
+      const older = new Date('2026-04-01T09:12:00.000Z');
+      const newer = new Date('2026-04-06T14:33:00.000Z');
+      await fs.utimes(first, older, older);
+      await fs.utimes(second, newer, newer);
+
+      const stats = await computeCombinedItemStats([first, second, first]);
+      expect(stats).toEqual({
+        sizeBytes: 6,
+        changedAtMs: newer.getTime(),
+      });
     });
   });
 
