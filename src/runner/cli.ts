@@ -9,6 +9,7 @@ import { cmdSkillsRemove } from '../commands/skills/rm.js';
 import { cmdSkillsSync } from '../commands/skills/sync.js';
 import { cmdSkillsUpdate } from '../commands/skills/update.js';
 import { cmdSkillsShow } from '../commands/skills/show.js';
+import { cmdSkillsOrganize } from '../commands/skills/organize.js';
 import { cmdAgentsAdd } from '../commands/agents/add.js';
 import { cmdAgentsCollect } from '../commands/agents/collect.js';
 import { cmdAgentsFind } from '../commands/agents/find.js';
@@ -17,6 +18,7 @@ import { cmdAgentsRemove } from '../commands/agents/rm.js';
 import { cmdAgentsSync } from '../commands/agents/sync.js';
 import { cmdAgentsUpdate } from '../commands/agents/update.js';
 import { cmdAgentsShow } from '../commands/agents/show.js';
+import { cmdAgentsOrganize } from '../commands/agents/organize.js';
 import { cmdCommandsAdd } from '../commands/commands/add.js';
 import { cmdCommandsCollect } from '../commands/commands/collect.js';
 import { cmdCommandsFind } from '../commands/commands/find.js';
@@ -25,6 +27,7 @@ import { cmdCommandsRemove } from '../commands/commands/rm.js';
 import { cmdCommandsSync } from '../commands/commands/sync.js';
 import { cmdCommandsUpdate } from '../commands/commands/update.js';
 import { cmdCommandsShow } from '../commands/commands/show.js';
+import { cmdCommandsOrganize } from '../commands/commands/organize.js';
 import { cmdRulesAdd } from '../commands/rules/add.js';
 import { cmdRulesCollect } from '../commands/rules/collect.js';
 import { cmdRulesFind } from '../commands/rules/find.js';
@@ -33,6 +36,7 @@ import { cmdRulesRemove } from '../commands/rules/rm.js';
 import { cmdRulesShow } from '../commands/rules/show.js';
 import { cmdRulesSync } from '../commands/rules/sync.js';
 import { cmdRulesValidate } from '../commands/rules/validate.js';
+import { cmdRulesOrganize } from '../commands/rules/organize.js';
 import { cmdMcpAdd } from '../commands/mcp/add.js';
 import { cmdMcpCollect } from '../commands/mcp/collect.js';
 import { cmdMcpFind } from '../commands/mcp/find.js';
@@ -41,6 +45,7 @@ import { cmdMcpRemove } from '../commands/mcp/rm.js';
 import { cmdMcpSync } from '../commands/mcp/sync.js';
 import { cmdMcpUpdate } from '../commands/mcp/update.js';
 import { cmdMcpShow } from '../commands/mcp/show.js';
+import { cmdMcpOrganize } from '../commands/mcp/organize.js';
 import { PKG_NAME, PKG_VERSION } from '../meta.js';
 
 export type CliRunContext = {
@@ -116,6 +121,8 @@ async function dispatchSkills(
       return await cmdSkillsList(positionals, flags, ctx);
     case 'show':
       return await cmdSkillsShow(positionals, flags, ctx);
+    case 'organize':
+      return await cmdSkillsOrganize(positionals, flags, ctx);
     case 'help':
     default:
       process.stdout.write(formatHelp('skills'));
@@ -146,6 +153,8 @@ async function dispatchCommands(
       return await cmdCommandsList(positionals, flags, ctx);
     case 'show':
       return await cmdCommandsShow(positionals, flags, ctx);
+    case 'organize':
+      return await cmdCommandsOrganize(positionals, flags, ctx);
     case 'help':
     default:
       process.stdout.write(formatHelp('commands'));
@@ -176,6 +185,8 @@ async function dispatchAgents(
       return await cmdAgentsList(positionals, flags, ctx);
     case 'show':
       return await cmdAgentsShow(positionals, flags, ctx);
+    case 'organize':
+      return await cmdAgentsOrganize(positionals, flags, ctx);
     case 'help':
     default:
       process.stdout.write(formatHelp('agents'));
@@ -206,6 +217,8 @@ async function dispatchMcp(
       return await cmdMcpList(positionals, flags, ctx);
     case 'show':
       return await cmdMcpShow(positionals, flags, ctx);
+    case 'organize':
+      return await cmdMcpOrganize(positionals, flags, ctx);
     case 'help':
     default:
       process.stdout.write(formatHelp('mcp'));
@@ -236,6 +249,8 @@ async function dispatchRules(
       return await cmdRulesShow(positionals, flags, ctx);
     case 'validate':
       return await cmdRulesValidate(positionals, flags, ctx);
+    case 'organize':
+      return await cmdRulesOrganize(positionals, flags, ctx);
     case 'help':
     default:
       process.stdout.write(formatHelp('rules'));

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  computeCanonicalMcpHash,
   normalizeCentralMcpDef,
   parseMcpToCanonical,
   serializeCanonicalMcpForTarget,
@@ -67,5 +68,23 @@ describe('mcp-transform', () => {
       args: ['-y', 'pkg'],
       env: { KEY: 'value' },
     });
+  });
+
+  it('hashes canonical definitions independent of object key order', () => {
+    const a = parseMcpToCanonical({
+      command: 'npx',
+      args: ['-y', 'pkg'],
+      env: { A: '1', B: '2' },
+      headers: { Z: '9', X: '8' },
+    });
+    const b = parseMcpToCanonical({
+      args: ['-y', 'pkg'],
+      command: 'npx',
+      env: { B: '2', A: '1' },
+      headers: { X: '8', Z: '9' },
+    });
+    expect(a.canonical).toBeDefined();
+    expect(b.canonical).toBeDefined();
+    expect(computeCanonicalMcpHash(a.canonical!)).toBe(computeCanonicalMcpHash(b.canonical!));
   });
 });

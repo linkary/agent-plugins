@@ -24,7 +24,7 @@ import {
   type TargetId,
 } from '../../targets/adapters.js';
 import { resolveTargetContext } from '../../util/scope.js';
-import { promptConfirm, promptMultiSelect } from '../../util/prompt.js';
+import { promptMultiSelect, promptReviewConfirm } from '../../util/prompt.js';
 import { isGitHubShorthand, isProbablyGitUrl } from '../../util/git-utils.js';
 import { ANSI } from '../../util/ansi.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
@@ -38,6 +38,7 @@ import {
 import { loadConfig } from '../../core/config.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
+import { formatTargetReviewLine, formatTargetSummaryLines } from '../../util/review-display.js';
 
 const CENTRAL_VALUE = '__central__';
 
@@ -317,8 +318,11 @@ async function interactiveRemoveCentralItems(dryRun: boolean): Promise<void> {
   });
   if (selected.length === 0) return;
 
-  const confirmed = await promptConfirm({
+  const selectedItems = items.filter((item) => selected.includes(item.hash));
+  const confirmed = await promptReviewConfirm({
     message: `Remove ${selected.length} rule(s) from central?`,
+    summaryLines: ['Source: central global rules', `Selected: ${selected.length}`],
+    detailLines: selectedItems.map((item) => `[${shortHash(item.hash)}] ${displayItem(item)}`),
     default: false,
   });
   if (!confirmed) return;
@@ -375,8 +379,16 @@ async function interactiveRemoveTargetItems(targetId: string, dryRun: boolean): 
   });
   if (selected.length === 0) return;
 
-  const confirmed = await promptConfirm({
-    message: `Remove ${selected.length} rule(s) from ${targetId}?`,
+  const selectedItems = items.filter((item) => selected.includes(item.hash));
+  const confirmed = await promptReviewConfirm({
+    message: `Remove ${selectedItems.length} rule(s) from ${targetId}?`,
+    summaryLines: [
+      `Selected: ${selectedItems.length}`,
+      ...formatTargetSummaryLines([{ targetLabel: targetId, scope: 'global' }]),
+    ],
+    detailLines: selectedItems.map((item) =>
+      formatTargetReviewLine(`[${shortHash(item.hash)}] ${displayItem(item)}`, targetId, 'global'),
+    ),
     default: false,
   });
   if (!confirmed) return;

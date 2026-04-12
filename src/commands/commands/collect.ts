@@ -31,6 +31,7 @@ import type { ParsedFlags } from '../../util/options.js';
 import { promptChoice, promptConfirm, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
 import { parseCommandMeta } from '../../util/command-meta.js';
+import { formatTargetReviewLine } from '../../util/review-display.js';
 
 const IGNORED_DIR_NAMES = ['.git'];
 
@@ -219,7 +220,7 @@ export async function cmdCommandsCollect(
         else if (c.status === 'identical') labels.push(`${ANSI.gray}identical${ANSI.reset}`);
         else if (c.status === 'conflict') labels.push(`${ANSI.red}conflict${ANSI.reset}`);
         return {
-          label: `${c.name} (${getColoredLabel(c.adapter)}) [${labels.join(', ')}]`,
+          label: `${formatTargetReviewLine(c.name, getColoredLabel(c.adapter), c.scope)} [${labels.join(', ')}]`,
           value: String(i),
         };
       }),
@@ -237,7 +238,7 @@ export async function cmdCommandsCollect(
     process.stdout.write(`\nCollect ${toCollect.length} command(s) to ${destBaseDir}:\n`);
     for (const c of toCollect) {
       const statusLabel = c.status === 'conflict' ? `${ANSI.red}conflict${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
-      process.stdout.write(`  ${c.name} (${getColoredLabel(c.adapter)}) [${statusLabel}]\n`);
+      process.stdout.write(`  ${formatTargetReviewLine(c.name, getColoredLabel(c.adapter), c.scope)} [${statusLabel}]\n`);
     }
     const skipped = commandsWithStatus.length - toCollect.length;
     if (skipped > 0) {

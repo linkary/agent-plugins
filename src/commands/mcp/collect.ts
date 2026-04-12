@@ -14,6 +14,7 @@ import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import { ANSI } from '../../util/ansi.js';
 import { filterMcpAdapters } from './manage-utils.js';
 import { normalizeCentralMcpDef, parseMcpToCanonical, serializeCanonicalMcpForTarget } from '../../util/mcp-transform.js';
+import { formatTargetReviewLine } from '../../util/review-display.js';
 import type { McpServerDef } from '../../core/mcp-types.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
@@ -162,7 +163,7 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
     const options = uniqueEntries.map((e, i) => {
       const statusLabel = STATUS_LABELS[e.status];
       return {
-        label: `${e.name} from ${getColoredLabel(e.adapter)} (${e.scope}) [${statusLabel}]`,
+        label: `${formatTargetReviewLine(e.name, getColoredLabel(e.adapter), e.scope)} [${statusLabel}]`,
         value: String(i),
       };
     });

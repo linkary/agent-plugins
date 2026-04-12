@@ -1,12 +1,14 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
-import { ensureCentralAgentStore, getCentralAgentPath } from '../../core/agent-store.js';
+import {
+  ensureCentralAgentStore,
+  resolveCentralAgentEntry,
+  writeCentralAgentSpec,
+} from '../../core/agent-store.js';
 import { loadRegistry, saveRegistry } from '../../core/registry.js';
 import { listDirNames, pathExists, removeDir } from '../../util/fs-utils.js';
-import { copyDir } from '../../util/copy-dir.js';
 import { promptMultiSelect } from '../../util/prompt.js';
-import { detectSkillStatus, type SkillStatus } from '../../util/skill-compare.js';
 import {
   isProbablyGitUrl,
   isGitHubShorthand,
@@ -15,9 +17,27 @@ import {
   runGit,
   isAgentDir,
 } from '../../util/git-utils.js';
+import {
+  classifyFilesystemAgentPath,
+  compareFilesystemAgents,
+  readAgentSpecFromEntry,
+} from '../../util/agent-transform.js';
 import { ANSI } from '../../util/ansi.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
+
+type AgentStatus = 'new' | 'update' | 'identical';
+
+async function detectAgentStatus(srcPath: string, name: string): Promise<AgentStatus> {
+  const sourceEntry = await classifyFilesystemAgentPath(srcPath, name);
+  if (!sourceEntry) return 'new';
+
+  const targetEntry = await resolveCentralAgentEntry(name);
+  if (!targetEntry) return 'new';
+
+  const comparison = await compareFilesystemAgents(sourceEntry, targetEntry);
+  return comparison === 'same' ? 'identical' : 'update';
+}
 
 export async function cmdAgentsAdd(positionals: string[], flags: ParsedFlags, _ctx: CliRunContext) {
   let source = positionals[0];
@@ -85,12 +105,11 @@ export async function cmdAgentsAdd(positionals: string[], flags: ParsedFlags, _c
           return 1;
         }
 
-        type AgentInfo = { name: string; srcDir: string; status: SkillStatus };
+        type AgentInfo = { name: string; srcDir: string; status: AgentStatus };
         const agentsInfo: AgentInfo[] = await Promise.all(
           agentDirs.map(async (name) => {
             const srcDir = path.join(searchDir, name);
-            const destDir = getCentralAgentPath(name);
-            const { status } = await detectSkillStatus(srcDir, destDir);
+            const status = await detectAgentStatus(srcDir, name);
             return { name, srcDir, status };
           }),
         );
@@ -135,18 +154,26 @@ export async function cmdAgentsAdd(positionals: string[], flags: ParsedFlags, _c
       const addedAgentNames: string[] = [];
 
       for (const { name, srcDir } of agentsToCopy) {
-        const dest = getCentralAgentPath(name);
-        const destExists = await pathExists(dest);
+        const destExists = (await resolveCentralAgentEntry(name)) !== null;
         if (destExists && !force && !interactive) {
           process.stderr.write(`Agent already exists: ${name} (use --force to overwrite)\n`);
           continue;
         }
-        if (dryRun) {
-          process.stdout.write(`[dry-run] add ${name} -> ${dest}\n`);
+        const sourceEntry = await classifyFilesystemAgentPath(srcDir, name);
+        if (!sourceEntry) {
+          process.stderr.write(`Unreadable agent source: ${srcDir}\n`);
           continue;
         }
-        if (destExists) await removeDir(dest);
-        await copyDir(srcDir, dest, { ignoreNames: ['.git'] });
+        const spec = await readAgentSpecFromEntry(sourceEntry);
+        if (!spec) {
+          process.stderr.write(`Could not parse agent: ${name}\n`);
+          continue;
+        }
+        if (dryRun) {
+          process.stdout.write(`[dry-run] add ${name}\n`);
+          continue;
+        }
+        await writeCentralAgentSpec({ ...spec, name }, { sourceDir: sourceEntry.form === 'directory' ? sourceEntry.path : undefined });
 
         registry.agents[name] = {
           name,
@@ -198,20 +225,28 @@ export async function cmdAgentsAdd(positionals: string[], flags: ParsedFlags, _c
   }
 
   const resolvedName = nameFlag ?? path.basename(source);
-  const dest = getCentralAgentPath(resolvedName);
-  const destExists = await pathExists(dest);
+  const destExists = (await resolveCentralAgentEntry(resolvedName)) !== null;
   if (destExists && !force) {
     process.stderr.write(`Agent already exists: ${resolvedName}\nUse --force to overwrite.\n`);
     return 1;
   }
 
   if (dryRun) {
-    process.stdout.write(`[dry-run] add ${resolvedName} -> ${dest}\n`);
+    process.stdout.write(`[dry-run] add ${resolvedName}\n`);
     return 0;
   }
 
-  if (destExists) await removeDir(dest);
-  await copyDir(srcPath, dest, { ignoreNames: ['.git'] });
+  const sourceEntry = await classifyFilesystemAgentPath(srcPath, resolvedName);
+  if (!sourceEntry) {
+    process.stderr.write(`Source path is not a readable agent: ${srcPath}\n`);
+    return 1;
+  }
+  const spec = await readAgentSpecFromEntry(sourceEntry);
+  if (!spec) {
+    process.stderr.write(`Could not parse agent: ${resolvedName}\n`);
+    return 1;
+  }
+  await writeCentralAgentSpec({ ...spec, name: resolvedName }, { sourceDir: sourceEntry.path });
 
   const registry = await loadRegistry();
   registry.agents ??= {};

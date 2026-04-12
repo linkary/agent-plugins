@@ -2,12 +2,15 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import { loadRegistry, saveRegistry, normalizeRepoUrl } from '../../core/registry.js';
-import { getCentralAgentPath } from '../../core/agent-store.js';
+import { resolveCentralAgentEntry, writeCentralAgentSpec } from '../../core/agent-store.js';
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
-import { copyDir } from '../../util/copy-dir.js';
-import { detectSkillStatus } from '../../util/skill-compare.js';
 import { promptMultiSelect } from '../../util/prompt.js';
 import { runGit, isAgentDir } from '../../util/git-utils.js';
+import {
+  classifyFilesystemAgentPath,
+  compareFilesystemAgents,
+  readAgentSpecFromEntry,
+} from '../../util/agent-transform.js';
 import { ANSI } from '../../util/ansi.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
@@ -83,8 +86,10 @@ export async function cmdAgentsUpdate(positionals: string[], flags: ParsedFlags,
           continue;
         }
 
-        const destDir = getCentralAgentPath(agentName);
-        const { status } = await detectSkillStatus(srcDir, destDir);
+        const srcEntry = await classifyFilesystemAgentPath(srcDir, agentName);
+        const destEntry = await resolveCentralAgentEntry(agentName);
+        const status =
+          srcEntry && destEntry && (await compareFilesystemAgents(srcEntry, destEntry)) === 'same' ? 'identical' : 'update';
         allUpdates.push({
           agentName,
           srcDir,
@@ -133,7 +138,16 @@ export async function cmdAgentsUpdate(positionals: string[], flags: ParsedFlags,
 
     for (const update of toUpdate) {
       const { agentName, srcDir, repoKey } = update;
-      const destDir = getCentralAgentPath(agentName);
+      const srcEntry = await classifyFilesystemAgentPath(srcDir, agentName);
+      if (!srcEntry) {
+        process.stderr.write(`Unreadable source agent: ${agentName}\n`);
+        continue;
+      }
+      const spec = await readAgentSpecFromEntry(srcEntry);
+      if (!spec) {
+        process.stderr.write(`Could not parse source agent: ${agentName}\n`);
+        continue;
+      }
 
       if (dryRun) {
         process.stdout.write(`[dry-run] update ${agentName}\n`);
@@ -141,8 +155,7 @@ export async function cmdAgentsUpdate(positionals: string[], flags: ParsedFlags,
         continue;
       }
 
-      await removeDir(destDir);
-      await copyDir(srcDir, destDir, { ignoreNames: ['.git'] });
+      await writeCentralAgentSpec({ ...spec, name: agentName }, { sourceDir: srcEntry.path });
 
       if (registry.agents[agentName]) registry.agents[agentName]!.updatedAt = new Date().toISOString();
       affectedRepos.add(repoKey);
@@ -174,9 +187,9 @@ async function updateSpecificAgents(
 
   for (const name of agentNames) {
     const record = registry.agents[name];
-    const dest = getCentralAgentPath(name);
+    const dest = await resolveCentralAgentEntry(name);
 
-    if (!(await pathExists(dest))) {
+    if (!dest) {
       process.stderr.write(`Missing agent: ${name}\n`);
       continue;
     }
@@ -200,8 +213,17 @@ async function updateSpecificAgents(
         updated++;
         continue;
       }
-      await removeDir(dest);
-      await copyDir(srcPath, dest, { ignoreNames: ['.git'] });
+      const sourceEntry = await classifyFilesystemAgentPath(srcPath, name);
+      if (!sourceEntry) {
+        process.stderr.write(`Unreadable local source: ${srcPath}\n`);
+        continue;
+      }
+      const spec = await readAgentSpecFromEntry(sourceEntry);
+      if (!spec) {
+        process.stderr.write(`Could not parse local source: ${srcPath}\n`);
+        continue;
+      }
+      await writeCentralAgentSpec({ ...spec, name }, { sourceDir: sourceEntry.path });
       record.updatedAt = new Date().toISOString();
       updated++;
       process.stdout.write(`Updated: ${name}\n`);

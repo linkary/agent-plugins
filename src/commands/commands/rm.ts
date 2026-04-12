@@ -18,7 +18,7 @@ import {
 } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { resolveTargetContext } from '../../util/scope.js';
-import { promptConfirm, promptMultiSelect, promptSelect } from '../../util/prompt.js';
+import { promptMultiSelect, promptReviewConfirm, promptSelect } from '../../util/prompt.js';
 import { isProbablyGitUrl, isGitHubShorthand } from '../../util/git-utils.js';
 import { ANSI } from '../../util/ansi.js';
 import {
@@ -28,6 +28,7 @@ import {
 } from './manage-utils.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
+import { formatTargetReviewLine, formatTargetSummaryLines } from '../../util/review-display.js';
 
 // ─── 常量 ────────────────────────────────────────────────────────────────
 
@@ -175,8 +176,10 @@ async function interactiveRemoveCentral(ctx: CliRunContext, pendingToolTargets: 
   });
   if (selected.length === 0) return;
 
-  const confirmed = await promptConfirm({
+  const confirmed = await promptReviewConfirm({
     message: `Remove ${selected.length} central command(s)?`,
+    summaryLines: [`Source: central commands`, `Selected: ${selected.length}`],
+    detailLines: selected,
     default: false,
   });
   if (!confirmed) return;
@@ -310,15 +313,27 @@ async function interactiveRemoveFromTools(
   });
   if (selected.length === 0) return;
 
-  const confirmed = await promptConfirm({
-    message: `Remove ${selected.length} command(s) from targets?`,
+  const selectedCommands = selected.map((idx) => allCommands[Number(idx)]!);
+  const confirmed = await promptReviewConfirm({
+    message: `Remove ${selectedCommands.length} command(s) from targets?`,
+    summaryLines: [
+      `Selected: ${selectedCommands.length}`,
+      ...formatTargetSummaryLines(
+        selectedCommands.map((command) => ({
+          targetLabel: command.adapterLabel,
+          scope: command.scope,
+        })),
+      ),
+    ],
+    detailLines: selectedCommands.map((command) =>
+      formatTargetReviewLine(command.name, command.adapterLabel, command.scope),
+    ),
     default: false,
   });
   if (!confirmed) return;
 
   const syncState = await loadSyncState();
-  for (const idx of selected) {
-    const cmd = allCommands[Number(idx)]!;
+  for (const cmd of selectedCommands) {
     if (await pathExists(cmd.mdPath)) await fs.rm(cmd.mdPath, { force: true });
     if (cmd.resourceDirPath && (await pathExists(cmd.resourceDirPath))) {
       await removeDir(cmd.resourceDirPath);
@@ -373,15 +388,27 @@ async function interactiveRemoveFromTarget(flags: ParsedFlags, ctx: CliRunContex
   });
   if (selected.length === 0) return 0;
 
-  const confirmed = await promptConfirm({
-    message: `Remove ${selected.length} command(s) from targets?`,
+  const selectedCommands = selected.map((idx) => allCommands[Number(idx)]!);
+  const confirmed = await promptReviewConfirm({
+    message: `Remove ${selectedCommands.length} command(s) from targets?`,
+    summaryLines: [
+      `Selected: ${selectedCommands.length}`,
+      ...formatTargetSummaryLines(
+        selectedCommands.map((command) => ({
+          targetLabel: command.adapterLabel,
+          scope: command.scope,
+        })),
+      ),
+    ],
+    detailLines: selectedCommands.map((command) =>
+      formatTargetReviewLine(command.name, command.adapterLabel, command.scope),
+    ),
     default: false,
   });
   if (!confirmed) return 0;
 
   const syncState = await loadSyncState();
-  for (const idx of selected) {
-    const cmd = allCommands[Number(idx)]!;
+  for (const cmd of selectedCommands) {
     if (await pathExists(cmd.mdPath)) await fs.rm(cmd.mdPath, { force: true });
     if (cmd.resourceDirPath && (await pathExists(cmd.resourceDirPath))) {
       await removeDir(cmd.resourceDirPath);

@@ -20,6 +20,7 @@ describe('help metadata', () => {
     const output = formatHelp('agents');
     expect(output).toContain('find [query]');
     expect(output).toContain('show [agent]');
+    expect(output).toContain('organize [agent...]');
   });
 
   it('should include browse options in agents show help', () => {
@@ -38,10 +39,13 @@ describe('help metadata', () => {
     const main = formatHelp();
     expect(main).toContain('ap rules <command> [args] [options]');
     expect(main).toContain('AP_CURSOR_USER_RULES_FILE');
+    expect(main).toContain('organize [skill...]');
+    expect(main).toContain('organize [server...]');
 
     const group = formatHelp('rules');
     expect(group).toContain('validate');
     expect(group).toContain('find [query]');
+    expect(group).toContain('organize [rule...]');
     const show = formatHelp('rules', 'show');
     expect(show).toContain('--target <tools>');
     expect(show).toContain('--scope <scope>');

@@ -56,4 +56,25 @@ describe('agents manage-utils', () => {
     expect(copies[0]!.form).toBe('file');
     expect(copies[0]!.path).toBe(filePath);
   });
+
+  it('findSyncedAgentCopies detects codex TOML copies', async () => {
+    const filePath = path.join(tmpProjectRoot, '.codex', 'agents', 'reviewer.toml');
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(
+      filePath,
+      'name = "reviewer"\ndescription = "Reviews changes"\ndeveloper_instructions = "Review changes."\n',
+      'utf8',
+    );
+
+    const config = { version: 1, targets: { codex: { defaultScope: 'local' } } } as any;
+    const copies = await findSyncedAgentCopies({
+      agentNames: ['reviewer'],
+      config,
+      currentCwd: tmpProjectRoot,
+    });
+
+    expect(copies).toHaveLength(1);
+    expect(copies[0]!.form).toBe('file');
+    expect(copies[0]!.path).toBe(filePath);
+  });
 });

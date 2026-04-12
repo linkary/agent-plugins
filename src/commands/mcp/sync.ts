@@ -21,6 +21,7 @@ import { createConflictResolver } from '../../util/sync-conflict.js';
 import { ANSI } from '../../util/ansi.js';
 import { getCentralMcpDir } from '../../util/apg-paths.js';
 import { filterMcpAdapters } from './manage-utils.js';
+import { formatTargetReviewLine, formatTargetScopeLabel } from '../../util/review-display.js';
 import { parseMcpToCanonical, serializeCanonicalMcpForTarget } from '../../util/mcp-transform.js';
 import {
   countByStatus,
@@ -233,7 +234,7 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
         const promptOption = formatSyncPromptOption({
           name,
           entries: entries.map((entry) => ({
-            targetLabel: getColoredLabel(entry.adapter),
+            targetLabel: formatTargetScopeLabel(getColoredLabel(entry.adapter), entry.scope),
             status: entry.status,
             sourceMeta: entry.sourceMeta,
             targetMeta: entry.targetMeta,
@@ -263,7 +264,9 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
   } else {
     process.stdout.write(`\nSync ${entriesWithStatus.length} MCP server target(s) from ${srcBaseDir} (${scopeTitle}):\n`);
     for (const s of entriesWithStatus) {
-      process.stdout.write(`  ${s.name} -> ${getColoredLabel(s.adapter)} (${formatStatusLabel(s.status, ENTRY_STATUS_STYLES)})\n`);
+      process.stdout.write(
+        `  ${formatTargetReviewLine(s.name, getColoredLabel(s.adapter), s.scope)} [${formatStatusLabel(s.status, ENTRY_STATUS_STYLES)}]\n`,
+      );
     }
     finalEntries = entriesWithStatus;
   }

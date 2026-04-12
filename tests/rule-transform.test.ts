@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   canonicalRuleIdFromPath,
+  computeCanonicalRuleHash,
   computeRuleContentHash,
   getRuleCapability,
   parseRuleToCanonical,
@@ -95,5 +96,29 @@ Prefer semantic HTML.
     const hashC = computeRuleContentHash('beta');
     expect(hashA).toBe(hashB);
     expect(hashA).not.toBe(hashC);
+  });
+
+  it('hashes canonical rules independent of path order', () => {
+    const a = parseRuleToCanonical(
+      'web/style.md',
+      `---
+paths:
+  - web/**
+  - src/**
+---
+body
+`,
+    );
+    const b = parseRuleToCanonical(
+      'web/style.mdc',
+      `---
+globs:
+  - src/**
+  - web/**
+---
+body
+`,
+    );
+    expect(computeCanonicalRuleHash(a)).toBe(computeCanonicalRuleHash(b));
   });
 });

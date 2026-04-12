@@ -101,7 +101,7 @@ describe('skills sync preview labels', () => {
     const options = capturedPromptParams?.options as Array<{ label: string; detailLines?: string[]; value: string }>;
     expect(options).toHaveLength(1);
     expect(stripAnsi(options[0]!.label)).toBe(
-      'reviewer -> Cursor [replace] 10 B 2026-04-01 09:12 -> 3 B 2026-04-06 14:33',
+      'reviewer -> Cursor (local) [replace] 10 B 2026-04-01 09:12 -> 3 B 2026-04-06 14:33',
     );
     expect(options[0]!.detailLines).toBeUndefined();
   });
@@ -126,8 +126,8 @@ describe('skills sync preview labels', () => {
     expect(options).toHaveLength(1);
 
     const label = stripAnsi(options[0]!.label);
-    expect(label).toContain('reviewer [1 replace, 1 same] | Cursor [replace] 10 B 2026-04-01 09:12 -> 3 B 2026-04-06 14:33');
-    expect(label).not.toContain('Codex');
+    expect(label).toContain('reviewer [1 replace, 1 same] | Cursor (local) [replace] 10 B 2026-04-01 09:12 -> 3 B 2026-04-06 14:33');
+    expect(label).not.toContain('Codex (local)');
     expect(options[0]!.detailLines).toBeUndefined();
   });
 
@@ -152,8 +152,8 @@ describe('skills sync preview labels', () => {
 
     expect(stripAnsi(options[0]!.label)).toBe('reviewer [1 new, 1 replace, 1 same]');
     expect(options[0]!.detailLines?.map(stripAnsi)).toEqual([
-      'Cursor [replace] 10 B 2026-04-01 09:12 -> 3 B 2026-04-06 14:33',
-      'Claude Code [new] 10 B 2026-04-01 09:12',
+      'Cursor (local) [replace] 10 B 2026-04-01 09:12 -> 3 B 2026-04-06 14:33',
+      'Claude Code (local) [new] 10 B 2026-04-01 09:12',
     ]);
   });
 });

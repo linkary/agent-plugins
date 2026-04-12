@@ -25,6 +25,7 @@ import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-sta
 import { loadConfig } from '../../core/config.js';
 import { syncDirectoryCommand, syncFileCommand } from '../../util/command-transform.js';
 import { parseCommandMeta } from '../../util/command-meta.js';
+import { formatTargetReviewLine, formatTargetScopeLabel } from '../../util/review-display.js';
 import { timestampId } from '../../util/sync-utils.js';
 import { copyDir } from '../../util/copy-dir.js';
 import {
@@ -223,7 +224,7 @@ export async function cmdCommandsSync(
         const promptOption = formatSyncPromptOption({
           name,
           entries: entries.map((entry) => ({
-            targetLabel: getColoredLabel(entry.adapter),
+            targetLabel: formatTargetScopeLabel(getColoredLabel(entry.adapter), entry.scope),
             status: entry.status,
             sourceMeta: entry.sourceMeta,
             targetMeta: entry.targetMeta,
@@ -255,7 +256,7 @@ export async function cmdCommandsSync(
     process.stdout.write(`\nSync ${entriesWithStatus.length} command(s) from ${srcBaseDir} (${scopeTitle}):\n`);
     for (const s of entriesWithStatus) {
       const status = formatStatusLabel(s.status, ENTRY_STATUS_STYLES);
-      process.stdout.write(`  ${s.name} -> ${getColoredLabel(s.adapter)} [${status}]\n`);
+      process.stdout.write(`  ${formatTargetReviewLine(s.name, getColoredLabel(s.adapter), s.scope)} [${status}]\n`);
     }
     finalEntries = entriesWithStatus;
   }

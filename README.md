@@ -51,7 +51,7 @@ Interactive features (selection, conflict resolution, browsing) use an ink-based
 
 ## Command Overview
 
-`skills`, `agents`, `commands`, and `rules` share lifecycle-style subcommands (`add/rm/sync/collect/list/find`).
+`skills`, `agents`, `commands`, `rules`, and `mcp` share lifecycle-style subcommands. `organize` is compatibility-aware: it scans target tools, previews exact duplicates, and only proposes safe mutations.
 
 ### Skills
 
@@ -81,6 +81,9 @@ ap skills collect [<skill>...] --target <target> [--scope local|global] [--all] 
 
 # Remove skills (interactive mode when no args given)
 ap skills rm [<skill>...] [--target <...>] [--scope local|global] [--dry-run]
+
+# Organize exact duplicate skills across selected target tools
+ap skills organize [<skill>...] --target <target> [--scope local|global] [--dry-run] [--force]
 ```
 
 ### Commands
@@ -109,6 +112,9 @@ ap commands collect [<command>...] --target <target> [--scope local|global] [--a
 
 # Remove commands
 ap commands rm [<command>...] [--target <...>] [--scope local|global] [--dry-run]
+
+# Organize exact duplicate commands across selected target tools
+ap commands organize [<command>...] --target <target> [--scope local|global] [--dry-run] [--force]
 ```
 
 ### Agents
@@ -134,6 +140,9 @@ ap agents collect [<agent>...] --target <target> [--scope local|global] [--all] 
 
 # Remove agents
 ap agents rm [<agent>...] [--target <...>] [--scope local|global] [--dry-run]
+
+# Organize exact duplicate agents across selected target tools
+ap agents organize [<agent>...] --target <target> [--scope local|global] [--dry-run] [--force]
 ```
 
 ### Rules
@@ -163,6 +172,25 @@ ap rules rm [<rule>...] [--target <...>] [--scope local|global] [--dry-run]
 
 # Validate rules (empty files / basename conflicts)
 ap rules validate
+
+# Organize exact duplicate prompt-rules across selected target tools
+ap rules organize [<rule>...] --target <target> [--scope local|global] [--dry-run] [--force]
+```
+
+### MCP
+
+```bash
+# List central MCP servers
+ap mcp list
+
+# Find MCP servers (local + remote)
+ap mcp find [query]
+
+# Browse and inspect MCP server definitions
+ap mcp show [server]
+
+# Organize exact duplicate MCP servers across selected target tools
+ap mcp organize [<server>...] --target <target> [--scope local|global] [--dry-run] [--force]
 ```
 
 Note: `ap rules sync/collect/rm --target cursor --scope global` now operates on Cursor **User Rules (Settings text)** using managed blocks.  
@@ -187,9 +215,17 @@ Subcommands also support abbreviations (parsed by position):
 ```bash
 ap s ls           # skills list
 ap s a /path      # skills add
+ap s o            # skills organize
 ap c ls           # commands list
 ap c show         # commands show
 ```
+
+### Compatibility-Aware Organize
+
+- `organize` compares exact canonical content only. Same name is not enough.
+- Skills are the only v1 workflow with safe promotion into a shared destination: Gemini CLI + Agents can consolidate into `.agents/skills`.
+- Commands, agents, rules, and MCP mostly remain preview/report-only in cross-tool cases because their official storage models are still tool-specific.
+- `organize` does not rewrite `config.json`; later `sync` can recreate removed copies if your include lists still target them.
 
 ### Targets
 

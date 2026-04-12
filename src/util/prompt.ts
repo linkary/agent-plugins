@@ -8,6 +8,7 @@ import { Select, type SelectOption } from '../ui/select.js';
 import { MultiSelect, type MultiSelectOption } from '../ui/multi-select.js';
 import { Confirm } from '../ui/confirm.js';
 import { Choice } from '../ui/choice.js';
+import { ReviewConfirm } from '../ui/review-confirm.js';
 
 export type { SelectOption } from '../ui/select.js';
 
@@ -61,14 +62,37 @@ export async function promptMultiSelect<T extends string>(params: {
 
 // ─── promptConfirm ──────────────────────────────────────────────────────
 
-export async function promptConfirm(params: { message: string; default?: boolean }): Promise<boolean> {
+export async function promptConfirm(params: string | { message: string; default?: boolean }): Promise<boolean> {
+  if (!process.stdin.isTTY) {
+    throw new Error('Interactive prompt requires a TTY');
+  }
+
+  const promptParams = typeof params === 'string' ? { message: params } : params;
+  return runInk<boolean>(
+    React.createElement(Confirm, {
+      message: promptParams.message,
+      defaultValue: promptParams.default,
+    }),
+  );
+}
+
+// ─── promptReviewConfirm ────────────────────────────────────────────────
+
+export async function promptReviewConfirm(params: {
+  message: string;
+  summaryLines?: string[];
+  detailLines?: string[];
+  default?: boolean;
+}): Promise<boolean> {
   if (!process.stdin.isTTY) {
     throw new Error('Interactive prompt requires a TTY');
   }
 
   return runInk<boolean>(
-    React.createElement(Confirm, {
+    React.createElement(ReviewConfirm, {
       message: params.message,
+      summaryLines: params.summaryLines,
+      detailLines: params.detailLines,
       defaultValue: params.default,
     }),
   );

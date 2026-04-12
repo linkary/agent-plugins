@@ -26,6 +26,7 @@ export type TargetAdapter = {
   label: string;
   color: string; // ANSI color code for this adapter
   aliases: string[];
+  agentFormat?: 'filesystem-markdown' | 'codex-toml';
   resolveSkillsDir(params: ResolveParams): string;
   resolveAgentsDir(params: ResolveParams): string;
   resolveCommandsDir(params: ResolveParams): string;
@@ -65,6 +66,7 @@ const adapters: TargetAdapter[] = [
     label: 'Cursor',
     color: ANSI.brightMagenta,
     aliases: ['cursor'],
+    agentFormat: 'filesystem-markdown',
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.cursor', 'skills') : path.join(projectRoot, '.cursor', 'skills'),
     resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
@@ -86,6 +88,7 @@ const adapters: TargetAdapter[] = [
     label: 'Gemini CLI',
     color: ANSI.magenta,
     aliases: ['gemini', 'gemini-cli'],
+    agentFormat: 'filesystem-markdown',
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.gemini', 'skills') : path.join(projectRoot, '.gemini', 'skills'),
     resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
@@ -110,6 +113,7 @@ const adapters: TargetAdapter[] = [
     label: 'Codex',
     color: ANSI.green,
     aliases: ['codex'],
+    agentFormat: 'codex-toml',
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(getCodexHomeDir(homeDir), 'skills') : path.join(projectRoot, '.codex', 'skills'),
     resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
@@ -131,6 +135,7 @@ const adapters: TargetAdapter[] = [
     label: 'Claude Code',
     color: ANSI.yellow,
     aliases: ['claude', 'claude-code', 'claudecode'],
+    agentFormat: 'filesystem-markdown',
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.claude', 'skills') : path.join(projectRoot, '.claude', 'skills'),
     resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
@@ -203,6 +208,7 @@ const adapters: TargetAdapter[] = [
     label: 'OpenCode',
     color: ANSI.teal,
     aliases: ['opencode', 'open-code'],
+    agentFormat: 'filesystem-markdown',
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.opencode', 'skills') : path.join(projectRoot, '.opencode', 'skills'),
     resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
@@ -227,6 +233,7 @@ const adapters: TargetAdapter[] = [
     label: 'Qoder',
     color: ANSI.pink,
     aliases: ['qoder'],
+    agentFormat: 'filesystem-markdown',
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.qoder', 'skills') : path.join(projectRoot, '.qoder', 'skills'),
     resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>

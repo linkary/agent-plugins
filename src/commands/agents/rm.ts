@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { loadConfig } from '../../core/config.js';
 import { loadRegistry, saveRegistry, normalizeRepoUrl, removeAgentFromRepo } from '../../core/registry.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
@@ -12,24 +11,17 @@ import {
   resolveAdapter,
 } from '../../targets/adapters.js';
 import { resolveTargetContext } from '../../util/scope.js';
-import { promptConfirm, promptMultiSelect, promptSelect } from '../../util/prompt.js';
+import { promptMultiSelect, promptReviewConfirm, promptSelect } from '../../util/prompt.js';
 import { isProbablyGitUrl, isGitHubShorthand } from '../../util/git-utils.js';
 import { ANSI } from '../../util/ansi.js';
 import { gatherTargetAgents, findSyncedAgentCopies, type SyncedAgentCopy } from './manage-utils.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
+import { formatTargetReviewLine, formatTargetSummaryLines } from '../../util/review-display.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
+import { resolveNamedTargetAgentPath } from '../../util/agent-transform.js';
 
 const CENTRAL_VALUE = '__central__';
-
-async function resolveTargetAgentPath(destAgentsDir: string, name: string): Promise<string | null> {
-  const dirPath = path.join(destAgentsDir, name);
-  const mdPath = path.join(destAgentsDir, `${name}.md`);
-  const [dirExists, fileExists] = await Promise.all([pathExists(dirPath), pathExists(mdPath)]);
-  if (dirExists) return dirPath;
-  if (fileExists) return mdPath;
-  return null;
-}
 
 export async function cmdAgentsRemove(positionals: string[], flags: ParsedFlags, ctx: CliRunContext) {
   const args = positionals;
@@ -134,8 +126,10 @@ async function interactiveRemoveCentral(ctx: CliRunContext, pendingToolTargets: 
   });
   if (selected.length === 0) return;
 
-  const confirmed = await promptConfirm({
+  const confirmed = await promptReviewConfirm({
     message: `Remove ${selected.length} central agent(s)?`,
+    summaryLines: [`Source: central agents`, `Selected: ${selected.length}`],
+    detailLines: selected,
     default: false,
   });
   if (!confirmed) return;
@@ -255,15 +249,25 @@ async function interactiveRemoveFromTools(
   });
   if (selected.length === 0) return;
 
-  const confirmed = await promptConfirm({
-    message: `Remove ${selected.length} agent(s) from targets?`,
+  const selectedAgents = selected.map((idx) => allAgents[Number(idx)]!);
+  const confirmed = await promptReviewConfirm({
+    message: `Remove ${selectedAgents.length} agent(s) from targets?`,
+    summaryLines: [
+      `Selected: ${selectedAgents.length}`,
+      ...formatTargetSummaryLines(
+        selectedAgents.map((agent) => ({
+          targetLabel: agent.adapterLabel,
+          scope: agent.scope,
+        })),
+      ),
+    ],
+    detailLines: selectedAgents.map((agent) => formatTargetReviewLine(agent.name, agent.adapterLabel, agent.scope)),
     default: false,
   });
   if (!confirmed) return;
 
   const syncState = await loadSyncState();
-  for (const idx of selected) {
-    const agent = allAgents[Number(idx)]!;
+  for (const agent of selectedAgents) {
     if (!(await pathExists(agent.path))) continue;
     await removeItem(agent.path);
 
@@ -314,15 +318,25 @@ async function interactiveRemoveFromTarget(flags: ParsedFlags, ctx: CliRunContex
   });
   if (selected.length === 0) return 0;
 
-  const confirmed = await promptConfirm({
-    message: `Remove ${selected.length} agent(s) from targets?`,
+  const selectedAgents = selected.map((idx) => allAgents[Number(idx)]!);
+  const confirmed = await promptReviewConfirm({
+    message: `Remove ${selectedAgents.length} agent(s) from targets?`,
+    summaryLines: [
+      `Selected: ${selectedAgents.length}`,
+      ...formatTargetSummaryLines(
+        selectedAgents.map((agent) => ({
+          targetLabel: agent.adapterLabel,
+          scope: agent.scope,
+        })),
+      ),
+    ],
+    detailLines: selectedAgents.map((agent) => formatTargetReviewLine(agent.name, agent.adapterLabel, agent.scope)),
     default: false,
   });
   if (!confirmed) return 0;
 
   const syncState = await loadSyncState();
-  for (const idx of selected) {
-    const agent = allAgents[Number(idx)]!;
+  for (const agent of selectedAgents) {
     if (!(await pathExists(agent.path))) continue;
     await removeItem(agent.path);
 
@@ -451,17 +465,17 @@ async function removeFromTargetDirect(
   const context = syncState.contexts[contextId];
 
   for (const name of agents) {
-    const agentPath = await resolveTargetAgentPath(destAgentsDir, name);
-    if (!agentPath) {
+    const agent = await resolveNamedTargetAgentPath(adapter, destAgentsDir, name);
+    if (!agent) {
       process.stderr.write(`Not found in ${targetFlag}: ${name}\n`);
       continue;
     }
     if (dryRun) {
-      process.stdout.write(`[dry-run] rm ${name} (${agentPath})\n`);
+      process.stdout.write(`[dry-run] rm ${name} (${agent.path})\n`);
       removed++;
       continue;
     }
-    await removeItem(agentPath);
+    await removeItem(agent.path);
     if (context?.agents) delete context.agents[name];
     removed++;
     process.stdout.write(`Removed: ${name} (${getColoredLabel(adapter)})\n`);

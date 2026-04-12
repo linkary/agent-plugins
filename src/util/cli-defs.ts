@@ -99,6 +99,12 @@ export const SUBCOMMANDS = {
     aliases: ['info', 's'],
     options: ['target', 'scope', 'global', 'local', 'cwd'],
   },
+  organize: {
+    desc: 'Organize duplicate skills across target tools',
+    args: '[skill...]',
+    aliases: ['o'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+  },
 } as const satisfies Record<string, SubcommandDef>;
 
 /** Subcommands under `agents` */
@@ -149,6 +155,12 @@ export const AGENT_SUBCOMMANDS = {
     args: '[agent]',
     aliases: ['info', 's'],
     options: ['target', 'scope', 'global', 'local', 'cwd'],
+  },
+  organize: {
+    desc: 'Organize duplicate agents across target tools',
+    args: '[agent...]',
+    aliases: ['o'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
   },
 } as const satisfies Record<string, SubcommandDef>;
 
@@ -201,6 +213,12 @@ export const COMMAND_SUBCOMMANDS = {
     aliases: ['info', 's'],
     options: ['target', 'scope', 'global', 'local', 'cwd'],
   },
+  organize: {
+    desc: 'Organize duplicate commands across target tools',
+    args: '[command...]',
+    aliases: ['o'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+  },
 } as const satisfies Record<string, SubcommandDef>;
 
 /** Subcommands under `rules` */
@@ -250,6 +268,12 @@ export const RULE_SUBCOMMANDS = {
     desc: 'Validate rule format and conflict risks',
     aliases: ['check', 'vld'],
     options: ['verbose'],
+  },
+  organize: {
+    desc: 'Organize duplicate compatible rules across target tools',
+    args: '[rule...]',
+    aliases: ['o'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
   },
 } as const satisfies Record<string, SubcommandDef>;
 
@@ -301,6 +325,12 @@ export const MCP_SUBCOMMANDS = {
     args: '[server]',
     aliases: ['info', 's'],
     options: [],
+  },
+  organize: {
+    desc: 'Organize duplicate MCP servers across target tools',
+    args: '[server...]',
+    aliases: ['o'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
   },
 } as const satisfies Record<string, SubcommandDef>;
 

@@ -9,7 +9,7 @@ import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-sta
 import { removeMcpServer } from '../../util/mcp-config-io.js';
 import { getAdapters, getColoredLabel, resolveAdapter } from '../../targets/adapters.js';
 import { resolveTargetContext } from '../../util/scope.js';
-import { promptConfirm, promptMultiSelect, promptSelect } from '../../util/prompt.js';
+import { promptMultiSelect, promptReviewConfirm, promptSelect } from '../../util/prompt.js';
 import { ANSI } from '../../util/ansi.js';
 import {
   findSyncedMcpCopies,
@@ -23,6 +23,7 @@ import type { ConfigV1 } from '../../core/config.js';
 import type { McpConfigSpec } from '../../core/mcp-types.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
+import { formatTargetReviewLine, formatTargetSummaryLines } from '../../util/review-display.js';
 
 // ─── 常量 ────────────────────────────────────────────────────────────────
 
@@ -121,8 +122,10 @@ async function interactiveRemoveCentral(ctx: CliRunContext, pendingToolTargets: 
   });
   if (selected.length === 0) return;
 
-  const confirmed = await promptConfirm({
+  const confirmed = await promptReviewConfirm({
     message: `Remove ${selected.length} central MCP server(s)?`,
+    summaryLines: ['Source: central MCP servers', `Selected: ${selected.length}`],
+    detailLines: selected,
     default: false,
   });
   if (!confirmed) return;
@@ -259,14 +262,25 @@ async function interactiveRemoveFromTools(
   });
   if (selected.length === 0) return;
 
-  const confirmed = await promptConfirm({
-    message: `Remove ${selected.length} MCP server(s) from targets?`,
+  const selectedServers = selected.map((idx) => allServers[Number(idx)]!);
+  const confirmed = await promptReviewConfirm({
+    message: `Remove ${selectedServers.length} MCP server(s) from targets?`,
+    summaryLines: [
+      `Selected: ${selectedServers.length}`,
+      ...formatTargetSummaryLines(
+        selectedServers.map((server) => ({
+          targetLabel: server.adapterLabel,
+          scope: server.scope,
+        })),
+      ),
+    ],
+    detailLines: selectedServers.map((server) => formatTargetReviewLine(server.name, server.adapterLabel, server.scope)),
     default: false,
   });
   if (!confirmed) return;
 
   await removeTargetServers(
-    selected.map((i) => allServers[Number(i)]!),
+    selectedServers,
     selectedAdapters,
     config,
     { scopeFlag, cwdFlag, currentCwd: ctx.cwd },
@@ -313,14 +327,25 @@ async function interactiveRemoveFromTarget(flags: ParsedFlags, ctx: CliRunContex
   });
   if (selected.length === 0) return 0;
 
-  const confirmed = await promptConfirm({
-    message: `Remove ${selected.length} MCP server(s) from targets?`,
+  const selectedServers = selected.map((idx) => allServers[Number(idx)]!);
+  const confirmed = await promptReviewConfirm({
+    message: `Remove ${selectedServers.length} MCP server(s) from targets?`,
+    summaryLines: [
+      `Selected: ${selectedServers.length}`,
+      ...formatTargetSummaryLines(
+        selectedServers.map((server) => ({
+          targetLabel: server.adapterLabel,
+          scope: server.scope,
+        })),
+      ),
+    ],
+    detailLines: selectedServers.map((server) => formatTargetReviewLine(server.name, server.adapterLabel, server.scope)),
     default: false,
   });
   if (!confirmed) return 0;
 
   await removeTargetServers(
-    selected.map((i) => allServers[Number(i)]!),
+    selectedServers,
     selectedAdapters,
     config,
     { scopeFlag, cwdFlag, currentCwd: ctx.cwd },

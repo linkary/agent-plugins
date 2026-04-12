@@ -14,6 +14,7 @@ import { computeDirHash } from '../../util/hash-dir.js';
 import type { ParsedFlags } from '../../util/options.js';
 import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
+import { formatTargetReviewLine } from '../../util/review-display.js';
 
 const IGNORED_DIR_NAMES = ['.git'];
 
@@ -157,7 +158,7 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
       options: skillsWithStatus.map((s, i) => {
         const statusLabel = s.isDuplicate ? `${ANSI.dim}dup${ANSI.reset}` : STATUS_LABELS[s.status];
         return {
-          label: `${s.name} (${getColoredLabel(s.adapter)}) [${statusLabel}]`,
+          label: `${formatTargetReviewLine(s.name, getColoredLabel(s.adapter), s.scope)} [${statusLabel}]`,
           value: String(i),
         };
       }),
@@ -178,7 +179,7 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
     process.stdout.write(`\nCollect ${toCollect.length} skill(s) to ${destBaseDir}:\n`);
     for (const s of toCollect) {
       const statusLabel = s.status === 'conflict' ? `${ANSI.red}conflict${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
-      process.stdout.write(`  ${s.name} (${getColoredLabel(s.adapter)}) [${statusLabel}]\n`);
+      process.stdout.write(`  ${formatTargetReviewLine(s.name, getColoredLabel(s.adapter), s.scope)} [${statusLabel}]\n`);
     }
     const skipped = skillsWithStatus.length - toCollect.length;
     if (skipped > 0) {

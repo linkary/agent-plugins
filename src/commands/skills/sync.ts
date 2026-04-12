@@ -15,6 +15,7 @@ import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-sta
 import { loadConfig } from '../../core/config.js';
 import { copyDir } from '../../util/copy-dir.js';
 import { computeItemStats } from '../../util/item-utils.js';
+import { formatTargetReviewLine, formatTargetScopeLabel } from '../../util/review-display.js';
 import { fsRenameOrCopy, timestampId } from '../../util/sync-utils.js';
 import {
   countByStatus,
@@ -169,7 +170,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
         const promptOption = formatSyncPromptOption({
           name,
           entries: entries.map((entry) => ({
-            targetLabel: getColoredLabel(entry.adapter),
+            targetLabel: formatTargetScopeLabel(getColoredLabel(entry.adapter), entry.scope),
             status: entry.status,
             sourceMeta: entry.sourceMeta,
             targetMeta: entry.targetMeta,
@@ -202,7 +203,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
     process.stdout.write(`\nSync ${entriesWithStatus.length} skill(s) from ${srcBaseDir} (${scopeTitle}):\n`);
     for (const s of entriesWithStatus) {
       const status = formatStatusLabel(s.status, ENTRY_STATUS_STYLES);
-      process.stdout.write(`  ${s.name} -> ${getColoredLabel(s.adapter)} [${status}]\n`);
+      process.stdout.write(`  ${formatTargetReviewLine(s.name, getColoredLabel(s.adapter), s.scope)} [${status}]\n`);
     }
     finalEntries = entriesWithStatus;
   }

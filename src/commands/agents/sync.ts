@@ -1,8 +1,7 @@
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 import path from 'node:path';
-import { listCentralAgentItems, type CentralAgentItem } from '../../core/agent-store.js';
-import { ANSI } from '../../util/ansi.js';
+import { listCentralAgentItems, readCentralAgentSpec } from '../../core/agent-store.js';
 import { ensureDir, pathExists } from '../../util/fs-utils.js';
 import { promptMultiSelect } from '../../util/prompt.js';
 import { createConflictResolver } from '../../util/sync-conflict.js';
@@ -18,7 +17,8 @@ import { getCentralAgentsDir } from '../../util/apg-paths.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
 import { loadConfig } from '../../core/config.js';
-import { computeItemHash, computeItemStats, copyItem, removeItem } from '../../util/item-utils.js';
+import { computeItemHash, computeItemStats, removeItem } from '../../util/item-utils.js';
+import { formatTargetReviewLine, formatTargetScopeLabel } from '../../util/review-display.js';
 import { fsRenameOrCopy, timestampId } from '../../util/sync-utils.js';
 import {
   countByStatus,
@@ -29,15 +29,27 @@ import {
   groupEntriesByName,
   type StatusStyle,
 } from '../../util/sync-preview.js';
+import {
+  classifyFilesystemAgentPath,
+  computeAgentHashForTarget,
+  compareAgentEntries,
+  resolveTargetAgentPaths,
+  writeAgentToTarget,
+} from '../../util/agent-transform.js';
 
 type SyncEntry = {
   name: string;
-  srcPath: string;
+  sourceEntry: Awaited<ReturnType<typeof classifyFilesystemAgentPath>> extends infer T
+    ? T extends null
+      ? never
+      : T
+    : never;
+  destAgentsDir: string;
   destPath: string;
-  altDestPath: string;
   adapter: TargetAdapter;
   scope: Scope;
   projectRoot: string;
+  altDestPaths: string[];
 };
 
 type EntryStatus = 'new' | 'replace' | 'same';
@@ -48,10 +60,11 @@ const ENTRY_STATUS_STYLES: StatusStyle<EntryStatus> = {
   same: { color: 'dim' },
 };
 
-async function resolveExistingPath(destPath: string, altDestPath: string): Promise<string | null> {
-  const [destExists, altExists] = await Promise.all([pathExists(destPath), pathExists(altDestPath)]);
-  if (destExists) return destPath;
-  if (altExists) return altDestPath;
+async function resolveExistingPath(destPath: string, altDestPaths: string[]): Promise<string | null> {
+  const candidates = [destPath, ...altDestPaths];
+  const results = await Promise.all(candidates.map((candidate) => pathExists(candidate)));
+  const existingIndex = results.findIndex(Boolean);
+  if (existingIndex >= 0) return candidates[existingIndex]!;
   return null;
 }
 
@@ -76,7 +89,7 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
   const availableAgentItems = await listCentralAgentItems();
   const availableAgentNames = availableAgentItems.map((agent) => agent.name);
   const availableAgentNamesSet = new Set(availableAgentNames);
-  const availableAgentByName = new Map<string, CentralAgentItem>(availableAgentItems.map((agent) => [agent.name, agent]));
+  const availableAgentByName = new Map(availableAgentItems.map((agent) => [agent.name, agent]));
   if (availableAgentNames.length === 0) {
     process.stdout.write('(no agents to sync)\n');
     return 0;
@@ -103,16 +116,16 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
       if (positionals.length > 0 && !positionals.includes(name)) continue;
       const item = availableAgentByName.get(name);
       if (!item) continue;
-      const destPath =
-        item.form === 'directory' ? path.join(destAgentsDir, name) : path.join(destAgentsDir, `${name}.md`);
-      const altDestPath =
-        item.form === 'directory' ? path.join(destAgentsDir, `${name}.md`) : path.join(destAgentsDir, name);
+      const sourceEntry = await classifyFilesystemAgentPath(item.path, name);
+      if (!sourceEntry) continue;
+      const { destPath, altDestPaths } = await resolveTargetAgentPaths(adapter, destAgentsDir, sourceEntry);
 
       allEntries.push({
         name,
-        srcPath: item.path,
+        sourceEntry,
+        destAgentsDir,
         destPath,
-        altDestPath,
+        altDestPaths,
         adapter,
         scope,
         projectRoot,
@@ -132,6 +145,7 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
     sourceMeta?: Awaited<ReturnType<typeof computeItemStats>>;
     targetMeta?: Awaited<ReturnType<typeof computeItemStats>>;
   };
+
   const sourceStatsCache = new Map<string, Promise<Awaited<ReturnType<typeof computeItemStats>>>>();
   const getSourceMeta = (srcPath: string) => {
     let cached = sourceStatsCache.get(srcPath);
@@ -141,21 +155,28 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
     }
     return cached;
   };
+
   const entriesWithStatus: EntryWithStatus[] = await Promise.all(
-    allEntries.map(async (s) => {
-      const existingPath = await resolveExistingPath(s.destPath, s.altDestPath);
+    allEntries.map(async (entry) => {
+      const existingPath = await resolveExistingPath(entry.destPath, entry.altDestPaths);
       if (!existingPath) {
         return {
-          ...s,
+          ...entry,
           status: 'new' as const,
-          sourceMeta: await getSourceMeta(s.srcPath),
+          sourceMeta: await getSourceMeta(entry.sourceEntry.path),
         };
       }
-      const srcHash = await computeItemHash(s.srcPath);
-      const existingHash = await computeItemHash(existingPath);
-      if (existingHash === srcHash) return { ...s, status: 'same' as const };
-      const [sourceMeta, targetMeta] = await Promise.all([getSourceMeta(s.srcPath), computeItemStats(existingPath)]);
-      return { ...s, status: 'replace' as const, sourceMeta, targetMeta };
+
+      const targetEntry = await classifyFilesystemAgentPath(existingPath, entry.name);
+      const comparison =
+        targetEntry ? await compareAgentEntries(entry.sourceEntry, targetEntry, entry.adapter) : 'different';
+      if (comparison === 'same') return { ...entry, status: 'same' as const };
+
+      const [sourceMeta, targetMeta] = await Promise.all([
+        getSourceMeta(entry.sourceEntry.path),
+        computeItemStats(existingPath),
+      ]);
+      return { ...entry, status: 'replace' as const, sourceMeta, targetMeta };
     }),
   );
 
@@ -173,11 +194,11 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
       options: groupedItems.map(([name, entries]) => {
         const promptOption = formatSyncPromptOption({
           name,
-          entries: entries.map((entry) => ({
-            targetLabel: getColoredLabel(entry.adapter),
-            status: entry.status,
-            sourceMeta: entry.sourceMeta,
-            targetMeta: entry.targetMeta,
+          entries: entries.map((item) => ({
+            targetLabel: formatTargetScopeLabel(getColoredLabel(item.adapter), item.scope),
+            status: item.status,
+            sourceMeta: item.sourceMeta,
+            targetMeta: item.targetMeta,
           })),
           orderedStatuses: ENTRY_STATUS_ORDER,
           styles: ENTRY_STATUS_STYLES,
@@ -190,7 +211,7 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
         };
       }),
       defaultSelected: groupedItems
-        .filter(([, entries]) => entries.some((e) => e.status === 'replace'))
+        .filter(([, entries]) => entries.some((item) => item.status === 'replace'))
         .map(([name]) => name),
       sortDefaultSelectedToTop: true,
       searchable: true,
@@ -204,9 +225,9 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
     finalEntries = entriesWithStatus.filter((entry) => selectedNameSet.has(entry.name));
   } else {
     process.stdout.write(`\nSync ${entriesWithStatus.length} agent(s) from ${srcBaseDir} (${scopeTitle}):\n`);
-    for (const s of entriesWithStatus) {
-      const status = formatStatusLabel(s.status, ENTRY_STATUS_STYLES);
-      process.stdout.write(`  ${s.name} -> ${getColoredLabel(s.adapter)} [${status}]\n`);
+    for (const entry of entriesWithStatus) {
+      const status = formatStatusLabel(entry.status, ENTRY_STATUS_STYLES);
+      process.stdout.write(`  ${formatTargetReviewLine(entry.name, getColoredLabel(entry.adapter), entry.scope)} [${status}]\n`);
     }
     finalEntries = entriesWithStatus;
   }
@@ -214,15 +235,27 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
   const syncState = await loadSyncState();
   const conflictResolver = createConflictResolver({ interactive, force });
 
-  const destDirs = new Set(finalEntries.map((e) => path.dirname(e.destPath)));
   if (!dryRun) {
-    for (const dir of destDirs) await ensureDir(dir);
+    for (const dir of new Set(finalEntries.map((entry) => entry.destAgentsDir))) {
+      await ensureDir(dir);
+    }
   }
 
   for (const entry of finalEntries) {
-    const { name, srcPath, destPath, altDestPath, adapter, scope, projectRoot } = entry;
-    if (!(await pathExists(srcPath))) {
+    const { name, sourceEntry, destPath, altDestPaths, destAgentsDir, adapter, scope, projectRoot } = entry;
+    if (!(await pathExists(sourceEntry.path))) {
       process.stderr.write(`Missing central agent: ${name}\n`);
+      continue;
+    }
+
+    const sourceRead = await readCentralAgentSpec(name);
+    if (!sourceRead) {
+      process.stderr.write(`Unreadable central agent: ${name}\n`);
+      continue;
+    }
+    const sourceHash = await computeAgentHashForTarget(sourceEntry, adapter);
+    if (!sourceHash) {
+      process.stderr.write(`Could not hash central agent: ${name}\n`);
       continue;
     }
 
@@ -237,29 +270,34 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
     context.agents ??= {};
     syncState.contexts[contextId] = context;
 
-    const srcHash = await computeItemHash(srcPath);
-    const existingPath = await resolveExistingPath(destPath, altDestPath);
-
+    const existingPath = await resolveExistingPath(destPath, altDestPaths);
     if (!existingPath) {
       if (dryRun) {
-        process.stdout.write(`[dry-run] copy ${name} -> ${destPath}\n`);
+        process.stdout.write(`[dry-run] write ${name} -> ${destPath}\n`);
         continue;
       }
-      await copyItem(srcPath, destPath);
-      context.agents[name] = { hash: srcHash, syncedAt: new Date().toISOString() };
+      await writeAgentToTarget({
+        adapter,
+        spec: sourceRead.spec,
+        sourceEntry,
+        targetDir: destAgentsDir,
+      });
+      context.agents[name] = { hash: sourceHash, syncedAt: new Date().toISOString() };
       process.stdout.write(`Synced: ${name} -> ${getColoredLabel(adapter)}\n`);
       continue;
     }
 
-    const destHash = await computeItemHash(existingPath);
-    if (destHash === srcHash) {
-      context.agents[name] = { hash: srcHash, syncedAt: context.agents[name]?.syncedAt ?? new Date().toISOString() };
+    const existingEntry = await classifyFilesystemAgentPath(existingPath, name);
+    const existingHash = existingEntry ? await computeAgentHashForTarget(existingEntry, adapter) : null;
+    if (existingHash === sourceHash) {
+      context.agents[name] = { hash: sourceHash, syncedAt: context.agents[name]?.syncedAt ?? new Date().toISOString() };
       process.stdout.write(`Up-to-date: ${name} (${getColoredLabel(adapter)})\n`);
       continue;
     }
 
+    const fallbackHash = existingHash ?? (await computeItemHash(existingPath));
     const last = context.agents[name];
-    const action = await conflictResolver.resolve(name, adapter, last?.hash, destHash);
+    const action = await conflictResolver.resolve(name, adapter, last?.hash, fallbackHash);
     if (action === 'quit') return 1;
 
     if (action === 'skip') {
@@ -276,15 +314,18 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
       const baseName = path.basename(existingPath);
       const backupPath = path.join(path.dirname(existingPath), `${baseName}.bak-${timestampId()}`);
       await fsRenameOrCopy(existingPath, backupPath);
+      await removeItem(existingPath);
     } else {
       await removeItem(existingPath);
     }
 
-    if (existingPath !== destPath && (await pathExists(destPath))) {
-      await removeItem(destPath);
-    }
-    await copyItem(srcPath, destPath);
-    context.agents[name] = { hash: srcHash, syncedAt: new Date().toISOString() };
+    await writeAgentToTarget({
+      adapter,
+      spec: sourceRead.spec,
+      sourceEntry,
+      targetDir: destAgentsDir,
+    });
+    context.agents[name] = { hash: sourceHash, syncedAt: new Date().toISOString() };
     process.stdout.write(`Synced: ${name} -> ${getColoredLabel(adapter)}\n`);
   }
 

@@ -1,7 +1,13 @@
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { loadConfig } from '../../core/config.js';
 import { loadRegistry, saveRegistry } from '../../core/registry.js';
-import { ensureCentralAgentStore, getCentralAgentPath } from '../../core/agent-store.js';
+import {
+  ensureCentralAgentStore,
+  getCentralAgentPath,
+  resolveCentralAgentEntry,
+  writeCentralAgentSpec,
+} from '../../core/agent-store.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
 import {
   type Scope,
@@ -11,22 +17,29 @@ import {
   type TargetAdapter,
 } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
-import { getCentralAgentsDir } from '../../util/apg-paths.js';
 import { ANSI } from '../../util/ansi.js';
+import { getCentralAgentsDir } from '../../util/apg-paths.js';
 import { resolveTargetContext } from '../../util/scope.js';
-import { copyDir } from '../../util/copy-dir.js';
-import { ensureDir, listDirNames, pathExists, removeDirContents } from '../../util/fs-utils.js';
-import { computeDirHash } from '../../util/hash-dir.js';
+import { ensureDir, pathExists } from '../../util/fs-utils.js';
 import type { ParsedFlags } from '../../util/options.js';
 import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
-
-const IGNORED_DIR_NAMES = ['.git'];
+import { formatTargetReviewLine } from '../../util/review-display.js';
+import {
+  classifyFilesystemAgentPath,
+  compareAgentEntries,
+  computeAgentHashForTarget,
+  readAgentSpecFromEntry,
+  scanFilesystemAgents,
+} from '../../util/agent-transform.js';
 
 type AgentEntry = {
   name: string;
-  srcDir: string;
-  destDir: string;
+  sourceEntry: Awaited<ReturnType<typeof classifyFilesystemAgentPath>> extends infer T
+    ? T extends null
+      ? never
+      : T
+    : never;
   adapter: TargetAdapter;
   scope: Scope;
   projectRoot: string;
@@ -50,8 +63,8 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
   if (selectedAdapters.length === 0) return 1;
 
   const config = await loadConfig();
-
   const allAgents: AgentEntry[] = [];
+
   for (const adapter of selectedAdapters) {
     const targetConfig = config.targets[adapter.id];
     const { scope, projectRoot, homeDir } = await resolveTargetContext({
@@ -62,19 +75,18 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
     });
     const sourceAgentsDir = adapter.resolveAgentsDir({ scope, projectRoot, homeDir });
 
-    const available = await listDirNames(sourceAgentsDir);
+    const available = await scanFilesystemAgents(sourceAgentsDir);
     if (available.length === 0) {
       process.stderr.write(`${ANSI.dim}(no agents found in ${getColoredLabel(adapter)} ${scope})${ANSI.reset}\n`);
       continue;
     }
 
-    for (const name of available) {
-      if (name.startsWith('.') && !positionals.includes(name)) continue;
-      if (positionals.length > 0 && !positionals.includes(name)) continue;
+    for (const entry of available) {
+      if (entry.name.startsWith('.') && !positionals.includes(entry.name)) continue;
+      if (positionals.length > 0 && !positionals.includes(entry.name)) continue;
       allAgents.push({
-        name,
-        srcDir: path.join(sourceAgentsDir, name),
-        destDir: getCentralAgentPath(name),
+        name: entry.name,
+        sourceEntry: entry,
         adapter,
         scope,
         projectRoot,
@@ -87,7 +99,7 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
     return 0;
   }
 
-  type CollectStatus = 'new' | 'identical' | 'conflict' | 'overwrite';
+  type CollectStatus = 'new' | 'identical' | 'conflict';
   type AgentWithStatus = AgentEntry & {
     status: CollectStatus;
     isDuplicate: boolean;
@@ -96,31 +108,34 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
 
   const seenNames = new Set<string>();
   const agentsWithStatus: AgentWithStatus[] = [];
-  const selectedAgents = allAgents;
 
   process.stderr.write(`${ANSI.dim}Analyzing agents...${ANSI.reset}\n`);
 
-  for (const agent of selectedAgents) {
+  for (const agent of allAgents) {
     const lower = agent.name.toLowerCase();
     const isDuplicate = seenNames.has(lower);
     seenNames.add(lower);
 
-    const srcHash = await computeDirHash(agent.srcDir, { ignoreNames: IGNORED_DIR_NAMES });
+    const srcHash = await computeAgentHashForTarget(agent.sourceEntry, agent.adapter);
+    if (!srcHash) continue;
+
     let status: CollectStatus = 'new';
-    if (await pathExists(agent.destDir)) {
-      const destHash = await computeDirHash(agent.destDir, { ignoreNames: IGNORED_DIR_NAMES });
-      status = destHash === srcHash ? 'identical' : 'conflict';
+    const existingEntry = await resolveCentralAgentEntry(agent.name);
+    if (existingEntry) {
+      const comparison = await compareAgentEntries(agent.sourceEntry, existingEntry, agent.adapter);
+      status = comparison === 'same' ? 'identical' : 'conflict';
     }
+
     agentsWithStatus.push({ ...agent, status, isDuplicate, srcHash });
   }
 
   const destBaseDir = getCentralAgentsDir();
   let finalAgents: AgentWithStatus[];
 
-  const newCount = agentsWithStatus.filter((s) => s.status === 'new' && !s.isDuplicate).length;
-  const conflictCount = agentsWithStatus.filter((s) => s.status === 'conflict').length;
-  const identicalCount = agentsWithStatus.filter((s) => s.status === 'identical').length;
-  const dedupCount = agentsWithStatus.filter((s) => s.isDuplicate).length;
+  const newCount = agentsWithStatus.filter((item) => item.status === 'new' && !item.isDuplicate).length;
+  const conflictCount = agentsWithStatus.filter((item) => item.status === 'conflict').length;
+  const identicalCount = agentsWithStatus.filter((item) => item.status === 'identical').length;
+  const dedupCount = agentsWithStatus.filter((item) => item.isDuplicate).length;
 
   if (interactive && !force) {
     process.stderr.write(
@@ -130,23 +145,23 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
     );
 
     const defaultSelected = agentsWithStatus
-      .map((s, i) => (!s.isDuplicate && (s.status === 'new' || s.status === 'conflict') ? String(i) : null))
-      .filter((v): v is string => v !== null);
+      .map((item, index) => (!item.isDuplicate && (item.status === 'new' || item.status === 'conflict') ? String(index) : null))
+      .filter((value): value is string => value !== null);
 
     const selectedKeys = await promptMultiSelect({
       message: `Confirm agents to collect (target: ${destBaseDir}):`,
-      options: agentsWithStatus.map((s, i) => {
+      options: agentsWithStatus.map((item, index) => {
         const statusLabel =
-          s.isDuplicate
+          item.isDuplicate
             ? `${ANSI.dim}dup${ANSI.reset}`
-            : s.status === 'new'
+            : item.status === 'new'
               ? `${ANSI.green}new${ANSI.reset}`
-              : s.status === 'identical'
+              : item.status === 'identical'
                 ? `${ANSI.gray}identical${ANSI.reset}`
                 : `${ANSI.red}conflict${ANSI.reset}`;
         return {
-          label: `${s.name} (${getColoredLabel(s.adapter)}) [${statusLabel}]`,
-          value: String(i),
+          label: `${formatTargetReviewLine(item.name, getColoredLabel(item.adapter), item.scope)} [${statusLabel}]`,
+          value: String(index),
         };
       }),
       defaultSelected,
@@ -157,13 +172,13 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
       process.stdout.write('Cancelled.\n');
       return 0;
     }
-    finalAgents = selectedKeys.map((i) => agentsWithStatus[Number(i)]!);
+    finalAgents = selectedKeys.map((index) => agentsWithStatus[Number(index)]!);
   } else {
-    const toCollect = agentsWithStatus.filter((s) => !s.isDuplicate && s.status !== 'identical');
+    const toCollect = agentsWithStatus.filter((item) => !item.isDuplicate && item.status !== 'identical');
     process.stdout.write(`\nCollect ${toCollect.length} agent(s) to ${destBaseDir}:\n`);
-    for (const s of toCollect) {
-      const statusLabel = s.status === 'conflict' ? `${ANSI.red}conflict${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
-      process.stdout.write(`  ${s.name} (${getColoredLabel(s.adapter)}) [${statusLabel}]\n`);
+    for (const item of toCollect) {
+      const statusLabel = item.status === 'conflict' ? `${ANSI.red}conflict${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
+      process.stdout.write(`  ${formatTargetReviewLine(item.name, getColoredLabel(item.adapter), item.scope)} [${statusLabel}]\n`);
     }
     const skipped = agentsWithStatus.length - toCollect.length;
     if (skipped > 0) {
@@ -178,11 +193,11 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
   registry.agents ??= {};
   const syncState = await loadSyncState();
 
-  const conflicts = finalAgents.filter((s) => s.status === 'conflict');
+  const conflicts = finalAgents.filter((item) => item.status === 'conflict');
   type Resolution = 'overwrite' | 'backup' | 'keep' | 'skip';
   const resolutions = new Map<string, Resolution>();
-  for (const s of finalAgents) {
-    if (s.status !== 'conflict') resolutions.set(s.name, 'overwrite');
+  for (const item of finalAgents) {
+    if (item.status !== 'conflict') resolutions.set(item.name, 'overwrite');
   }
 
   if (conflicts.length > 0 && interactive) {
@@ -201,13 +216,13 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
       process.stdout.write('Operation cancelled.\n');
       return 0;
     }
-    if (batchAction === 'o') conflicts.forEach((c) => resolutions.set(c.name, 'overwrite'));
-    if (batchAction === 's') conflicts.forEach((c) => resolutions.set(c.name, 'skip'));
-    if (batchAction === 'b') conflicts.forEach((c) => resolutions.set(c.name, 'backup'));
+    if (batchAction === 'o') conflicts.forEach((item) => resolutions.set(item.name, 'overwrite'));
+    if (batchAction === 's') conflicts.forEach((item) => resolutions.set(item.name, 'skip'));
+    if (batchAction === 'b') conflicts.forEach((item) => resolutions.set(item.name, 'backup'));
     if (batchAction === 'i') {
-      for (const c of conflicts) {
+      for (const item of conflicts) {
         const action = await promptChoice({
-          message: `Resolve conflict for ${c.name}:`,
+          message: `Resolve conflict for ${item.name}:`,
           options: [
             { key: 'o', label: 'Overwrite' },
             { key: 'b', label: 'Backup & overwrite' },
@@ -216,20 +231,26 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
           ],
         });
         const keyToAction: Record<string, Resolution> = { o: 'overwrite', b: 'backup', k: 'keep', s: 'skip' };
-        resolutions.set(c.name, keyToAction[action] ?? 'skip');
+        resolutions.set(item.name, keyToAction[action] ?? 'skip');
       }
     }
   } else if (force) {
-    conflicts.forEach((c) => resolutions.set(c.name, 'overwrite'));
+    conflicts.forEach((item) => resolutions.set(item.name, 'overwrite'));
   } else if (conflicts.length > 0) {
     process.stderr.write(`${conflicts.length} conflict(s) detected. Re-run with --force or in an interactive terminal.\n`);
     return 1;
   }
 
   for (const agent of finalAgents) {
-    const { name, srcDir, destDir, adapter, scope, projectRoot, srcHash } = agent;
-    if (!(await pathExists(srcDir))) {
+    const { name, sourceEntry, adapter, scope, projectRoot, srcHash } = agent;
+    if (!(await pathExists(sourceEntry.path))) {
       process.stderr.write(`Missing source agent: ${name}\n`);
+      continue;
+    }
+
+    const spec = await readAgentSpecFromEntry(sourceEntry);
+    if (!spec) {
+      process.stderr.write(`Could not parse source agent: ${name}\n`);
       continue;
     }
 
@@ -238,51 +259,51 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
       scope,
       projectRoot: scope === 'local' ? projectRoot : undefined,
     });
-    const context = syncState.contexts[contextId] ?? { skills: {}, agents: {} as Record<string, { hash: string; syncedAt: string }> };
+    const context =
+      syncState.contexts[contextId] ?? ({ skills: {}, agents: {} as Record<string, { hash: string; syncedAt: string }> } as const);
     context.agents ??= {};
     syncState.contexts[contextId] = context;
 
-    let targetDest = destDir;
     let targetName = name;
-    const action = resolutions.get(name) ?? 'skip';
-
+    let action = resolutions.get(name) ?? 'skip';
     if (action === 'skip') {
       process.stdout.write(`Skipped: ${name}\n`);
       continue;
     }
-    if (dryRun) {
-      const actionLabel = action === 'keep' ? `keep-both as ${targetName}` : action;
-      process.stdout.write(`[dry-run] ${actionLabel} ${name} -> ${targetDest}\n`);
-      continue;
-    }
+
     if (action === 'keep') {
       let counter = 1;
-      while (await pathExists(targetDest)) {
+      while ((await resolveCentralAgentEntry(targetName)) !== null) {
         targetName = `${name}_new${counter}`;
-        targetDest = path.join(destBaseDir, targetName);
         counter++;
       }
       process.stdout.write(`Renaming incoming to ${targetName}\n`);
+      action = 'overwrite';
     }
 
-    if (action === 'backup') {
-      const backupDir = `${destDir}.bak-${Date.now()}`;
-      await ensureDir(path.dirname(backupDir));
-      if (await pathExists(destDir)) {
-        await copyDir(destDir, backupDir, { ignoreNames: IGNORED_DIR_NAMES });
-        await removeDirContents(destDir, IGNORED_DIR_NAMES);
-      }
-    } else if (action === 'overwrite' && (await pathExists(destDir))) {
-      await removeDirContents(destDir, IGNORED_DIR_NAMES);
+    if (dryRun) {
+      process.stdout.write(`[dry-run] ${action} ${name} -> ${path.join(destBaseDir, targetName)}\n`);
+      continue;
     }
 
-    await copyDir(srcDir, targetDest, { ignoreNames: IGNORED_DIR_NAMES });
+    const existingEntry = await resolveCentralAgentEntry(targetName);
+    if (action === 'backup' && existingEntry) {
+      const backupPath = `${getCentralAgentPath(targetName)}.bak-${Date.now()}`;
+      await ensureDir(path.dirname(backupPath));
+      await fs.cp(existingEntry.path, backupPath, { recursive: true });
+    }
+
+    await writeCentralAgentSpec(
+      { ...spec, name: targetName },
+      sourceEntry.form === 'directory' ? { sourceDir: sourceEntry.path } : { sourceFile: sourceEntry.path },
+    );
+
     const now = new Date().toISOString();
     registry.agents[targetName] = registry.agents[targetName] ?? {
       name: targetName,
       addedAt: now,
       updatedAt: now,
-      source: { type: 'collected', from: { target: adapter.id, scope, path: srcDir } },
+      source: { type: 'collected', from: { target: adapter.id, scope, path: sourceEntry.path } },
     };
     registry.agents[targetName]!.updatedAt = now;
     context.agents[name] = { hash: srcHash, syncedAt: now };

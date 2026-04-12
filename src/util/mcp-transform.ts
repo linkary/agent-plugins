@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { McpServerDef, McpTransport } from '../core/mcp-types.js';
 import type { TargetId } from '../targets/adapters.js';
 
@@ -171,4 +172,20 @@ export function normalizeCentralMcpDef(def: McpServerDef): { def: McpServerDef |
   const normalized = serializeCanonicalMcpForTarget(parsed.canonical, 'cursor');
   if (!normalized.def) return { def: null, error: normalized.incompatibleReason ?? 'Invalid MCP definition' };
   return { def: normalized.def };
+}
+
+export function computeCanonicalMcpHash(canonical: CanonicalMcpDef): string {
+  const normalized = JSON.stringify({
+    type: canonical.type,
+    command: canonical.command ?? null,
+    args: canonical.args ?? [],
+    url: canonical.url ?? null,
+    env: canonical.env ? Object.fromEntries(Object.entries(canonical.env).sort(([a], [b]) => a.localeCompare(b))) : {},
+    headers: canonical.headers
+      ? Object.fromEntries(Object.entries(canonical.headers).sort(([a], [b]) => a.localeCompare(b)))
+      : {},
+    enabled: canonical.enabled ?? null,
+    tool_timeout_sec: canonical.tool_timeout_sec ?? null,
+  });
+  return `sha256:${crypto.createHash('sha256').update(normalized).digest('hex')}`;
 }

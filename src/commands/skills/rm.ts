@@ -6,11 +6,12 @@ import { listCentralSkills, getCentralSkillPath } from '../../core/skill-store.j
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { getAdapters, getColoredLabel, resolveAdapter } from '../../targets/adapters.js';
 import { resolveTargetContext } from '../../util/scope.js';
-import { promptConfirm, promptMultiSelect, promptSelect } from '../../util/prompt.js';
+import { promptMultiSelect, promptReviewConfirm, promptSelect } from '../../util/prompt.js';
 import { isProbablyGitUrl, isGitHubShorthand } from '../../util/git-utils.js';
 import { ANSI } from '../../util/ansi.js';
 import { gatherTargetSkills, findSyncedCopies, type SyncedCopy } from './manage-utils.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
+import { formatTargetReviewLine, formatTargetSummaryLines } from '../../util/review-display.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
@@ -151,8 +152,10 @@ async function interactiveRemoveCentral(ctx: CliRunContext, pendingToolTargets: 
   });
   if (selected.length === 0) return;
 
-  const confirmed = await promptConfirm({
+  const confirmed = await promptReviewConfirm({
     message: `Remove ${selected.length} central skill(s)?`,
+    summaryLines: [`Source: central skills`, `Selected: ${selected.length}`],
+    detailLines: selected,
     default: false,
   });
   if (!confirmed) return;
@@ -283,15 +286,25 @@ async function interactiveRemoveFromTools(
   });
   if (selected.length === 0) return;
 
-  const confirmed = await promptConfirm({
-    message: `Remove ${selected.length} skill(s) from targets?`,
+  const selectedSkills = selected.map((idx) => allSkills[Number(idx)]!);
+  const confirmed = await promptReviewConfirm({
+    message: `Remove ${selectedSkills.length} skill(s) from targets?`,
+    summaryLines: [
+      `Selected: ${selectedSkills.length}`,
+      ...formatTargetSummaryLines(
+        selectedSkills.map((skill) => ({
+          targetLabel: skill.adapterLabel,
+          scope: skill.scope,
+        })),
+      ),
+    ],
+    detailLines: selectedSkills.map((skill) => formatTargetReviewLine(skill.name, skill.adapterLabel, skill.scope)),
     default: false,
   });
   if (!confirmed) return;
 
   const syncState = await loadSyncState();
-  for (const idx of selected) {
-    const skill = allSkills[Number(idx)]!;
+  for (const skill of selectedSkills) {
     if (!(await pathExists(skill.path))) continue;
     await removeDir(skill.path);
 
@@ -344,15 +357,25 @@ async function interactiveRemoveFromTarget(flags: ParsedFlags, ctx: CliRunContex
   });
   if (selected.length === 0) return 0;
 
-  const confirmed = await promptConfirm({
-    message: `Remove ${selected.length} skill(s) from targets?`,
+  const selectedSkills = selected.map((idx) => allSkills[Number(idx)]!);
+  const confirmed = await promptReviewConfirm({
+    message: `Remove ${selectedSkills.length} skill(s) from targets?`,
+    summaryLines: [
+      `Selected: ${selectedSkills.length}`,
+      ...formatTargetSummaryLines(
+        selectedSkills.map((skill) => ({
+          targetLabel: skill.adapterLabel,
+          scope: skill.scope,
+        })),
+      ),
+    ],
+    detailLines: selectedSkills.map((skill) => formatTargetReviewLine(skill.name, skill.adapterLabel, skill.scope)),
     default: false,
   });
   if (!confirmed) return 0;
 
   const syncState = await loadSyncState();
-  for (const idx of selected) {
-    const skill = allSkills[Number(idx)]!;
+  for (const skill of selectedSkills) {
     if (!(await pathExists(skill.path))) continue;
     await removeDir(skill.path);
 

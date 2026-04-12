@@ -5,7 +5,9 @@ import path from 'node:path';
 import {
   ensureCentralAgentStore,
   listCentralAgentItems,
+  readCentralAgentSpec,
   resolveCentralAgentPath,
+  writeCentralAgentSpec,
 } from '../src/core/agent-store.js';
 
 let tmpDir: string;
@@ -60,5 +62,33 @@ describe('agent-store', () => {
     expect(await resolveCentralAgentPath('dir-only')).toBe(path.join(agentsDir, 'dir-only'));
     expect(await resolveCentralAgentPath('file-only')).toBe(path.join(agentsDir, 'file-only.md'));
     expect(await resolveCentralAgentPath('missing')).toBeNull();
+  });
+
+  it('writes and reads canonical agent storage', async () => {
+    const sourceDir = path.join(tmpDir, 'source-agent');
+    await fs.mkdir(path.join(sourceDir, 'docs'), { recursive: true });
+    await fs.writeFile(path.join(sourceDir, 'AGENT.md'), '---\nname: sample\ncolor: cyan\ntools: ["Read"]\n---\nPrompt body\n');
+    await fs.writeFile(path.join(sourceDir, 'docs', 'guide.md'), '# guide\n');
+
+    await writeCentralAgentSpec(
+      {
+        name: 'sample',
+        description: 'Sample agent',
+        prompt: 'Prompt body\n',
+        color: 'cyan',
+        tools: ['Read'],
+      },
+      { sourceDir },
+    );
+
+    const entryPath = await resolveCentralAgentPath('sample');
+    expect(entryPath).toBe(path.join(tmpDir, 'agents', 'sample'));
+
+    const read = await readCentralAgentSpec('sample');
+    expect(read?.spec.name).toBe('sample');
+    expect(read?.spec.description).toBe('Sample agent');
+    expect(read?.spec.tools).toEqual(['Read']);
+    expect(await fs.readFile(path.join(tmpDir, 'agents', 'sample', 'prompt.md'), 'utf8')).toBe('Prompt body\n');
+    expect(await fs.readFile(path.join(tmpDir, 'agents', 'sample', 'resources', 'docs', 'guide.md'), 'utf8')).toBe('# guide\n');
   });
 });

@@ -41,4 +41,10 @@ describe('command-path', () => {
     expect(resolveCommandPath(['rules', 'validate']).path).toEqual(['rules', 'validate']);
     expect(resolveCommandPath(['rule', 'list']).path).toEqual(['rules', 'list']);
   });
+
+  it('resolves organize and shorthand aliases', () => {
+    expect(resolveCommandPath(['skills', 'organize']).path).toEqual(['skills', 'organize']);
+    expect(resolveCommandPath(['s', 'o']).path).toEqual(['skills', 'organize']);
+    expect(resolveCommandPath(['mcp', 'o']).path).toEqual(['mcp', 'organize']);
+  });
 });

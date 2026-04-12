@@ -51,7 +51,7 @@ node dist/cli.mjs --help
 
 ## 命令概览
 
-`skills`、`agents`、`commands` 与 `rules` 共用生命周期子命令（`add/rm/sync/collect/list/find`）。
+`skills`、`agents`、`commands`、`rules` 与 `mcp` 共用生命周期子命令。`organize` 是兼容性感知的整理流程：先扫描 target，再预览精确重复项，只对安全场景给出变更。
 
 ### Skills
 
@@ -81,6 +81,9 @@ ap skills collect [<skill>...] --target <target> [--scope local|global] [--all] 
 
 # 删除 skill（无参数时进入交互模式）
 ap skills rm [<skill>...] [--target <...>] [--scope local|global] [--dry-run]
+
+# 整理所选 target 中内容完全相同的 skills
+ap skills organize [<skill>...] --target <target> [--scope local|global] [--dry-run] [--force]
 ```
 
 ### Commands
@@ -109,6 +112,9 @@ ap commands collect [<command>...] --target <target> [--scope local|global] [--a
 
 # 删除 command
 ap commands rm [<command>...] [--target <...>] [--scope local|global] [--dry-run]
+
+# 整理所选 target 中内容完全相同的 commands
+ap commands organize [<command>...] --target <target> [--scope local|global] [--dry-run] [--force]
 ```
 
 ### Agents
@@ -134,6 +140,9 @@ ap agents collect [<agent>...] --target <target> [--scope local|global] [--all] 
 
 # 删除 agent
 ap agents rm [<agent>...] [--target <...>] [--scope local|global] [--dry-run]
+
+# 整理所选 target 中内容完全相同的 agents
+ap agents organize [<agent>...] --target <target> [--scope local|global] [--dry-run] [--force]
 ```
 
 ### Rules
@@ -163,6 +172,25 @@ ap rules rm [<rule>...] [--target <...>] [--scope local|global] [--dry-run]
 
 # 校验规则（空文件/同名冲突）
 ap rules validate
+
+# 整理所选 target 中 canonical 内容完全相同的 prompt-rules
+ap rules organize [<rule>...] --target <target> [--scope local|global] [--dry-run] [--force]
+```
+
+### MCP
+
+```bash
+# 列出 central MCP 服务器
+ap mcp list
+
+# 查找 MCP 服务器（本地 + 在线）
+ap mcp find [query]
+
+# 查看 MCP 服务器详情
+ap mcp show [server]
+
+# 整理所选 target 中内容完全相同的 MCP 服务器
+ap mcp organize [<server>...] --target <target> [--scope local|global] [--dry-run] [--force]
 ```
 
 说明：`ap rules sync/collect/rm --target cursor --scope global` 现在会操作 Cursor **User Rules（Settings 文本）**，并使用受控标记块管理。  
@@ -187,9 +215,17 @@ ap rules validate
 ```bash
 ap s ls           # skills list
 ap s a /path      # skills add
+ap s o            # skills organize
 ap c ls           # commands list
 ap c show         # commands show
 ```
+
+### 兼容性感知的 Organize
+
+- `organize` 只按精确 canonical 内容比较；同名不代表可合并。
+- v1 里只有 skills 支持安全提升到共享目录：Gemini CLI + Agents 可以整理到 `.agents/skills`。
+- commands、agents、rules、MCP 的官方存储模型目前仍以各工具自有格式为主，所以大多数跨工具场景仍以预览 / report-only 为主。
+- `organize` 不会改写 `config.json`；如果 include 配置还保留旧 target，后续 `sync` 仍可能把被移除的副本重新生成出来。
 
 ### 目标
 

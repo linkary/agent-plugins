@@ -246,3 +246,15 @@ export function selectPreferredRulePathsForTarget(paths: string[], targetFormat:
 export function computeRuleContentHash(content: string): string {
   return `sha256:${crypto.createHash('sha256').update(content).digest('hex')}`;
 }
+
+export function computeCanonicalRuleHash(rule: CanonicalRule): string {
+  const normalized = {
+    id: rule.id,
+    body: rule.body,
+    description: rule.description ?? '',
+    paths: [...rule.paths].sort(),
+    alwaysApply: rule.alwaysApply ?? null,
+    extra: Object.fromEntries(Object.entries(rule.extra).sort(([a], [b]) => a.localeCompare(b))),
+  };
+  return computeRuleContentHash(JSON.stringify(normalized));
+}
