@@ -56,30 +56,30 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REF-01 | TBD | Pending |
-| REF-02 | TBD | Pending |
-| REF-03 | TBD | Pending |
-| REF-04 | TBD | Pending |
-| DOC-01 | TBD | Pending |
-| DOC-02 | TBD | Pending |
-| DOC-03 | TBD | Pending |
-| DOC-04 | TBD | Pending |
-| DOC-05 | TBD | Pending |
-| DOC-06 | TBD | Pending |
-| DOC-07 | TBD | Pending |
-| VER-01 | TBD | Pending |
-| VER-02 | TBD | Pending |
-| VER-03 | TBD | Pending |
-| VER-04 | TBD | Pending |
-| READ-01 | TBD | Pending |
-| READ-02 | TBD | Pending |
-| READ-03 | TBD | Pending |
+| REF-01 | Phase 1 | Pending |
+| REF-02 | Phase 1 | Pending |
+| REF-03 | Phase 1 | Pending |
+| REF-04 | Phase 1 | Pending |
+| DOC-01 | Phase 4 | Pending |
+| DOC-02 | Phase 3 | Pending |
+| DOC-03 | Phase 3 | Pending |
+| DOC-04 | Phase 3 | Pending |
+| DOC-05 | Phase 3 | Pending |
+| DOC-06 | Phase 3 | Pending |
+| DOC-07 | Phase 3 | Pending |
+| VER-01 | Phase 2 | Pending |
+| VER-02 | Phase 2 | Pending |
+| VER-03 | Phase 2 | Pending |
+| VER-04 | Phase 2 | Pending |
+| READ-01 | Phase 4 | Pending |
+| READ-02 | Phase 4 | Pending |
+| READ-03 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 18 total
-- Mapped to phases: 0
-- Unmapped: 18 ⚠️
+- Mapped to phases: 18
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-12*
-*Last updated: 2026-04-12 after initialization*
+*Last updated: 2026-04-12 after roadmap creation*
