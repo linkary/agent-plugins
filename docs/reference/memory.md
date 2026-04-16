@@ -6,15 +6,15 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 
 | Target | Support | Repo Support | Scopes | Format | Reliability |
 | --- | --- | --- | --- | --- | --- |
-| [Cursor](./targets/cursor.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Gemini CLI](./targets/gemini.md) | supported | documented-only | Undocumented | markdown | Low |
-| [Codex](./targets/codex.md) | supported | documented-only | [local](#codex-memory-local), [global](#codex-memory-global) | markdown | Low |
-| [Claude Code](./targets/claude-code.md) | supported | documented-only | [local](#claude-code-memory-local), [global](#claude-code-memory-global) | markdown | Low |
-| [Google Antigravity](./targets/antigravity.md) | supported | documented-only | [global](#antigravity-memory-global) | markdown | Low |
-| [Openskills](./targets/openskills.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Agentskills (Vercel Labs)](./targets/agents.md) | undocumented | documented-only | Undocumented | — | Low |
-| [OpenCode](./targets/opencode.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Qoder](./targets/qoder.md) | undocumented | documented-only | Undocumented | — | Low |
+| Cursor | undocumented | documented-only | Undocumented | — | Low |
+| [Gemini CLI](https://google-gemini.github.io/gemini-cli/docs/cli/gemini-md.html) | supported | documented-only | Undocumented | markdown | Low |
+| [Codex](https://developers.openai.com/codex/guides/agents-md) | supported | documented-only | [local](#codex-memory-local), [global](#codex-memory-global) | markdown | Low |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code/memory) | supported | documented-only | [local](#claude-code-memory-local), [global](#claude-code-memory-global) | markdown | Low |
+| Google Antigravity | supported | documented-only | [global](#antigravity-memory-global) | markdown | Low |
+| Openskills | undocumented | documented-only | Undocumented | — | Low |
+| Agentskills (Vercel Labs) | undocumented | documented-only | Undocumented | — | Low |
+| OpenCode | undocumented | documented-only | Undocumented | — | Low |
+| Qoder | undocumented | documented-only | Undocumented | — | Low |
 
 ## Cursor
 

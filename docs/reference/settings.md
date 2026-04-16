@@ -6,15 +6,15 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 
 | Target | Support | Repo Support | Scopes | Format | Reliability |
 | --- | --- | --- | --- | --- | --- |
-| [Cursor](./targets/cursor.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Gemini CLI](./targets/gemini.md) | supported | documented-only | [local](#gemini-settings-local), [global](#gemini-settings-global) | json | Medium |
-| [Codex](./targets/codex.md) | supported | documented-only | [local](#codex-settings-local), [global](#codex-settings-global) | toml | Low |
-| [Claude Code](./targets/claude-code.md) | supported | documented-only | [local](#claude-code-settings-local), [global](#claude-code-settings-global) | json | Low |
-| [Google Antigravity](./targets/antigravity.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Openskills](./targets/openskills.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Agentskills (Vercel Labs)](./targets/agents.md) | undocumented | documented-only | Undocumented | — | Low |
-| [OpenCode](./targets/opencode.md) | supported | documented-only | [local](#opencode-settings-local), [global](#opencode-settings-global) | json | Low |
-| [Qoder](./targets/qoder.md) | supported | documented-only | [local](#qoder-settings-local), [global](#qoder-settings-global) | json | Low |
+| Cursor | undocumented | documented-only | Undocumented | — | Low |
+| [Gemini CLI](https://google-gemini.github.io/gemini-cli/docs/get-started/configuration.html) | supported | documented-only | [local](#gemini-settings-local), [global](#gemini-settings-global) | json | Medium |
+| [Codex](https://developers.openai.com/codex/config-reference) | supported | documented-only | [local](#codex-settings-local), [global](#codex-settings-global) | toml | Low |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code/settings) | supported | documented-only | [local](#claude-code-settings-local), [global](#claude-code-settings-global) | json | Low |
+| Google Antigravity | undocumented | documented-only | Undocumented | — | Low |
+| Openskills | undocumented | documented-only | Undocumented | — | Low |
+| Agentskills (Vercel Labs) | undocumented | documented-only | Undocumented | — | Low |
+| [OpenCode](https://opencode.ai/docs/config/) | supported | documented-only | [local](#opencode-settings-local), [global](#opencode-settings-global) | json | Low |
+| Qoder | supported | documented-only | [local](#qoder-settings-local), [global](#qoder-settings-global) | json | Low |
 
 ## Cursor
 

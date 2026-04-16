@@ -6,15 +6,15 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 
 | Target | Support | Repo Support | Scopes | Format | Reliability |
 | --- | --- | --- | --- | --- | --- |
-| [Cursor](./targets/cursor.md) | supported | documented-only | [local](#cursor-agents-local), [global](#cursor-agents-global) | markdown | Low |
-| [Gemini CLI](./targets/gemini.md) | undocumented | managed | [local](#gemini-agents-local), [global](#gemini-agents-global) | markdown | Low |
-| [Codex](./targets/codex.md) | supported | managed | [local](#codex-agents-local), [global](#codex-agents-global) | toml | High |
-| [Claude Code](./targets/claude-code.md) | supported | documented-only | [local](#claude-code-agents-local), [global](#claude-code-agents-global) | markdown | High |
-| [Google Antigravity](./targets/antigravity.md) | unsupported | unsupported | Undocumented | — | Low |
-| [Openskills](./targets/openskills.md) | unsupported | unsupported | Undocumented | — | Low |
-| [Agentskills (Vercel Labs)](./targets/agents.md) | unsupported | unsupported | Undocumented | — | Low |
-| [OpenCode](./targets/opencode.md) | supported | documented-only | [local](#opencode-agents-local), [global](#opencode-agents-global) | markdown | Medium |
-| [Qoder](./targets/qoder.md) | supported | documented-only | [local](#qoder-agents-local), [global](#qoder-agents-global) | markdown | High |
+| [Cursor](https://docs.cursor.com/agent/modes) | supported | documented-only | [local](#cursor-agents-local), [global](#cursor-agents-global) | markdown | Low |
+| Gemini CLI | undocumented | managed | [local](#gemini-agents-local), [global](#gemini-agents-global) | markdown | Low |
+| [Codex](https://developers.openai.com/codex/subagents) | supported | managed | [local](#codex-agents-local), [global](#codex-agents-global) | toml | High |
+| [Claude Code](https://code.claude.com/docs/en/sub-agents) | supported | documented-only | [local](#claude-code-agents-local), [global](#claude-code-agents-global) | markdown | High |
+| Google Antigravity | unsupported | unsupported | Undocumented | — | Low |
+| Openskills | unsupported | unsupported | Undocumented | — | Low |
+| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | — | Low |
+| [OpenCode](https://opencode.ai/docs/agents/) | supported | documented-only | [local](#opencode-agents-local), [global](#opencode-agents-global) | markdown | Medium |
+| [Qoder](https://docs.qoder.com/en/cli/user-guide/subagent) | supported | documented-only | [local](#qoder-agents-local), [global](#qoder-agents-global) | markdown | High |
 
 ## Cursor
 

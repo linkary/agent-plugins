@@ -6,15 +6,15 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 
 | Target | Support | Repo Support | Scopes | Format | Reliability |
 | --- | --- | --- | --- | --- | --- |
-| [Cursor](./targets/cursor.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Gemini CLI](./targets/gemini.md) | supported | documented-only | Undocumented | package | Low |
-| [Codex](./targets/codex.md) | supported | documented-only | Undocumented | package | Low |
-| [Claude Code](./targets/claude-code.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Google Antigravity](./targets/antigravity.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Openskills](./targets/openskills.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Agentskills (Vercel Labs)](./targets/agents.md) | undocumented | documented-only | Undocumented | — | Low |
-| [OpenCode](./targets/opencode.md) | supported | documented-only | Undocumented | package | Low |
-| [Qoder](./targets/qoder.md) | undocumented | documented-only | Undocumented | — | Low |
+| Cursor | undocumented | documented-only | Undocumented | — | Low |
+| [Gemini CLI](https://google-gemini.github.io/gemini-cli/docs/extensions/) | supported | documented-only | Undocumented | package | Low |
+| [Codex](https://developers.openai.com/codex/skills) | supported | documented-only | Undocumented | package | Low |
+| Claude Code | undocumented | documented-only | Undocumented | — | Low |
+| Google Antigravity | undocumented | documented-only | Undocumented | — | Low |
+| Openskills | undocumented | documented-only | Undocumented | — | Low |
+| Agentskills (Vercel Labs) | undocumented | documented-only | Undocumented | — | Low |
+| [OpenCode](https://opencode.ai/docs/plugins/) | supported | documented-only | Undocumented | package | Low |
+| Qoder | undocumented | documented-only | Undocumented | — | Low |
 
 ## Cursor
 

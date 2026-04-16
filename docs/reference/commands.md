@@ -6,15 +6,15 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 
 | Target | Support | Repo Support | Scopes | Format | Reliability |
 | --- | --- | --- | --- | --- | --- |
-| [Cursor](./targets/cursor.md) | supported | managed | [local](#cursor-commands-local), [global](#cursor-commands-global) | markdown | High |
-| [Gemini CLI](./targets/gemini.md) | supported | documented-only | [local](#gemini-commands-local), [global](#gemini-commands-global) | toml | High |
-| [Codex](./targets/codex.md) | supported | managed | [local](#codex-commands-local), [global](#codex-commands-global) | markdown | Low |
-| [Claude Code](./targets/claude-code.md) | supported | documented-only | [local](#claude-code-commands-local), [global](#claude-code-commands-global) | markdown | High |
-| [Google Antigravity](./targets/antigravity.md) | supported | partial | [local](#antigravity-commands-local), [global](#antigravity-commands-global) | markdown | Low |
-| [Openskills](./targets/openskills.md) | unsupported | unsupported | Undocumented | — | Low |
-| [Agentskills (Vercel Labs)](./targets/agents.md) | unsupported | unsupported | Undocumented | — | Low |
-| [OpenCode](./targets/opencode.md) | supported | documented-only | [local](#opencode-commands-local), [global](#opencode-commands-global) | markdown | High |
-| [Qoder](./targets/qoder.md) | supported | documented-only | [local](#qoder-commands-local), [global](#qoder-commands-global) | markdown | Medium |
+| [Cursor](https://docs.cursor.com/en/agent/chat/commands) | supported | managed | [local](#cursor-commands-local), [global](#cursor-commands-global) | markdown | High |
+| [Gemini CLI](https://google-gemini.github.io/gemini-cli/docs/cli/custom-commands.html) | supported | documented-only | [local](#gemini-commands-local), [global](#gemini-commands-global) | toml | High |
+| [Codex](https://developers.openai.com/codex/app/commands) | supported | managed | [local](#codex-commands-local), [global](#codex-commands-global) | markdown | Low |
+| [Claude Code](https://code.claude.com/docs/en/slash-commands) | supported | documented-only | [local](#claude-code-commands-local), [global](#claude-code-commands-global) | markdown | High |
+| Google Antigravity | supported | partial | [local](#antigravity-commands-local), [global](#antigravity-commands-global) | markdown | Low |
+| Openskills | unsupported | unsupported | Undocumented | — | Low |
+| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | — | Low |
+| [OpenCode](https://opencode.ai/docs/commands/) | supported | documented-only | [local](#opencode-commands-local), [global](#opencode-commands-global) | markdown | High |
+| [Qoder](https://docs.qoder.com/user-guide/commands) | supported | documented-only | [local](#qoder-commands-local), [global](#qoder-commands-global) | markdown | Medium |
 
 ## Cursor
 

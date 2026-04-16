@@ -6,15 +6,15 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 
 | Target | Support | Repo Support | Scopes | Format | Reliability |
 | --- | --- | --- | --- | --- | --- |
-| [Cursor](./targets/cursor.md) | supported | documented-only | Undocumented | webhook | Low |
-| [Gemini CLI](./targets/gemini.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Codex](./targets/codex.md) | supported | documented-only | [local](#codex-hooks-local), [global](#codex-hooks-global) | json | Low |
-| [Claude Code](./targets/claude-code.md) | supported | documented-only | Undocumented | json | Low |
-| [Google Antigravity](./targets/antigravity.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Openskills](./targets/openskills.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Agentskills (Vercel Labs)](./targets/agents.md) | undocumented | documented-only | Undocumented | — | Low |
-| [OpenCode](./targets/opencode.md) | undocumented | documented-only | Undocumented | — | Low |
-| [Qoder](./targets/qoder.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Cursor](https://docs.cursor.com/background-agent/api/webhooks) | supported | documented-only | Undocumented | webhook | Low |
+| Gemini CLI | undocumented | documented-only | Undocumented | — | Low |
+| [Codex](https://developers.openai.com/codex/hooks) | supported | documented-only | [local](#codex-hooks-local), [global](#codex-hooks-global) | json | Low |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code/hooks) | supported | documented-only | Undocumented | json | Low |
+| Google Antigravity | undocumented | documented-only | Undocumented | — | Low |
+| Openskills | undocumented | documented-only | Undocumented | — | Low |
+| Agentskills (Vercel Labs) | undocumented | documented-only | Undocumented | — | Low |
+| OpenCode | undocumented | documented-only | Undocumented | — | Low |
+| Qoder | undocumented | documented-only | Undocumented | — | Low |
 
 ## Cursor
 

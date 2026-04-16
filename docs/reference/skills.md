@@ -6,15 +6,15 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 
 | Target | Support | Repo Support | Scopes | Format | Reliability |
 | --- | --- | --- | --- | --- | --- |
-| [Cursor](./targets/cursor.md) | supported | managed | [local](#cursor-skills-local), [global](#cursor-skills-global) | package | Low |
-| [Gemini CLI](./targets/gemini.md) | supported | managed | [local](#gemini-skills-local), [global](#gemini-skills-global), [shared](#gemini-skills-shared) | package | Low |
-| [Codex](./targets/codex.md) | supported | documented-only | [local](#codex-skills-local), [global](#codex-skills-global) | package | High |
-| [Claude Code](./targets/claude-code.md) | supported | managed | [local](#claude-code-skills-local), [global](#claude-code-skills-global) | package | High |
-| [Google Antigravity](./targets/antigravity.md) | supported | managed | [local](#antigravity-skills-local), [global](#antigravity-skills-global) | package | Low |
-| [Openskills](./targets/openskills.md) | supported | managed | [local](#openskills-skills-local), [global](#openskills-skills-global) | package | Low |
-| [Agentskills (Vercel Labs)](./targets/agents.md) | supported | managed | [local](#agents-skills-local), [global](#agents-skills-global), [shared](#agents-skills-shared) | package | Low |
-| [OpenCode](./targets/opencode.md) | supported | managed | [local](#opencode-skills-local), [global](#opencode-skills-global), [shared](#opencode-skills-shared) | package | Medium |
-| [Qoder](./targets/qoder.md) | supported | managed | [local](#qoder-skills-local), [global](#qoder-skills-global) | package | High |
+| [Cursor](https://agentskills.io/specification) | supported | managed | [local](#cursor-skills-local), [global](#cursor-skills-global) | package | Low |
+| [Gemini CLI](https://agentskills.io/specification) | supported | managed | [local](#gemini-skills-local), [global](#gemini-skills-global), [shared](#gemini-skills-shared) | package | Low |
+| [Codex](https://developers.openai.com/codex/skills) | supported | documented-only | [local](#codex-skills-local), [global](#codex-skills-global) | package | High |
+| [Claude Code](https://agentskills.io/specification) | supported | managed | [local](#claude-code-skills-local), [global](#claude-code-skills-global) | package | High |
+| [Google Antigravity](https://agentskills.io/specification) | supported | managed | [local](#antigravity-skills-local), [global](#antigravity-skills-global) | package | Low |
+| [Openskills](https://agentskills.io/specification) | supported | managed | [local](#openskills-skills-local), [global](#openskills-skills-global) | package | Low |
+| Agentskills (Vercel Labs) | supported | managed | [local](#agents-skills-local), [global](#agents-skills-global), [shared](#agents-skills-shared) | package | Low |
+| OpenCode | supported | managed | [local](#opencode-skills-local), [global](#opencode-skills-global), [shared](#opencode-skills-shared) | package | Medium |
+| [Qoder](https://docs.qoder.com/cli/Skills) | supported | managed | [local](#qoder-skills-local), [global](#qoder-skills-global) | package | High |
 
 ## Cursor
 
