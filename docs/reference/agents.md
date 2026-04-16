@@ -4,23 +4,24 @@ Generated: 2026-04-15
 
 This page is official-doc-first. Vendor docs are treated as authoritative. Current repo behavior is only used to fill gaps and is labeled in the evidence status.
 
-| Target | Support | Repo Support | Scopes | Format | Reliability |
-| --- | --- | --- | --- | --- | --- |
-| [Cursor](https://docs.cursor.com/agent/modes) | supported | documented-only | [local](#cursor-agents-local), [global](#cursor-agents-global) | markdown | Low |
-| Gemini CLI | undocumented | managed | [local](#gemini-agents-local), [global](#gemini-agents-global) | markdown | Low |
-| [Codex](https://developers.openai.com/codex/subagents) | supported | managed | [local](#codex-agents-local), [global](#codex-agents-global) | toml | High |
-| [Claude Code](https://code.claude.com/docs/en/sub-agents) | supported | documented-only | [local](#claude-code-agents-local), [global](#claude-code-agents-global) | markdown | High |
-| Google Antigravity | unsupported | unsupported | Undocumented | — | Low |
-| Openskills | unsupported | unsupported | Undocumented | — | Low |
-| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | — | Low |
-| [OpenCode](https://opencode.ai/docs/agents/) | supported | documented-only | [local](#opencode-agents-local), [global](#opencode-agents-global) | markdown | Medium |
-| [Qoder](https://docs.qoder.com/en/cli/user-guide/subagent) | supported | documented-only | [local](#qoder-agents-local), [global](#qoder-agents-global) | markdown | High |
+| Target | Support | Repo Support | Scopes | Shared .agents | Format | Reliability |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Cursor](https://docs.cursor.com/agent/modes) | supported | documented-only | [local](#cursor-agents-local), [global](#cursor-agents-global) | unsupported | markdown | Low |
+| Gemini CLI | undocumented | managed | [local](#gemini-agents-local), [global](#gemini-agents-global) | not documented | markdown | Low |
+| [Codex](https://developers.openai.com/codex/subagents) | supported | managed | [local](#codex-agents-local), [global](#codex-agents-global) | unsupported | toml | High |
+| [Claude Code](https://code.claude.com/docs/en/sub-agents) | supported | documented-only | [local](#claude-code-agents-local), [global](#claude-code-agents-global) | unsupported | markdown | High |
+| Google Antigravity | unsupported | unsupported | Undocumented | unsupported | — | Low |
+| Openskills | unsupported | unsupported | Undocumented | unsupported | — | Low |
+| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | unsupported | — | Low |
+| [OpenCode](https://opencode.ai/docs/agents/) | supported | documented-only | [local](#opencode-agents-local), [global](#opencode-agents-global) | unsupported | markdown | Medium |
+| [Qoder](https://docs.qoder.com/en/cli/user-guide/subagent) | supported | documented-only | [local](#qoder-agents-local), [global](#qoder-agents-global) | unsupported | markdown | High |
 
 ## Cursor
 
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#cursor-agents-local), [global](#cursor-agents-global)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: Low
 - Evidence status: `disputed`
@@ -49,6 +50,7 @@ Notes:
 - Target support: `undocumented`
 - Repo support: `managed`
 - Scopes: [local](#gemini-agents-local), [global](#gemini-agents-global)
+- Shared .agents support: `not documented`
 - Format: markdown
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -76,6 +78,7 @@ Notes:
 - Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#codex-agents-local), [global](#codex-agents-global)
+- Shared .agents support: `unsupported`
 - Format: toml
 - Reliability: High
 - Evidence status: `official+implementation`
@@ -106,6 +109,7 @@ Notes:
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#claude-code-agents-local), [global](#claude-code-agents-global)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: High
 - Evidence status: `official+implementation`
@@ -135,6 +139,7 @@ Notes:
 - Target support: `unsupported`
 - Repo support: `unsupported`
 - Scopes: Undocumented
+- Shared .agents support: `unsupported`
 - Format: —
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -154,6 +159,7 @@ None.
 - Target support: `unsupported`
 - Repo support: `unsupported`
 - Scopes: Undocumented
+- Shared .agents support: `unsupported`
 - Format: —
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -173,6 +179,7 @@ None.
 - Target support: `unsupported`
 - Repo support: `unsupported`
 - Scopes: Undocumented
+- Shared .agents support: `unsupported`
 - Format: —
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -192,6 +199,7 @@ None.
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#opencode-agents-local), [global](#opencode-agents-global)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: Medium
 - Evidence status: `disputed`
@@ -220,6 +228,7 @@ Notes:
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#qoder-agents-local), [global](#qoder-agents-global)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: High
 - Evidence status: `official+implementation`

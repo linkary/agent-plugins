@@ -4,23 +4,24 @@ Generated: 2026-04-15
 
 This page is official-doc-first. Vendor docs are treated as authoritative. Current repo behavior is only used to fill gaps and is labeled in the evidence status.
 
-| Target | Support | Repo Support | Scopes | Format | Reliability |
-| --- | --- | --- | --- | --- | --- |
-| [Cursor](https://agentskills.io/specification) | supported | managed | [local](#cursor-skills-local), [global](#cursor-skills-global) | package | Low |
-| [Gemini CLI](https://agentskills.io/specification) | supported | managed | [local](#gemini-skills-local), [global](#gemini-skills-global), [shared](#gemini-skills-shared) | package | Low |
-| [Codex](https://developers.openai.com/codex/skills) | supported | documented-only | [local](#codex-skills-local), [global](#codex-skills-global) | package | High |
-| [Claude Code](https://agentskills.io/specification) | supported | managed | [local](#claude-code-skills-local), [global](#claude-code-skills-global) | package | High |
-| [Google Antigravity](https://agentskills.io/specification) | supported | managed | [local](#antigravity-skills-local), [global](#antigravity-skills-global) | package | Low |
-| [Openskills](https://agentskills.io/specification) | supported | managed | [local](#openskills-skills-local), [global](#openskills-skills-global) | package | Low |
-| Agentskills (Vercel Labs) | supported | managed | [local](#agents-skills-local), [global](#agents-skills-global), [shared](#agents-skills-shared) | package | Low |
-| OpenCode | supported | managed | [local](#opencode-skills-local), [global](#opencode-skills-global), [shared](#opencode-skills-shared) | package | Medium |
-| [Qoder](https://docs.qoder.com/cli/Skills) | supported | managed | [local](#qoder-skills-local), [global](#qoder-skills-global) | package | High |
+| Target | Support | Repo Support | Scopes | Shared .agents | Format | Reliability |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Cursor](https://agentskills.io/specification) | supported | managed | [local](#cursor-skills-local), [global](#cursor-skills-global) | not documented | package | Low |
+| [Gemini CLI](https://agentskills.io/specification) | supported | managed | [local](#gemini-skills-local), [global](#gemini-skills-global), [shared](#gemini-skills-shared) | repo-only | package | Low |
+| [Codex](https://developers.openai.com/codex/skills) | supported | documented-only | [local](#codex-skills-local), [global](#codex-skills-global) | native | package | High |
+| [Claude Code](https://agentskills.io/specification) | supported | managed | [local](#claude-code-skills-local), [global](#claude-code-skills-global) | not documented | package | High |
+| [Google Antigravity](https://agentskills.io/specification) | supported | managed | [local](#antigravity-skills-local), [global](#antigravity-skills-global) | not documented | package | Low |
+| [Openskills](https://agentskills.io/specification) | supported | managed | [local](#openskills-skills-local), [global](#openskills-skills-global) | unsupported | package | Low |
+| Agentskills (Vercel Labs) | supported | managed | [local](#agents-skills-local), [global](#agents-skills-global), [shared](#agents-skills-shared) | repo-only | package | Low |
+| [OpenCode](https://opencode.ai/docs/skills) | supported | managed | [local](#opencode-skills-local), [global](#opencode-skills-global), [shared](#opencode-skills-shared) | compatibility | package | High |
+| [Qoder](https://docs.qoder.com/cli/Skills) | supported | managed | [local](#qoder-skills-local), [global](#qoder-skills-global) | not documented | package | High |
 
 ## Cursor
 
 - Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#cursor-skills-local), [global](#cursor-skills-global)
+- Shared .agents support: `not documented`
 - Format: package
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -48,6 +49,7 @@ None.
 - Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#gemini-skills-local), [global](#gemini-skills-global), [shared](#gemini-skills-shared)
+- Shared .agents support: `repo-only`
 - Format: package
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -75,16 +77,17 @@ None.
 - Path sources: Shared-skill compatibility map (`src/util/organize-compat.ts`); Skills organize flow (`src/commands/skills/organize.ts`); Skills organize tests (`tests/skills-organize.test.ts`)
 
 Restrictions:
-None.
+- Gemini CLI does not currently document `.agents/skills` or `~/.agents/skills` as native or compatibility skill paths.
 
 Notes:
-None.
+- The shared `.agents/skills` destination here is repo compatibility behavior from skills organize, not a vendor-documented Gemini storage location.
 
 ## Codex
 
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#codex-skills-local), [global](#codex-skills-global)
+- Shared .agents support: `native`
 - Format: package
 - Reliability: High
 - Evidence status: `official+implementation`
@@ -107,13 +110,15 @@ Restrictions:
 - The repo still resolves the current project/repository root as the local scope for sync operations.
 
 Notes:
-- Official docs describe Codex skill discovery under .agents/skills rather than .codex/skills.
+- Official docs describe Codex skill discovery under `.agents/skills` rather than `.codex/skills`.
+- This is native Codex storage, not a compatibility shim.
 
 ## Claude Code
 
 - Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#claude-code-skills-local), [global](#claude-code-skills-global)
+- Shared .agents support: `not documented`
 - Format: package
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -141,6 +146,7 @@ None.
 - Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#antigravity-skills-local), [global](#antigravity-skills-global)
+- Shared .agents support: `not documented`
 - Format: package
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -168,6 +174,7 @@ None.
 - Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#openskills-skills-local), [global](#openskills-skills-global)
+- Shared .agents support: `unsupported`
 - Format: package
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -195,11 +202,12 @@ None.
 - Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#agents-skills-local), [global](#agents-skills-global), [shared](#agents-skills-shared)
+- Shared .agents support: `repo-only`
 - Format: package
-- Reliability: Medium
-- Evidence status: `official+implementation`
-- Evidence summary: Official docs directly cover `.opencode/skills/<name>/SKILL.md`, `~/.config/opencode/skills/<name>/SKILL.md`, and compatibility discovery under `.claude/skills` and `.agents/skills`.
-- Sources: [OpenCode skills](https://opencode.ai/docs/skills); Target adapters (`src/targets/adapters.ts`)
+- Reliability: Low
+- Evidence status: `implementation-only`
+- Evidence summary: Current repo adapters define the Agents target path as `.agents/skills`, and current organize logic uses it as the shared owner destination for Gemini-compatible skills.
+- Sources: Target adapters (`src/targets/adapters.ts`); Shared-skill compatibility map (`src/util/organize-compat.ts`); Skills organize flow (`src/commands/skills/organize.ts`)
 
 ### Local path {#agents-skills-local}
 
@@ -222,21 +230,22 @@ None.
 - Path sources: Shared-skill compatibility map (`src/util/organize-compat.ts`); Skills organize flow (`src/commands/skills/organize.ts`); Skills organize tests (`tests/skills-organize.test.ts`)
 
 Restrictions:
-None.
+- No stable official vendor docs were captured for the Agents target beyond the repo’s own target-path convention.
 
 Notes:
-None.
+- The `.agents/skills` path is the repo’s target convention here and the owner of the repo-only shared skills destination.
 
 ## OpenCode
 
 - Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#opencode-skills-local), [global](#opencode-skills-global)
-- Format: Directory-based skill with SKILL.md and optional supporting files
-- Reliability: Low
-- Evidence status: `implementation-only`
-- Evidence summary: Current repo adapters define skill sync directories for this target.
-- Sources: Target adapters (`src/targets/adapters.ts`)
+- Shared .agents support: `compatibility`
+- Format: package
+- Reliability: High
+- Evidence status: `official+implementation`
+- Evidence summary: OpenCode officially documents native `.opencode/skills` locations and compatibility discovery under `.agents/skills` and `.claude/skills`.
+- Sources: [OpenCode skills](https://opencode.ai/docs/skills); Target adapters (`src/targets/adapters.ts`)
 
 ### Local path {#opencode-skills-local}
 
@@ -259,13 +268,14 @@ Restrictions:
 - OpenCode also supports compatibility discovery under `.claude/skills` and `.agents/skills`.
 
 Notes:
-None.
+- `.agents/skills` is an official compatibility/discovery path for OpenCode, not its primary native storage root.
 
 ## Qoder
 
 - Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#qoder-skills-local), [global](#qoder-skills-global)
+- Shared .agents support: `not documented`
 - Format: package
 - Reliability: High
 - Evidence status: `official+implementation`

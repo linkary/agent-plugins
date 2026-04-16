@@ -4,23 +4,24 @@ Reviewed: 2026-04-16
 
 This page is official-doc-first. Vendor docs are treated as authoritative. Current repo behavior is only used to fill gaps and is labeled in the evidence status.
 
-| Target | Support | Repo Support | Scopes | Format | Reliability |
-| --- | --- | --- | --- | --- | --- |
-| [Cursor](https://docs.cursor.com/en/agent/chat/commands) | supported | managed | [local](#cursor-commands-local), [global](#cursor-commands-global) | markdown | High |
-| [Gemini CLI](https://google-gemini.github.io/gemini-cli/docs/cli/custom-commands.html) | supported | documented-only | [local](#gemini-commands-local), [global](#gemini-commands-global) | toml | High |
-| [Codex](https://developers.openai.com/codex/app/commands) | supported | managed | [local](#codex-commands-local), [global](#codex-commands-global) | markdown | Low |
-| [Claude Code](https://code.claude.com/docs/en/slash-commands) | supported | documented-only | [local](#claude-code-commands-local), [global](#claude-code-commands-global) | markdown | High |
-| Google Antigravity | supported | partial | [local](#antigravity-commands-local), [global](#antigravity-commands-global) | markdown | Low |
-| Openskills | unsupported | unsupported | Undocumented | — | Low |
-| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | — | Low |
-| [OpenCode](https://opencode.ai/docs/commands/) | supported | documented-only | [local](#opencode-commands-local), [global](#opencode-commands-global) | markdown | High |
-| [Qoder](https://docs.qoder.com/user-guide/commands) | supported | documented-only | [local](#qoder-commands-local), [global](#qoder-commands-global) | markdown | Medium |
+| Target | Support | Repo Support | Scopes | Shared .agents | Format | Reliability |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Cursor](https://docs.cursor.com/en/agent/chat/commands) | supported | managed | [local](#cursor-commands-local), [global](#cursor-commands-global) | unsupported | markdown | High |
+| [Gemini CLI](https://google-gemini.github.io/gemini-cli/docs/cli/custom-commands.html) | supported | documented-only | [local](#gemini-commands-local), [global](#gemini-commands-global) | unsupported | toml | High |
+| [Codex](https://developers.openai.com/codex/app/commands) | supported | managed | [local](#codex-commands-local), [global](#codex-commands-global) | unsupported | markdown | Low |
+| [Claude Code](https://code.claude.com/docs/en/slash-commands) | supported | documented-only | [local](#claude-code-commands-local), [global](#claude-code-commands-global) | unsupported | markdown | High |
+| Google Antigravity | supported | partial | [local](#antigravity-commands-local), [global](#antigravity-commands-global) | unsupported | markdown | Low |
+| Openskills | unsupported | unsupported | Undocumented | unsupported | — | Low |
+| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | unsupported | — | Low |
+| [OpenCode](https://opencode.ai/docs/commands/) | supported | documented-only | [local](#opencode-commands-local), [global](#opencode-commands-global) | unsupported | markdown | High |
+| [Qoder](https://docs.qoder.com/user-guide/commands) | supported | documented-only | [local](#qoder-commands-local), [global](#qoder-commands-global) | unsupported | markdown | Medium |
 
 ## Cursor
 
 - Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#cursor-commands-local), [global](#cursor-commands-global)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: High
 - Evidence status: `official+implementation`
@@ -50,6 +51,7 @@ None.
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#gemini-commands-local), [global](#gemini-commands-global)
+- Shared .agents support: `unsupported`
 - Format: toml
 - Reliability: High
 - Evidence status: `official`
@@ -78,6 +80,7 @@ None.
 - Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#codex-commands-local), [global](#codex-commands-global)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -106,6 +109,7 @@ None.
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#claude-code-commands-local), [global](#claude-code-commands-global)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: High
 - Evidence status: `official`
@@ -134,6 +138,7 @@ None.
 - Target support: `supported`
 - Repo support: `partial`
 - Scopes: [local](#antigravity-commands-local), [global](#antigravity-commands-global)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -161,6 +166,7 @@ None.
 - Target support: `unsupported`
 - Repo support: `unsupported`
 - Scopes: Undocumented
+- Shared .agents support: `unsupported`
 - Format: —
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -180,6 +186,7 @@ None.
 - Target support: `unsupported`
 - Repo support: `unsupported`
 - Scopes: Undocumented
+- Shared .agents support: `unsupported`
 - Format: —
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -199,6 +206,7 @@ None.
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#opencode-commands-local), [global](#opencode-commands-global)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: High
 - Evidence status: `official+implementation`
@@ -227,6 +235,7 @@ None.
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#qoder-commands-local), [global](#qoder-commands-global)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: Medium
 - Evidence status: `official+implementation`

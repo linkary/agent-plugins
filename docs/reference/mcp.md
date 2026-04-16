@@ -4,23 +4,24 @@ Generated: 2026-04-15
 
 This page is official-doc-first. Vendor docs are treated as authoritative. Current repo behavior is only used to fill gaps and is labeled in the evidence status.
 
-| Target | Support | Repo Support | Scopes | Format | Reliability |
-| --- | --- | --- | --- | --- | --- |
-| [Cursor](https://cursor.com/docs/mcp) | supported | documented-only | [local](#cursor-mcp-local), [global](#cursor-mcp-global) | json | High |
-| [Gemini CLI](https://google-gemini.github.io/gemini-cli/docs/tools/mcp-server.html) | supported | documented-only | [local](#gemini-mcp-local), [global](#gemini-mcp-global) | json | High |
-| [Codex](https://developers.openai.com/codex/mcp) | supported | documented-only | [local](#codex-mcp-local), [global](#codex-mcp-global) | toml | High |
-| [Claude Code](https://code.claude.com/docs/en/mcp) | supported | documented-only | [local](#claude-code-mcp-local), [global](#claude-code-mcp-global) | json | High |
-| [Google Antigravity](https://developers.google.com/knowledge/mcp) | supported | partial | [global](#antigravity-mcp-global) | json | Medium |
-| Openskills | unsupported | unsupported | Undocumented | — | Low |
-| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | — | Low |
-| [OpenCode](https://opencode.ai/docs/mcp-servers) | supported | documented-only | [local](#opencode-mcp-local), [global](#opencode-mcp-global) | json | High |
-| [Qoder](https://docs.qoder.com/user-guide/chat/model-context-protocol) | supported | documented-only | [local](#qoder-mcp-local), [global](#qoder-mcp-global) | json | High |
+| Target | Support | Repo Support | Scopes | Shared .agents | Format | Reliability |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Cursor](https://cursor.com/docs/mcp) | supported | documented-only | [local](#cursor-mcp-local), [global](#cursor-mcp-global) | unsupported | json | High |
+| [Gemini CLI](https://google-gemini.github.io/gemini-cli/docs/tools/mcp-server.html) | supported | documented-only | [local](#gemini-mcp-local), [global](#gemini-mcp-global) | unsupported | json | High |
+| [Codex](https://developers.openai.com/codex/mcp) | supported | documented-only | [local](#codex-mcp-local), [global](#codex-mcp-global) | unsupported | toml | High |
+| [Claude Code](https://code.claude.com/docs/en/mcp) | supported | documented-only | [local](#claude-code-mcp-local), [global](#claude-code-mcp-global) | unsupported | json | High |
+| [Google Antigravity](https://developers.google.com/knowledge/mcp) | supported | partial | [global](#antigravity-mcp-global) | unsupported | json | Medium |
+| Openskills | unsupported | unsupported | Undocumented | unsupported | — | Low |
+| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | unsupported | — | Low |
+| [OpenCode](https://opencode.ai/docs/mcp-servers) | supported | documented-only | [local](#opencode-mcp-local), [global](#opencode-mcp-global) | unsupported | json | High |
+| [Qoder](https://docs.qoder.com/user-guide/chat/model-context-protocol) | supported | documented-only | [local](#qoder-mcp-local), [global](#qoder-mcp-global) | unsupported | json | High |
 
 ## Cursor
 
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#cursor-mcp-local), [global](#cursor-mcp-global)
+- Shared .agents support: `unsupported`
 - Format: json
 - Reliability: High
 - Evidence status: `official+implementation`
@@ -49,6 +50,7 @@ Notes:
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#gemini-mcp-local), [global](#gemini-mcp-global)
+- Shared .agents support: `unsupported`
 - Format: json
 - Reliability: High
 - Evidence status: `official`
@@ -76,6 +78,7 @@ None.
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#codex-mcp-local), [global](#codex-mcp-global)
+- Shared .agents support: `unsupported`
 - Format: toml
 - Reliability: High
 - Evidence status: `official+implementation`
@@ -106,6 +109,7 @@ None.
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#claude-code-mcp-local), [global](#claude-code-mcp-global)
+- Shared .agents support: `unsupported`
 - Format: json
 - Reliability: High
 - Evidence status: `official+implementation`
@@ -127,6 +131,7 @@ Restrictions:
 - Both the project file and the user/local file use JSON with an `mcpServers` object.
 
 Notes:
+- Claude Code documents a project-shared MCP scope, but that shared scope uses `.mcp.json`, not `.agents/mcp`.
 - This reference maps Claude’s project/private/global model into the repo’s local/global terminology.
 
 ## Google Antigravity
@@ -134,6 +139,7 @@ Notes:
 - Target support: `supported`
 - Repo support: `partial`
 - Scopes: [global](#antigravity-mcp-global)
+- Shared .agents support: `unsupported`
 - Format: json
 - Reliability: Medium
 - Evidence status: `official+implementation`
@@ -157,6 +163,7 @@ None.
 - Target support: `unsupported`
 - Repo support: `unsupported`
 - Scopes: Undocumented
+- Shared .agents support: `unsupported`
 - Format: —
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -176,6 +183,7 @@ None.
 - Target support: `unsupported`
 - Repo support: `unsupported`
 - Scopes: Undocumented
+- Shared .agents support: `unsupported`
 - Format: —
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -195,6 +203,7 @@ None.
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#opencode-mcp-local), [global](#opencode-mcp-global)
+- Shared .agents support: `unsupported`
 - Format: json
 - Reliability: High
 - Evidence status: `official+implementation`
@@ -223,6 +232,7 @@ Notes:
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#qoder-mcp-local), [global](#qoder-mcp-global)
+- Shared .agents support: `unsupported`
 - Format: json
 - Reliability: High
 - Evidence status: `official+implementation`

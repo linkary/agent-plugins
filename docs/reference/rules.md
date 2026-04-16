@@ -4,23 +4,24 @@ Generated: 2026-04-15
 
 This page is official-doc-first. Vendor docs are treated as authoritative. Current repo behavior is only used to fill gaps and is labeled in the evidence status.
 
-| Target | Support | Repo Support | Scopes | Format | Reliability |
-| --- | --- | --- | --- | --- | --- |
-| [Cursor](https://docs.cursor.com/en/context) | supported | managed | [local](#cursor-rules-local), [global](#cursor-rules-global) | mdc + text | Medium |
-| [Gemini CLI](https://google-gemini.github.io/gemini-cli/docs/cli/gemini-md.html) | supported | documented-only | [local](#gemini-rules-local), [global](#gemini-rules-global) | markdown | Medium |
-| [Codex](https://developers.openai.com/codex/guides/agents-md) | supported | documented-only | [local](#codex-rules-local), [global](#codex-rules-global) | .rules | Low |
-| [Claude Code](https://code.claude.com/docs/en/memory) | supported | partial | [local](#claude-code-rules-local), [global](#claude-code-rules-global) | markdown | High |
-| [Google Antigravity](https://codelabs.developers.google.com/getting-started-google-antigravity) | supported | documented-only | [local](#antigravity-rules-local) | markdown | Low |
-| Openskills | unsupported | unsupported | Undocumented | — | Low |
-| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | — | Low |
-| [OpenCode](https://opencode.ai/docs/rules) | supported | documented-only | [local](#opencode-rules-local), [global](#opencode-rules-global) | markdown | Medium |
-| [Qoder](https://docs.qoder.com/user-guide/rules) | supported | documented-only | [local](#qoder-rules-local) | markdown | High |
+| Target | Support | Repo Support | Scopes | Shared .agents | Format | Reliability |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Cursor](https://docs.cursor.com/en/context) | supported | managed | [local](#cursor-rules-local), [global](#cursor-rules-global) | unsupported | mdc + text | Medium |
+| [Gemini CLI](https://google-gemini.github.io/gemini-cli/docs/cli/gemini-md.html) | supported | documented-only | [local](#gemini-rules-local), [global](#gemini-rules-global) | unsupported | markdown | Medium |
+| [Codex](https://developers.openai.com/codex/guides/agents-md) | supported | documented-only | [local](#codex-rules-local), [global](#codex-rules-global) | unsupported | .rules | Low |
+| [Claude Code](https://code.claude.com/docs/en/memory) | supported | partial | [local](#claude-code-rules-local), [global](#claude-code-rules-global) | unsupported | markdown | High |
+| [Google Antigravity](https://codelabs.developers.google.com/getting-started-google-antigravity) | supported | documented-only | [local](#antigravity-rules-local) | unsupported | markdown | Low |
+| Openskills | unsupported | unsupported | Undocumented | unsupported | — | Low |
+| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | unsupported | — | Low |
+| [OpenCode](https://opencode.ai/docs/rules) | supported | documented-only | [local](#opencode-rules-local), [global](#opencode-rules-global) | unsupported | markdown | Medium |
+| [Qoder](https://docs.qoder.com/user-guide/rules) | supported | documented-only | [local](#qoder-rules-local) | unsupported | markdown | High |
 
 ## Cursor
 
 - Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#cursor-rules-local), [global](#cursor-rules-global)
+- Shared .agents support: `unsupported`
 - Format: mdc + text
 - Reliability: Medium
 - Evidence status: `official+implementation`
@@ -52,6 +53,7 @@ None.
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#gemini-rules-local), [global](#gemini-rules-global)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: Medium
 - Evidence status: `disputed`
@@ -81,6 +83,7 @@ None.
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#codex-rules-local), [global](#codex-rules-global)
+- Shared .agents support: `unsupported`
 - Format: .rules
 - Reliability: Low
 - Evidence status: `disputed`
@@ -110,6 +113,7 @@ None.
 - Target support: `supported`
 - Repo support: `partial`
 - Scopes: [local](#claude-code-rules-local), [global](#claude-code-rules-global)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: High
 - Evidence status: `official+implementation`
@@ -140,6 +144,7 @@ None.
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#antigravity-rules-local)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: Low
 - Evidence status: `official+implementation`
@@ -163,6 +168,7 @@ None.
 - Target support: `unsupported`
 - Repo support: `unsupported`
 - Scopes: Undocumented
+- Shared .agents support: `unsupported`
 - Format: —
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -182,6 +188,7 @@ None.
 - Target support: `unsupported`
 - Repo support: `unsupported`
 - Scopes: Undocumented
+- Shared .agents support: `unsupported`
 - Format: —
 - Reliability: Low
 - Evidence status: `implementation-only`
@@ -201,6 +208,7 @@ None.
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#opencode-rules-local), [global](#opencode-rules-global)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: Medium
 - Evidence status: `disputed`
@@ -229,6 +237,7 @@ None.
 - Target support: `supported`
 - Repo support: `documented-only`
 - Scopes: [local](#qoder-rules-local)
+- Shared .agents support: `unsupported`
 - Format: markdown
 - Reliability: High
 - Evidence status: `official+implementation`
