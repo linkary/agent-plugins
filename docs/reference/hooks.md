@@ -6,15 +6,15 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 
 | Target | Support | Repo Support | Scopes | Format | Reliability |
 | --- | --- | --- | --- | --- | --- |
-| [Cursor](./targets/cursor.md#hooks) | supported | documented-only | Undocumented | webhook | Low |
-| [Gemini CLI](./targets/gemini.md#hooks) | undocumented | documented-only | Undocumented | — | Low |
-| [Codex](./targets/codex.md#hooks) | supported | documented-only | [local](#codex-hooks-local), [global](#codex-hooks-global) | json | Low |
-| [Claude Code](./targets/claude-code.md#hooks) | supported | documented-only | Undocumented | json | Low |
-| [Google Antigravity](./targets/antigravity.md#hooks) | undocumented | documented-only | Undocumented | — | Low |
-| [Openskills](./targets/openskills.md#hooks) | undocumented | documented-only | Undocumented | — | Low |
-| [Agentskills (Vercel Labs)](./targets/agents.md#hooks) | undocumented | documented-only | Undocumented | — | Low |
-| [OpenCode](./targets/opencode.md#hooks) | undocumented | documented-only | Undocumented | — | Low |
-| [Qoder](./targets/qoder.md#hooks) | undocumented | documented-only | Undocumented | — | Low |
+| [Cursor](./targets/cursor.md) | supported | documented-only | Undocumented | webhook | Low |
+| [Gemini CLI](./targets/gemini.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Codex](./targets/codex.md) | supported | documented-only | [local](#codex-hooks-local), [global](#codex-hooks-global) | json | Low |
+| [Claude Code](./targets/claude-code.md) | supported | documented-only | Undocumented | json | Low |
+| [Google Antigravity](./targets/antigravity.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Openskills](./targets/openskills.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Agentskills (Vercel Labs)](./targets/agents.md) | undocumented | documented-only | Undocumented | — | Low |
+| [OpenCode](./targets/opencode.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Qoder](./targets/qoder.md) | undocumented | documented-only | Undocumented | — | Low |
 
 ## Cursor
 
@@ -25,7 +25,7 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 - Reliability: Low
 - Evidence status: `disputed`
 - Evidence summary: Official docs and current implementation differ on: support.
-- Sources: [Cursor background-agent webhooks](https://docs.cursor.com/background-agent/api/webhooks); Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: [Cursor background-agent webhooks](https://docs.cursor.com/background-agent/api/webhooks); Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -44,7 +44,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: No stable repo-managed hook surface exists; only documentation can be generated here.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -63,7 +63,7 @@ None.
 - Reliability: Low
 - Evidence status: `disputed`
 - Evidence summary: Official docs and current implementation differ on: support.
-- Sources: [OpenAI Codex hooks](https://developers.openai.com/codex/hooks); Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: [OpenAI Codex hooks](https://developers.openai.com/codex/hooks); Target adapters (`src/targets/adapters.ts`)
 
 ### Local path {#codex-hooks-local}
 
@@ -93,7 +93,7 @@ None.
 - Reliability: Low
 - Evidence status: `disputed`
 - Evidence summary: Official docs and current implementation differ on: support.
-- Sources: [Anthropic Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks); Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: [Anthropic Claude Code hooks](https://docs.anthropic.com/en/docs/claude-code/hooks); Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -113,7 +113,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: No stable repo-managed hook surface exists; only documentation can be generated here.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -132,7 +132,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: No stable repo-managed hook surface exists; only documentation can be generated here.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -151,7 +151,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: No stable repo-managed hook surface exists; only documentation can be generated here.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -170,7 +170,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: No stable repo-managed hook surface exists; only documentation can be generated here.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -189,7 +189,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: No stable repo-managed hook surface exists; only documentation can be generated here.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 

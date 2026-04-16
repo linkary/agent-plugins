@@ -6,15 +6,15 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 
 | Target | Support | Repo Support | Scopes | Format | Reliability |
 | --- | --- | --- | --- | --- | --- |
-| [Cursor](./targets/cursor.md#plugins) | undocumented | documented-only | Undocumented | — | Low |
-| [Gemini CLI](./targets/gemini.md#plugins) | supported | documented-only | Undocumented | package | Low |
-| [Codex](./targets/codex.md#plugins) | supported | documented-only | Undocumented | package | Low |
-| [Claude Code](./targets/claude-code.md#plugins) | undocumented | documented-only | Undocumented | — | Low |
-| [Google Antigravity](./targets/antigravity.md#plugins) | undocumented | documented-only | Undocumented | — | Low |
-| [Openskills](./targets/openskills.md#plugins) | undocumented | documented-only | Undocumented | — | Low |
-| [Agentskills (Vercel Labs)](./targets/agents.md#plugins) | undocumented | documented-only | Undocumented | — | Low |
-| [OpenCode](./targets/opencode.md#plugins) | supported | documented-only | Undocumented | package | Low |
-| [Qoder](./targets/qoder.md#plugins) | undocumented | documented-only | Undocumented | — | Low |
+| [Cursor](./targets/cursor.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Gemini CLI](./targets/gemini.md) | supported | documented-only | Undocumented | package | Low |
+| [Codex](./targets/codex.md) | supported | documented-only | Undocumented | package | Low |
+| [Claude Code](./targets/claude-code.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Google Antigravity](./targets/antigravity.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Openskills](./targets/openskills.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Agentskills (Vercel Labs)](./targets/agents.md) | undocumented | documented-only | Undocumented | — | Low |
+| [OpenCode](./targets/opencode.md) | supported | documented-only | Undocumented | package | Low |
+| [Qoder](./targets/qoder.md) | undocumented | documented-only | Undocumented | — | Low |
 
 ## Cursor
 
@@ -25,7 +25,7 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: No stable repo-managed plugin surface exists; only documentation can be generated here.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -44,7 +44,7 @@ None.
 - Reliability: Low
 - Evidence status: `disputed`
 - Evidence summary: Official docs and current implementation differ on: support.
-- Sources: [Gemini CLI extensions](https://google-gemini.github.io/gemini-cli/docs/extensions/); Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: [Gemini CLI extensions](https://google-gemini.github.io/gemini-cli/docs/extensions/); Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -63,7 +63,7 @@ None.
 - Reliability: Low
 - Evidence status: `disputed`
 - Evidence summary: Official docs and current implementation differ on: support.
-- Sources: [OpenAI Codex skills](https://developers.openai.com/codex/skills); Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: [OpenAI Codex skills](https://developers.openai.com/codex/skills); Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -83,7 +83,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: No stable repo-managed plugin surface exists; only documentation can be generated here.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -102,7 +102,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: No stable repo-managed plugin surface exists; only documentation can be generated here.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -121,7 +121,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: No stable repo-managed plugin surface exists; only documentation can be generated here.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -140,7 +140,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: No stable repo-managed plugin surface exists; only documentation can be generated here.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -159,7 +159,7 @@ None.
 - Reliability: Low
 - Evidence status: `disputed`
 - Evidence summary: Official docs and current implementation differ on: support.
-- Sources: [OpenCode plugins](https://opencode.ai/docs/plugins/); Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: [OpenCode plugins](https://opencode.ai/docs/plugins/); Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -178,7 +178,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: No stable repo-managed plugin surface exists; only documentation can be generated here.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 

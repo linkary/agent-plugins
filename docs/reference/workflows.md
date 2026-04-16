@@ -6,15 +6,15 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 
 | Target | Support | Repo Support | Scopes | Format | Reliability |
 | --- | --- | --- | --- | --- | --- |
-| [Cursor](./targets/cursor.md#workflows) | undocumented | documented-only | Undocumented | — | Low |
-| [Gemini CLI](./targets/gemini.md#workflows) | undocumented | documented-only | Undocumented | — | Low |
-| [Codex](./targets/codex.md#workflows) | undocumented | documented-only | Undocumented | — | Low |
-| [Claude Code](./targets/claude-code.md#workflows) | undocumented | documented-only | Undocumented | — | Low |
-| [Google Antigravity](./targets/antigravity.md#workflows) | supported | documented-only | [local](#antigravity-workflows-local), [global](#antigravity-workflows-global) | markdown | Low |
-| [Openskills](./targets/openskills.md#workflows) | undocumented | documented-only | Undocumented | — | Low |
-| [Agentskills (Vercel Labs)](./targets/agents.md#workflows) | undocumented | documented-only | Undocumented | — | Low |
-| [OpenCode](./targets/opencode.md#workflows) | undocumented | documented-only | Undocumented | — | Low |
-| [Qoder](./targets/qoder.md#workflows) | undocumented | documented-only | Undocumented | — | Low |
+| [Cursor](./targets/cursor.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Gemini CLI](./targets/gemini.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Codex](./targets/codex.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Claude Code](./targets/claude-code.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Google Antigravity](./targets/antigravity.md) | supported | documented-only | [local](#antigravity-workflows-local), [global](#antigravity-workflows-global) | markdown | Low |
+| [Openskills](./targets/openskills.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Agentskills (Vercel Labs)](./targets/agents.md) | undocumented | documented-only | Undocumented | — | Low |
+| [OpenCode](./targets/opencode.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Qoder](./targets/qoder.md) | undocumented | documented-only | Undocumented | — | Low |
 
 ## Cursor
 

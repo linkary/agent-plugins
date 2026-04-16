@@ -6,15 +6,15 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 
 | Target | Support | Repo Support | Scopes | Format | Reliability |
 | --- | --- | --- | --- | --- | --- |
-| [Cursor](./targets/cursor.md#settings) | undocumented | documented-only | Undocumented | — | Low |
-| [Gemini CLI](./targets/gemini.md#settings) | supported | documented-only | [local](#gemini-settings-local), [global](#gemini-settings-global) | json | Medium |
-| [Codex](./targets/codex.md#settings) | supported | documented-only | [local](#codex-settings-local), [global](#codex-settings-global) | toml | Low |
-| [Claude Code](./targets/claude-code.md#settings) | supported | documented-only | [local](#claude-code-settings-local), [global](#claude-code-settings-global) | json | Low |
-| [Google Antigravity](./targets/antigravity.md#settings) | undocumented | documented-only | Undocumented | — | Low |
-| [Openskills](./targets/openskills.md#settings) | undocumented | documented-only | Undocumented | — | Low |
-| [Agentskills (Vercel Labs)](./targets/agents.md#settings) | undocumented | documented-only | Undocumented | — | Low |
-| [OpenCode](./targets/opencode.md#settings) | supported | documented-only | [local](#opencode-settings-local), [global](#opencode-settings-global) | json | Low |
-| [Qoder](./targets/qoder.md#settings) | supported | documented-only | [local](#qoder-settings-local), [global](#qoder-settings-global) | json | Low |
+| [Cursor](./targets/cursor.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Gemini CLI](./targets/gemini.md) | supported | documented-only | [local](#gemini-settings-local), [global](#gemini-settings-global) | json | Medium |
+| [Codex](./targets/codex.md) | supported | documented-only | [local](#codex-settings-local), [global](#codex-settings-global) | toml | Low |
+| [Claude Code](./targets/claude-code.md) | supported | documented-only | [local](#claude-code-settings-local), [global](#claude-code-settings-global) | json | Low |
+| [Google Antigravity](./targets/antigravity.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Openskills](./targets/openskills.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Agentskills (Vercel Labs)](./targets/agents.md) | undocumented | documented-only | Undocumented | — | Low |
+| [OpenCode](./targets/opencode.md) | supported | documented-only | [local](#opencode-settings-local), [global](#opencode-settings-global) | json | Low |
+| [Qoder](./targets/qoder.md) | supported | documented-only | [local](#qoder-settings-local), [global](#qoder-settings-global) | json | Low |
 
 ## Cursor
 
@@ -25,7 +25,7 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: Settings are documented from target docs and current adapter behavior rather than a dedicated repo-managed family.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -44,7 +44,7 @@ Notes:
 - Reliability: Medium
 - Evidence status: `official+implementation`
 - Evidence summary: Official docs cover this surface, with current implementation filling gaps for: local path, global path.
-- Sources: [Gemini CLI configuration](https://google-gemini.github.io/gemini-cli/docs/get-started/configuration.html); Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: [Gemini CLI configuration](https://google-gemini.github.io/gemini-cli/docs/get-started/configuration.html); Target adapters (`src/targets/adapters.ts`)
 
 ### Local path {#gemini-settings-local}
 
@@ -71,7 +71,7 @@ None.
 - Reliability: Low
 - Evidence status: `disputed`
 - Evidence summary: Official docs and current implementation differ on: global path.
-- Sources: [OpenAI Codex config reference](https://developers.openai.com/codex/config-reference); Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: [OpenAI Codex config reference](https://developers.openai.com/codex/config-reference); Target adapters (`src/targets/adapters.ts`)
 
 ### Local path {#codex-settings-local}
 
@@ -99,7 +99,7 @@ None.
 - Reliability: Low
 - Evidence status: `disputed`
 - Evidence summary: Official docs and current implementation differ on: format.
-- Sources: [Anthropic Claude Code settings](https://docs.anthropic.com/en/docs/claude-code/settings); Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: [Anthropic Claude Code settings](https://docs.anthropic.com/en/docs/claude-code/settings); Target adapters (`src/targets/adapters.ts`)
 
 ### Local path {#claude-code-settings-local}
 
@@ -126,7 +126,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: Settings are documented from target docs and current adapter behavior rather than a dedicated repo-managed family.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -145,7 +145,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: Settings are documented from target docs and current adapter behavior rather than a dedicated repo-managed family.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -164,7 +164,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: Settings are documented from target docs and current adapter behavior rather than a dedicated repo-managed family.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -183,7 +183,7 @@ None.
 - Reliability: Low
 - Evidence status: `disputed`
 - Evidence summary: Official docs and current implementation differ on: format.
-- Sources: [OpenCode config](https://opencode.ai/docs/config/); Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: [OpenCode config](https://opencode.ai/docs/config/); Target adapters (`src/targets/adapters.ts`)
 
 ### Local path {#opencode-settings-local}
 
@@ -210,7 +210,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: Settings are documented from target docs and current adapter behavior rather than a dedicated repo-managed family.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 ### Local path {#qoder-settings-local}
 

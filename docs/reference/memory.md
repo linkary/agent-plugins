@@ -6,15 +6,15 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 
 | Target | Support | Repo Support | Scopes | Format | Reliability |
 | --- | --- | --- | --- | --- | --- |
-| [Cursor](./targets/cursor.md#memory) | undocumented | documented-only | Undocumented | — | Low |
-| [Gemini CLI](./targets/gemini.md#memory) | supported | documented-only | Undocumented | markdown | Low |
-| [Codex](./targets/codex.md#memory) | supported | documented-only | [local](#codex-memory-local), [global](#codex-memory-global) | markdown | Low |
-| [Claude Code](./targets/claude-code.md#memory) | supported | documented-only | [local](#claude-code-memory-local), [global](#claude-code-memory-global) | markdown | Low |
-| [Google Antigravity](./targets/antigravity.md#memory) | supported | documented-only | [global](#antigravity-memory-global) | markdown | Low |
-| [Openskills](./targets/openskills.md#memory) | undocumented | documented-only | Undocumented | — | Low |
-| [Agentskills (Vercel Labs)](./targets/agents.md#memory) | undocumented | documented-only | Undocumented | — | Low |
-| [OpenCode](./targets/opencode.md#memory) | undocumented | documented-only | Undocumented | — | Low |
-| [Qoder](./targets/qoder.md#memory) | undocumented | documented-only | Undocumented | — | Low |
+| [Cursor](./targets/cursor.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Gemini CLI](./targets/gemini.md) | supported | documented-only | Undocumented | markdown | Low |
+| [Codex](./targets/codex.md) | supported | documented-only | [local](#codex-memory-local), [global](#codex-memory-global) | markdown | Low |
+| [Claude Code](./targets/claude-code.md) | supported | documented-only | [local](#claude-code-memory-local), [global](#claude-code-memory-global) | markdown | Low |
+| [Google Antigravity](./targets/antigravity.md) | supported | documented-only | [global](#antigravity-memory-global) | markdown | Low |
+| [Openskills](./targets/openskills.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Agentskills (Vercel Labs)](./targets/agents.md) | undocumented | documented-only | Undocumented | — | Low |
+| [OpenCode](./targets/opencode.md) | undocumented | documented-only | Undocumented | — | Low |
+| [Qoder](./targets/qoder.md) | undocumented | documented-only | Undocumented | — | Low |
 
 ## Cursor
 
@@ -25,7 +25,7 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: Memory surfaces are documented from target docs and current global-rules behavior rather than a dedicated repo-managed family.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -44,7 +44,7 @@ None.
 - Reliability: Low
 - Evidence status: `disputed`
 - Evidence summary: Official docs and current implementation differ on: support.
-- Sources: [Gemini CLI GEMINI.md docs](https://google-gemini.github.io/gemini-cli/docs/cli/gemini-md.html); Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: [Gemini CLI GEMINI.md docs](https://google-gemini.github.io/gemini-cli/docs/cli/gemini-md.html); Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -64,7 +64,7 @@ None.
 - Reliability: Low
 - Evidence status: `disputed`
 - Evidence summary: Official docs and current implementation differ on: local path, global path.
-- Sources: [OpenAI Codex AGENTS.md](https://developers.openai.com/codex/guides/agents-md); Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: [OpenAI Codex AGENTS.md](https://developers.openai.com/codex/guides/agents-md); Target adapters (`src/targets/adapters.ts`)
 
 ### Local path {#codex-memory-local}
 
@@ -93,7 +93,7 @@ None.
 - Reliability: Low
 - Evidence status: `disputed`
 - Evidence summary: Official docs and current implementation differ on: format.
-- Sources: [Anthropic Claude Code memory](https://docs.anthropic.com/en/docs/claude-code/memory); Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: [Anthropic Claude Code memory](https://docs.anthropic.com/en/docs/claude-code/memory); Target adapters (`src/targets/adapters.ts`)
 
 ### Local path {#claude-code-memory-local}
 
@@ -120,7 +120,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: Memory surfaces are documented from target docs and current global-rules behavior rather than a dedicated repo-managed family.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 ### Global path {#antigravity-memory-global}
 
@@ -142,7 +142,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: Memory surfaces are documented from target docs and current global-rules behavior rather than a dedicated repo-managed family.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -161,7 +161,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: Memory surfaces are documented from target docs and current global-rules behavior rather than a dedicated repo-managed family.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -180,7 +180,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: Memory surfaces are documented from target docs and current global-rules behavior rather than a dedicated repo-managed family.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 
@@ -199,7 +199,7 @@ None.
 - Reliability: Low
 - Evidence status: `implementation-only`
 - Evidence summary: Memory surfaces are documented from target docs and current global-rules behavior rather than a dedicated repo-managed family.
-- Sources: Implementation fallback extractor (`src/docs/model/extract-implementation-fallbacks.ts`)
+- Sources: Target adapters (`src/targets/adapters.ts`)
 
 No scope-specific paths captured.
 

@@ -6,15 +6,15 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 
 | Target | Support | Repo Support | Scopes | Format | Reliability |
 | --- | --- | --- | --- | --- | --- |
-| [Cursor](./targets/cursor.md#mcp) | supported | documented-only | [local](#cursor-mcp-local), [global](#cursor-mcp-global) | json | High |
-| [Gemini CLI](./targets/gemini.md#mcp) | supported | documented-only | [local](#gemini-mcp-local), [global](#gemini-mcp-global) | json | High |
-| [Codex](./targets/codex.md#mcp) | supported | documented-only | [local](#codex-mcp-local), [global](#codex-mcp-global) | toml | High |
-| [Claude Code](./targets/claude-code.md#mcp) | supported | documented-only | [local](#claude-code-mcp-local), [global](#claude-code-mcp-global) | json | High |
-| [Google Antigravity](./targets/antigravity.md#mcp) | supported | partial | [global](#antigravity-mcp-global) | json | Medium |
-| [Openskills](./targets/openskills.md#mcp) | unsupported | unsupported | Undocumented | — | Low |
-| [Agentskills (Vercel Labs)](./targets/agents.md#mcp) | unsupported | unsupported | Undocumented | — | Low |
-| [OpenCode](./targets/opencode.md#mcp) | supported | documented-only | [local](#opencode-mcp-local), [global](#opencode-mcp-global) | json | High |
-| [Qoder](./targets/qoder.md#mcp) | supported | documented-only | [local](#qoder-mcp-local), [global](#qoder-mcp-global) | json | High |
+| [Cursor](./targets/cursor.md) | supported | documented-only | [local](#cursor-mcp-local), [global](#cursor-mcp-global) | json | High |
+| [Gemini CLI](./targets/gemini.md) | supported | documented-only | [local](#gemini-mcp-local), [global](#gemini-mcp-global) | json | High |
+| [Codex](./targets/codex.md) | supported | documented-only | [local](#codex-mcp-local), [global](#codex-mcp-global) | toml | High |
+| [Claude Code](./targets/claude-code.md) | supported | documented-only | [local](#claude-code-mcp-local), [global](#claude-code-mcp-global) | json | High |
+| [Google Antigravity](./targets/antigravity.md) | supported | partial | [global](#antigravity-mcp-global) | json | Medium |
+| [Openskills](./targets/openskills.md) | unsupported | unsupported | Undocumented | — | Low |
+| [Agentskills (Vercel Labs)](./targets/agents.md) | unsupported | unsupported | Undocumented | — | Low |
+| [OpenCode](./targets/opencode.md) | supported | documented-only | [local](#opencode-mcp-local), [global](#opencode-mcp-global) | json | High |
+| [Qoder](./targets/qoder.md) | supported | documented-only | [local](#qoder-mcp-local), [global](#qoder-mcp-global) | json | High |
 
 ## Cursor
 
