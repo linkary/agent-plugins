@@ -1,6 +1,6 @@
 # Memory Reference
 
-Generated: 2026-04-15
+Reviewed: 2026-04-17
 
 This page is official-doc-first. Vendor docs are treated as authoritative. Current repo behavior is only used to fill gaps and is labeled in the evidence status.
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Reference Docs Maintainer"
+  short_description: "Update and validate docs/reference against official docs and repo behavior"
+  default_prompt: "Use $reference-docs-maintainer to update or validate docs/reference for agent-plugins, verify official source links, check adapter-vs-doc consistency, and audit shared .agents support."
