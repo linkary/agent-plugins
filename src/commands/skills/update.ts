@@ -301,11 +301,21 @@ async function checkRepoCredentials(
 
   const preflight = await mapLimit(httpsRepos, Math.min(4, httpsRepos.length), async (repo) => {
     const result = await runGitCapture(['ls-remote', '--heads', repo.url], { env: nonInteractiveGitEnv() });
+    let stderr = result.stderr;
+    let needsCredential = result.code !== 0 && looksLikeCredentialFailure(result.stderr);
+    if (needsCredential) {
+      const githubStatus = await checkGitHubRepoStatus(repo.url);
+      if (githubStatus === 'not-found') {
+        needsCredential = false;
+        stderr = 'GitHub repository not found';
+      }
+    }
+
     return {
       repo,
       code: result.code,
-      stderr: result.stderr,
-      needsCredential: result.code !== 0 && looksLikeCredentialFailure(result.stderr),
+      stderr,
+      needsCredential,
     };
   });
 
@@ -363,6 +373,56 @@ function summarizeFailure(error: string, repoUrl: string): string {
 
 function stripAnsi(value: string): string {
   return value.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+type GitHubRepoStatus = 'exists' | 'not-found' | 'unknown';
+
+async function checkGitHubRepoStatus(repoUrl: string): Promise<GitHubRepoStatus> {
+  const apiUrl = getGitHubRepoApiUrl(repoUrl);
+  if (!apiUrl || typeof fetch !== 'function') {
+    return 'unknown';
+  }
+
+  try {
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'agent-plugins',
+    };
+    const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(apiUrl, { headers });
+    if (response.status === 404) {
+      return 'not-found';
+    }
+    if (response.ok) {
+      return 'exists';
+    }
+  } catch {
+    return 'unknown';
+  }
+
+  return 'unknown';
+}
+
+function getGitHubRepoApiUrl(repoUrl: string): string | null {
+  try {
+    const parsed = new URL(repoUrl);
+    if (parsed.hostname.toLowerCase() !== 'github.com') {
+      return null;
+    }
+
+    const [owner, repo] = parsed.pathname.replace(/^\/+|\/+$/g, '').split('/');
+    if (!owner || !repo) {
+      return null;
+    }
+
+    return `https://api.github.com/repos/${owner}/${repo.replace(/\.git$/i, '')}`;
+  } catch {
+    return null;
+  }
 }
 
 async function createCredentialGitEnv(

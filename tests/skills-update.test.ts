@@ -9,6 +9,7 @@ let repoFixture = '';
 let cloneFailures = new Set<string>();
 let credentialFailures = new Set<string>();
 let missingRepos = new Set<string>();
+let originalFetch: typeof globalThis.fetch | undefined;
 
 mock.module('../src/util/git-utils.js', () => ({
   runGit: async (args: string[], opts?: { env?: NodeJS.ProcessEnv }) => {
@@ -83,6 +84,22 @@ describe('skills update', () => {
     cloneFailures = new Set<string>();
     credentialFailures = new Set<string>();
     missingRepos = new Set<string>();
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = String(input);
+      const decoded = decodeURIComponent(url);
+      const isMissing = [...missingRepos].some((repoUrl) => {
+        const parsed = new URL(repoUrl);
+        const [owner, repo] = parsed.pathname.replace(/^\/+|\/+$/g, '').split('/');
+        return Boolean(owner && repo && decoded.includes(`/repos/${owner}/${repo.replace(/\.git$/i, '')}`));
+      });
+
+      return {
+        ok: !isMissing,
+        status: isMissing ? 404 : 200,
+      } as Response;
+    }) as typeof globalThis.fetch;
+
     tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), 'apg-skills-update-'));
     process.env.APG_HOME = tmpHome;
 
@@ -128,6 +145,7 @@ describe('skills update', () => {
   afterEach(async () => {
     if (tmpHome) await fs.rm(tmpHome, { recursive: true, force: true });
     if (repoFixture) await fs.rm(repoFixture, { recursive: true, force: true });
+    globalThis.fetch = originalFetch!;
     delete process.env.APG_HOME;
   });
 
