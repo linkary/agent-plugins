@@ -56,15 +56,18 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
     const preflight = await checkRepoCredentials(
       repoKeys.map((repoKey) => ({ repoKey, url: repos[repoKey]!.url })),
     );
-    process.stdout.write(`Checking ${repoKeys.length} repo(s) in parallel...\n`);
+    const concurrency = Math.min(4, repoKeys.length);
+    if (!process.stdout.isTTY) {
+      process.stdout.write(`Checking ${repoKeys.length} repo(s)...\n`);
+    }
 
-    const progress = createProgress(repoKeys.length, 'repos');
-    const repoResults = await mapLimit(repoKeys, Math.min(4, repoKeys.length), async (repoKey) => {
+    const progress = createProgress({ total: repoKeys.length, label: 'repos', action: 'Checking', concurrency });
+    const repoResults = await mapLimit(repoKeys, concurrency, async (repoKey) => {
       const repo = repos[repoKey]!;
       try {
         const preflightError = preflight.failures.get(repoKey);
         if (preflightError) {
-          progress.tick(`${ANSI.red}failed${ANSI.reset} ${repo.url}`);
+          progress.tick('failed', repo.url);
           return {
             updates: [] as PendingUpdate[],
             error: preflightError,
@@ -80,7 +83,7 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
         const gitEnv = credential ? await createCredentialGitEnv(credential, askpassScripts) : nonInteractiveGitEnv();
         const code = await runGit(['clone', '--depth', '1', repo.url, cloneDest], { stdio: 'ignore', env: gitEnv });
         if (code !== 0) {
-          progress.tick(`${ANSI.red}failed${ANSI.reset} ${repo.url}`);
+          progress.tick('failed', repo.url);
           return {
             updates: [] as PendingUpdate[],
             error: `${ANSI.red}Failed to clone ${repo.url}${ANSI.reset}`,
@@ -97,7 +100,7 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
               ? await runGit(['-C', cloneDest, 'checkout', repo.ref], { stdio: 'ignore', env: gitEnv })
               : 1;
           if (fetchCode !== 0 || checkoutCode !== 0) {
-            progress.tick(`${ANSI.red}failed${ANSI.reset} ${repo.url}`);
+            progress.tick('failed', repo.url);
             return {
               updates: [] as PendingUpdate[],
               error: `${ANSI.red}Failed to checkout ${repo.ref} from ${repo.url}${ANSI.reset}`,
@@ -132,10 +135,10 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
             repoUrl: repo.url,
           });
         }
-        progress.tick(`${ANSI.green}checked${ANSI.reset} ${repo.url}`);
+        progress.tick('checked', repo.url);
         return { updates };
       } catch (err) {
-        progress.tick(`${ANSI.red}failed${ANSI.reset} ${repo.url}`);
+        progress.tick('failed', repo.url);
         return {
           updates: [] as PendingUpdate[],
           error: `${ANSI.red}Failed to check ${repo.url}: ${String(err)}${ANSI.reset}`,
@@ -413,32 +416,76 @@ async function promptHidden(question: string): Promise<string> {
   });
 }
 
-function createProgress(total: number, label: string) {
-  let done = 0;
-  const enabled = Boolean(process.stdout.isTTY);
+type ProgressStatus = 'checked' | 'failed';
 
-  const render = (message?: string) => {
+function createProgress(params: { total: number; label: string; action: string; concurrency: number }) {
+  let done = 0;
+  let failed = 0;
+  let lastMessage = '';
+  let frame = 0;
+  const startedAt = Date.now();
+  const enabled = Boolean(process.stdout.isTTY);
+  const frames = ['-', '\\', '|', '/'];
+
+  const render = (final = false) => {
     if (!enabled) return;
-    const width = 24;
-    const filled = total === 0 ? width : Math.round((done / total) * width);
-    const bar = `${'#'.repeat(filled)}${'-'.repeat(width - filled)}`;
-    const suffix = message ? ` ${ANSI.dim}${message}${ANSI.reset}` : '';
-    process.stdout.write(`\r[${bar}] ${done}/${total} ${label}${suffix}`);
+    const elapsed = formatElapsed(Date.now() - startedAt);
+    if (final) {
+      const failedText = failed > 0 ? ` (${failed} failed)` : '';
+      const color = failed > 0 ? ANSI.yellow : ANSI.green;
+      process.stdout.write(`\r\x1b[K${color}Checked${ANSI.reset} ${params.total} ${params.label} in ${elapsed}${failedText}\n`);
+      return;
+    }
+
+    const width = 20;
+    const filled = params.total === 0 ? width : Math.floor((done / params.total) * width);
+    const hasRemaining = done < params.total;
+    const bar =
+      `${'='.repeat(filled)}` +
+      `${hasRemaining ? '>' : ''}` +
+      `${'-'.repeat(Math.max(0, width - filled - (hasRemaining ? 1 : 0)))}`;
+    const running = Math.min(params.concurrency, Math.max(0, params.total - done));
+    const failedText = failed > 0 ? ` ${ANSI.red}failed ${failed}${ANSI.reset}` : '';
+    const suffix = lastMessage ? ` ${ANSI.dim}${truncateMiddle(lastMessage, 44)}${ANSI.reset}` : '';
+    const spinner = frames[frame % frames.length]!;
+    frame++;
+
+    process.stdout.write(
+      `\r\x1b[K${spinner} ${params.action} ${params.label} [${bar}] ${done}/${params.total} running ${running}${failedText} ${elapsed}${suffix}`,
+    );
   };
 
   render();
 
   return {
-    tick(message?: string) {
+    tick(status: ProgressStatus, message?: string) {
       done++;
-      render(message);
+      if (status === 'failed') {
+        failed++;
+      }
+      lastMessage = message ?? '';
+      render();
     },
     finish() {
-      if (enabled) {
-        process.stdout.write('\n');
-      }
+      render(true);
     },
   };
+}
+
+function formatElapsed(ms: number): string {
+  const seconds = ms / 1000;
+  if (seconds < 10) {
+    return `${seconds.toFixed(1)}s`;
+  }
+  return `${Math.round(seconds)}s`;
+}
+
+function truncateMiddle(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  const keep = Math.max(4, Math.floor((maxLength - 3) / 2));
+  return `${value.slice(0, keep)}...${value.slice(-keep)}`;
 }
 
 async function mapLimit<T, R>(
