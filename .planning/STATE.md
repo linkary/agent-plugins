@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 Phase: 1 of 4 (Reference Manifest Foundation)
 Plan: 0 of 2 in current phase
 Status: Ready to plan
-Last activity: 2026-04-25 - Completed quick task 260425-psk: Treat missing GitHub skill update repos as failed instead of prompting for credentials
+Last activity: 2026-04-25 - Completed quick task 260425-pzh: Make ap skills update progress look like uv style progress
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -62,6 +62,7 @@ None yet.
 |---|-------------|------|--------|-----------|
 | 260425-omy | Improve ap skills update repo diagnostics, parallel update progress, and credential-prompt behavior | 2026-04-25 | 8cd2739 | [260425-omy-improve-ap-skills-update-repo-diagnostic](./quick/260425-omy-improve-ap-skills-update-repo-diagnostic/) |
 | 260425-psk | Treat missing GitHub skill update repos as failed instead of prompting for credentials | 2026-04-25 | bd61c8f | [260425-psk-treat-missing-github-skill-update-repos-](./quick/260425-psk-treat-missing-github-skill-update-repos-/) |
+| 260425-pzh | Make ap skills update progress look like uv style progress | 2026-04-25 | ba07893 | [260425-pzh-make-ap-skills-update-progress-look-like](./quick/260425-pzh-make-ap-skills-update-progress-look-like/) |
 
 ## Session Continuity
 
