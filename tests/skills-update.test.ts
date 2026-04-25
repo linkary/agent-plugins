@@ -6,15 +6,32 @@ import { normalizeRepoUrl } from '../src/core/registry.js';
 
 let tmpHome = '';
 let repoFixture = '';
+let cloneFailures = new Set<string>();
+let credentialFailures = new Set<string>();
 
 mock.module('../src/util/git-utils.js', () => ({
-  runGit: async (args: string[]) => {
+  runGit: async (args: string[], opts?: { env?: NodeJS.ProcessEnv }) => {
     if (args[0] === 'clone') {
+      const repoUrl = args[args.length - 2]!;
+      if (cloneFailures.has(repoUrl) || (credentialFailures.has(repoUrl) && !opts?.env?.GIT_ASKPASS)) {
+        return 1;
+      }
       const cloneDest = args[args.length - 1]!;
       await fs.cp(repoFixture, cloneDest, { recursive: true });
       return 0;
     }
     return 0;
+  },
+  runGitCapture: async (args: string[]) => {
+    const repoUrl = args[args.length - 1]!;
+    if (credentialFailures.has(repoUrl)) {
+      return {
+        code: 128,
+        stdout: '',
+        stderr: "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+      };
+    }
+    return { code: 0, stdout: '', stderr: '' };
   },
   isSkillDir: async (dir: string) => {
     try {
@@ -41,6 +58,8 @@ describe('skills update', () => {
   const repoUrl = 'https://example.com/skills';
 
   beforeEach(async () => {
+    cloneFailures = new Set<string>();
+    credentialFailures = new Set<string>();
     tmpHome = await fs.mkdtemp(path.join(os.tmpdir(), 'apg-skills-update-'));
     process.env.APG_HOME = tmpHome;
 
@@ -102,5 +121,89 @@ describe('skills update', () => {
     const registry = JSON.parse(await fs.readFile(path.join(tmpHome, 'registry.json'), 'utf8'));
     expect(registry.skills['skill-a'].updatedAt).not.toBe('2024-01-01T00:00:00Z');
     expect(registry.skills['skill-missing'].updatedAt).toBe('2024-01-01T00:00:00Z');
+  });
+
+  it('keeps updating successful repos when another repo clone fails', async () => {
+    const badRepoUrl = 'https://example.com/bad-skills';
+    cloneFailures.add(badRepoUrl);
+
+    const now = '2024-01-01T00:00:00Z';
+    const registryPath = path.join(tmpHome, 'registry.json');
+    const registry = JSON.parse(await fs.readFile(registryPath, 'utf8'));
+    registry.skills['skill-bad'] = {
+      name: 'skill-bad',
+      addedAt: now,
+      updatedAt: now,
+      source: { type: 'git', url: badRepoUrl },
+    };
+    registry.repos[normalizeRepoUrl(badRepoUrl)] = {
+      url: badRepoUrl,
+      skills: ['skill-bad'],
+      addedAt: now,
+      updatedAt: now,
+    };
+    await fs.writeFile(registryPath, JSON.stringify(registry, null, 2));
+
+    let stderr = '';
+    const originalWrite = process.stderr.write;
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderr += chunk.toString();
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      const code = await cmdSkillsUpdate([], { all: true }, { cwd: tmpHome });
+      expect(code).toBe(0);
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+
+    const updated = await fs.readFile(path.join(tmpHome, 'skills', 'skill-a', 'SKILL.md'), 'utf8');
+    expect(updated).toBe('new-a');
+    expect(stderr).toContain(`Failed to clone ${badRepoUrl}`);
+  });
+
+  it('prints the repo that needs credentials before skipping non-interactive prompting', async () => {
+    const privateRepoUrl = 'https://github.com/example/private-skills';
+    credentialFailures.add(privateRepoUrl);
+
+    const now = '2024-01-01T00:00:00Z';
+    const registryPath = path.join(tmpHome, 'registry.json');
+    const registry = {
+      version: 1,
+      skills: {
+        private: { name: 'private', addedAt: now, updatedAt: now, source: { type: 'git', url: privateRepoUrl } },
+      },
+      repos: {
+        [normalizeRepoUrl(privateRepoUrl)]: {
+          url: privateRepoUrl,
+          skills: ['private'],
+          addedAt: now,
+          updatedAt: now,
+        },
+      },
+      agents: {},
+      commands: {},
+      rules: {},
+      mcp: {},
+      agentRepos: {},
+      commandRepos: {},
+      ruleRepos: {},
+    };
+    await fs.writeFile(registryPath, JSON.stringify(registry, null, 2));
+
+    let stderr = '';
+    const originalWrite = process.stderr.write;
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderr += chunk.toString();
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      const code = await cmdSkillsUpdate([], { all: true }, { cwd: tmpHome });
+      expect(code).toBe(1);
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+
+    expect(stderr).toContain(`Credentials required for repo: ${privateRepoUrl}`);
   });
 });

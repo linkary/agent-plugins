@@ -27,15 +27,48 @@ export function guessNameFromGitUrl(url: string): string {
   return last.endsWith('.git') ? last.slice(0, -4) : last;
 }
 
+type GitRunOptions = {
+  cwd?: string;
+  stdio?: 'inherit' | 'ignore';
+  env?: NodeJS.ProcessEnv;
+};
+
 /** 执行 git 命令，返回退出码 */
-export async function runGit(args: string[], opts: { cwd?: string; stdio?: 'inherit' | 'ignore' }): Promise<number> {
+export async function runGit(args: string[], opts: GitRunOptions = {}): Promise<number> {
   return await new Promise((resolve, reject) => {
     const child = spawn('git', args, {
       cwd: opts.cwd,
       stdio: opts.stdio ?? 'inherit',
+      env: opts.env ? { ...process.env, ...opts.env } : process.env,
     });
     child.on('error', reject);
     child.on('close', (code) => resolve(code ?? 1));
+  });
+}
+
+export async function runGitCapture(
+  args: string[],
+  opts: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return await new Promise((resolve, reject) => {
+    const child = spawn('git', args, {
+      cwd: opts.cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: opts.env ? { ...process.env, ...opts.env } : process.env,
+    });
+
+    let stdout = '';
+    let stderr = '';
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr?.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
   });
 }
 

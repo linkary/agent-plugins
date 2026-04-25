@@ -1,13 +1,15 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
+import readline from 'node:readline';
+import { Writable } from 'node:stream';
 import { loadRegistry, saveRegistry, normalizeRepoUrl } from '../../core/registry.js';
 import { getCentralSkillPath } from '../../core/skill-store.js';
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { copyDir } from '../../util/copy-dir.js';
 import { detectSkillStatus } from '../../util/skill-compare.js';
 import { promptMultiSelect } from '../../util/prompt.js';
-import { runGit, isSkillDir } from '../../util/git-utils.js';
+import { runGit, runGitCapture, isSkillDir } from '../../util/git-utils.js';
 import { ANSI } from '../../util/ansi.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
@@ -36,6 +38,7 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
 
   let totalUpdated = 0;
   const tempDirs: string[] = [];
+  const askpassScripts: string[] = [];
 
   type PendingUpdate = {
     skillName: string;
@@ -46,56 +49,98 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
   };
 
   const allUpdates: PendingUpdate[] = [];
+  let failedUpdates = 0;
+  let missingDuringUpdate = 0;
 
   try {
-    process.stdout.write(`Checking ${repoKeys.length} repo(s)...\n`);
+    const credentials = await collectCredentialsForRepos(
+      repoKeys.map((repoKey) => ({ repoKey, url: repos[repoKey]!.url })),
+    );
+    process.stdout.write(`Checking ${repoKeys.length} repo(s) in parallel...\n`);
 
-    // Serial processing to avoid network/disk contention (can be parallelized if needed)
-    for (const repoKey of repoKeys) {
+    const progress = createProgress(repoKeys.length, 'repos');
+    const repoResults = await mapLimit(repoKeys, Math.min(4, repoKeys.length), async (repoKey) => {
       const repo = repos[repoKey]!;
-      // process.stdout.write(`  Checking ${repo.url}...\n`);
+      try {
+        const tmpDir = path.join(os.tmpdir(), `apd-update-${Math.random().toString(36).slice(2, 8)}`);
+        tempDirs.push(tmpDir); // Track for cleanup
+        await ensureDir(tmpDir);
+        const cloneDest = path.join(tmpDir, 'repo');
 
-      const tmpDir = path.join(os.tmpdir(), `apd-update-${Math.random().toString(36).slice(2, 8)}`);
-      tempDirs.push(tmpDir); // Track for cleanup
-      await ensureDir(tmpDir);
-      const cloneDest = path.join(tmpDir, 'repo');
-
-      const code = await runGit(['clone', '--depth', '1', repo.url, cloneDest], { stdio: 'ignore' });
-      if (code !== 0) {
-        process.stderr.write(`${ANSI.red}Failed to clone ${repo.url}${ANSI.reset}\n`);
-        continue;
-      }
-
-      if (repo.ref) {
-        await runGit(['-C', cloneDest, 'fetch', '--depth', '1', 'origin', repo.ref], { stdio: 'ignore' });
-        await runGit(['-C', cloneDest, 'checkout', repo.ref], { stdio: 'ignore' });
-      }
-
-      let searchDir = cloneDest;
-      const skillsSubdir = path.join(cloneDest, 'skills');
-      if (await pathExists(skillsSubdir)) {
-        const stat = await fs.stat(skillsSubdir);
-        if (stat.isDirectory()) {
-          searchDir = skillsSubdir;
-        }
-      }
-
-      for (const skillName of repo.skills) {
-        const srcDir = path.join(searchDir, skillName);
-        if (!(await pathExists(srcDir)) || !(await isSkillDir(srcDir))) {
-          allUpdates.push({ skillName, srcDir, repoKey, status: 'missing', repoUrl: repo.url });
-          continue;
+        const credential = credentials.get(repoKey);
+        const gitEnv = credential ? await createCredentialGitEnv(credential, askpassScripts) : nonInteractiveGitEnv();
+        const code = await runGit(['clone', '--depth', '1', repo.url, cloneDest], { stdio: 'ignore', env: gitEnv });
+        if (code !== 0) {
+          progress.tick(`${ANSI.red}failed${ANSI.reset} ${repo.url}`);
+          return {
+            updates: [] as PendingUpdate[],
+            error: `${ANSI.red}Failed to clone ${repo.url}${ANSI.reset}`,
+          };
         }
 
-        const destDir = getCentralSkillPath(skillName);
-        const { status } = await detectSkillStatus(srcDir, destDir);
-        allUpdates.push({
-          skillName,
-          srcDir,
-          repoKey,
-          status: status === 'new' ? 'update' : status as 'update' | 'identical',
-          repoUrl: repo.url,
-        });
+        if (repo.ref) {
+          const fetchCode = await runGit(['-C', cloneDest, 'fetch', '--depth', '1', 'origin', repo.ref], {
+            stdio: 'ignore',
+            env: gitEnv,
+          });
+          const checkoutCode =
+            fetchCode === 0
+              ? await runGit(['-C', cloneDest, 'checkout', repo.ref], { stdio: 'ignore', env: gitEnv })
+              : 1;
+          if (fetchCode !== 0 || checkoutCode !== 0) {
+            progress.tick(`${ANSI.red}failed${ANSI.reset} ${repo.url}`);
+            return {
+              updates: [] as PendingUpdate[],
+              error: `${ANSI.red}Failed to checkout ${repo.ref} from ${repo.url}${ANSI.reset}`,
+            };
+          }
+        }
+
+        let searchDir = cloneDest;
+        const skillsSubdir = path.join(cloneDest, 'skills');
+        if (await pathExists(skillsSubdir)) {
+          const stat = await fs.stat(skillsSubdir);
+          if (stat.isDirectory()) {
+            searchDir = skillsSubdir;
+          }
+        }
+
+        const updates: PendingUpdate[] = [];
+        for (const skillName of repo.skills) {
+          const srcDir = path.join(searchDir, skillName);
+          if (!(await pathExists(srcDir)) || !(await isSkillDir(srcDir))) {
+            updates.push({ skillName, srcDir, repoKey, status: 'missing', repoUrl: repo.url });
+            continue;
+          }
+
+          const destDir = getCentralSkillPath(skillName);
+          const { status } = await detectSkillStatus(srcDir, destDir);
+          updates.push({
+            skillName,
+            srcDir,
+            repoKey,
+            status: status === 'new' ? 'update' : status as 'update' | 'identical',
+            repoUrl: repo.url,
+          });
+        }
+        progress.tick(`${ANSI.green}checked${ANSI.reset} ${repo.url}`);
+        return { updates };
+      } catch (err) {
+        progress.tick(`${ANSI.red}failed${ANSI.reset} ${repo.url}`);
+        return {
+          updates: [] as PendingUpdate[],
+          error: `${ANSI.red}Failed to check ${repo.url}: ${String(err)}${ANSI.reset}`,
+        };
+      }
+    });
+    progress.finish();
+
+    let failedRepoCount = 0;
+    for (const result of repoResults) {
+      allUpdates.push(...result.updates);
+      if (result.error) {
+        failedRepoCount++;
+        process.stderr.write(`${result.error}\n`);
       }
     }
 
@@ -107,12 +152,15 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
     process.stdout.write(
       `Found ${allUpdates.length} scanned: ${ANSI.yellow}${updatesAvailable.length} update${ANSI.reset}, ${ANSI.dim}${identicalCount} identical${ANSI.reset}` +
         (missingCount > 0 ? `, ${ANSI.red}${missingCount} missing${ANSI.reset}` : '') +
+        (failedRepoCount > 0 ? `, ${ANSI.red}${failedRepoCount} repo failed${ANSI.reset}` : '') +
         '\n',
     );
 
     if (updatesAvailable.length === 0) {
-      process.stdout.write('All skills up-to-date.\n');
-      return 0;
+      process.stdout.write(
+        failedRepoCount > 0 ? 'No updates found in repos checked successfully.\n' : 'All skills up-to-date.\n',
+      );
+      return allUpdates.length > 0 || failedRepoCount === 0 ? 0 : 1;
     }
 
     let toUpdate: PendingUpdate[] = [];
@@ -137,9 +185,6 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
 
     // Execute updates
     const affectedRepos = new Set<string>();
-    let failedUpdates = 0;
-    let missingDuringUpdate = 0;
-
     for (const update of toUpdate) {
       const { skillName, srcDir, repoKey } = update;
       const destDir = getCentralSkillPath(skillName);
@@ -196,6 +241,9 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
     for (const dir of tempDirs) {
       await removeDir(dir);
     }
+    for (const file of askpassScripts) {
+      await fs.rm(file, { force: true });
+    }
   }
 
   if (!dryRun && totalUpdated > 0) await saveRegistry(registry);
@@ -207,6 +255,182 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
     process.stderr.write(`${failedUpdates} skill(s) failed to update.\n`);
   }
   return totalUpdated > 0 ? 0 : failedUpdates > 0 ? 1 : 0;
+}
+
+type GitCredential = {
+  username: string;
+  password: string;
+};
+
+function nonInteractiveGitEnv(): NodeJS.ProcessEnv {
+  return {
+    GIT_TERMINAL_PROMPT: '0',
+    GCM_INTERACTIVE: 'never',
+  };
+}
+
+async function collectCredentialsForRepos(
+  repos: { repoKey: string; url: string }[],
+): Promise<Map<string, GitCredential>> {
+  const credentials = new Map<string, GitCredential>();
+  const httpsRepos = repos.filter((repo) => /^https?:\/\//.test(repo.url));
+
+  if (httpsRepos.length === 0) {
+    return credentials;
+  }
+
+  const preflight = await mapLimit(httpsRepos, Math.min(4, httpsRepos.length), async (repo) => {
+    const result = await runGitCapture(['ls-remote', '--heads', repo.url], { env: nonInteractiveGitEnv() });
+    return {
+      repo,
+      needsCredential: result.code !== 0 && looksLikeCredentialFailure(result.stderr, repo.url),
+    };
+  });
+
+  for (const item of preflight) {
+    if (!item.needsCredential) continue;
+
+    process.stderr.write(`${ANSI.yellow}Credentials required for repo: ${item.repo.url}${ANSI.reset}\n`);
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      process.stderr.write(
+        `${ANSI.red}Cannot prompt for credentials in non-interactive mode: ${item.repo.url}${ANSI.reset}\n`,
+      );
+      continue;
+    }
+
+    const username = await promptLine(`Username for '${item.repo.url}': `);
+    const password = await promptHidden(`Token/password for '${item.repo.url}': `);
+    if (username.length === 0 || password.length === 0) {
+      process.stderr.write(`${ANSI.red}Incomplete credentials for repo: ${item.repo.url}${ANSI.reset}\n`);
+      continue;
+    }
+
+    credentials.set(item.repo.repoKey, { username, password });
+  }
+
+  return credentials;
+}
+
+function looksLikeCredentialFailure(stderr: string, repoUrl: string): boolean {
+  const text = stderr.toLowerCase();
+  return (
+    text.includes('could not read username') ||
+    text.includes('authentication failed') ||
+    text.includes('terminal prompts disabled') ||
+    text.includes('authentication required') ||
+    (text.includes('repository not found') && repoUrl.includes('github.com'))
+  );
+}
+
+async function createCredentialGitEnv(
+  credential: GitCredential,
+  askpassScripts: string[],
+): Promise<NodeJS.ProcessEnv> {
+  const askpassPath = path.join(os.tmpdir(), `apd-askpass-${Math.random().toString(36).slice(2, 8)}.sh`);
+  await fs.writeFile(
+    askpassPath,
+    [
+      '#!/bin/sh',
+      'case "$1" in',
+      '*Username*|*username*) printf "%s\\n" "$APG_GIT_USERNAME" ;;',
+      '*) printf "%s\\n" "$APG_GIT_PASSWORD" ;;',
+      'esac',
+      '',
+    ].join('\n'),
+    { mode: 0o700 },
+  );
+  askpassScripts.push(askpassPath);
+
+  return {
+    ...nonInteractiveGitEnv(),
+    GIT_ASKPASS: askpassPath,
+    APG_GIT_USERNAME: credential.username,
+    APG_GIT_PASSWORD: credential.password,
+  };
+}
+
+async function promptLine(question: string): Promise<string> {
+  return await new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+async function promptHidden(question: string): Promise<string> {
+  return await new Promise((resolve) => {
+    let muted = false;
+    const output = new Writable({
+      write(chunk, _encoding, callback) {
+        if (!muted) {
+          process.stdout.write(chunk);
+        }
+        callback();
+      },
+    });
+    const rl = readline.createInterface({ input: process.stdin, output, terminal: true });
+
+    process.stdout.write(question);
+    muted = true;
+    rl.question('', (answer) => {
+      muted = false;
+      process.stdout.write('\n');
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
+function createProgress(total: number, label: string) {
+  let done = 0;
+  const enabled = Boolean(process.stdout.isTTY);
+
+  const render = (message?: string) => {
+    if (!enabled) return;
+    const width = 24;
+    const filled = total === 0 ? width : Math.round((done / total) * width);
+    const bar = `${'#'.repeat(filled)}${'-'.repeat(width - filled)}`;
+    const suffix = message ? ` ${ANSI.dim}${message}${ANSI.reset}` : '';
+    process.stdout.write(`\r[${bar}] ${done}/${total} ${label}${suffix}`);
+  };
+
+  render();
+
+  return {
+    tick(message?: string) {
+      done++;
+      render(message);
+    },
+    finish() {
+      if (enabled) {
+        process.stdout.write('\n');
+      }
+    },
+  };
+}
+
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workerCount = Math.max(1, Math.min(limit, items.length));
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const index = next++;
+        if (index >= items.length) break;
+        results[index] = await fn(items[index]!, index);
+      }
+    }),
+  );
+
+  return results;
 }
 
 async function updateSpecificSkills(
