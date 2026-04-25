@@ -316,7 +316,6 @@ async function checkRepoCredentials(
     }
     if (!item.needsCredential) continue;
 
-    process.stderr.write(`${ANSI.yellow}Credentials required for repo: ${item.repo.url}${ANSI.reset}\n`);
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       process.stderr.write(
         `${ANSI.red}Cannot prompt for credentials in non-interactive mode: ${item.repo.url}${ANSI.reset}\n`,
@@ -354,7 +353,7 @@ function formatGitError(stderr: string): string {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find((line) => line.length > 0);
-  return firstLine ?? 'unknown git error';
+  return firstLine?.replace(/^remote:\s*/i, '') ?? 'unknown git error';
 }
 
 function summarizeFailure(error: string, repoUrl: string): string {

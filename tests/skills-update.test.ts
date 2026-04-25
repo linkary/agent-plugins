@@ -185,7 +185,7 @@ describe('skills update', () => {
     expect(stderr).toContain(`Failed to clone ${badRepoUrl}`);
   });
 
-  it('prints the repo that needs credentials before skipping non-interactive prompting', async () => {
+  it('does not print a duplicate credentials-required line before non-interactive failure', async () => {
     const privateRepoUrl = 'https://github.com/example/private-skills';
     credentialFailures.add(privateRepoUrl);
 
@@ -227,7 +227,8 @@ describe('skills update', () => {
       process.stderr.write = originalWrite;
     }
 
-    expect(stderr).toContain(`Credentials required for repo: ${privateRepoUrl}`);
+    expect(stderr).toContain(`Cannot prompt for credentials in non-interactive mode: ${privateRepoUrl}`);
+    expect(stderr).not.toContain('Credentials required for repo');
   });
 
   it('marks missing GitHub repos failed without prompting for credentials', async () => {
