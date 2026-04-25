@@ -9,7 +9,7 @@ import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { copyDir } from '../../util/copy-dir.js';
 import { detectSkillStatus } from '../../util/skill-compare.js';
 import { promptMultiSelect } from '../../util/prompt.js';
-import { runGit, runGitCapture, isSkillDir } from '../../util/git-utils.js';
+import { runGitCapture, isSkillDir } from '../../util/git-utils.js';
 import { ANSI } from '../../util/ansi.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
@@ -68,7 +68,7 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
       try {
         const preflightError = preflight.failures.get(repoKey);
         if (preflightError) {
-          progress.finishSlot(slot, 'failed', repo.url);
+          progress.finishSlot(slot, 'failed', repo.url, summarizeFailure(preflightError, repo.url));
           return {
             updates: [] as PendingUpdate[],
             error: preflightError,
@@ -82,29 +82,30 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
 
         const credential = preflight.credentials.get(repoKey);
         const gitEnv = credential ? await createCredentialGitEnv(credential, askpassScripts) : nonInteractiveGitEnv();
-        const code = await runGit(['clone', '--depth', '1', repo.url, cloneDest], { stdio: 'ignore', env: gitEnv });
-        if (code !== 0) {
-          progress.finishSlot(slot, 'failed', repo.url);
+        const cloneResult = await runGitCapture(['clone', '--depth', '1', '--quiet', repo.url, cloneDest], { env: gitEnv });
+        if (cloneResult.code !== 0) {
+          const error = formatGitError(cloneResult.stderr);
+          progress.finishSlot(slot, 'failed', repo.url, error);
           return {
             updates: [] as PendingUpdate[],
-            error: `${ANSI.red}Failed to clone ${repo.url}${ANSI.reset}`,
+            error: `${ANSI.red}Failed to clone ${repo.url}: ${error}${ANSI.reset}`,
           };
         }
 
         if (repo.ref) {
-          const fetchCode = await runGit(['-C', cloneDest, 'fetch', '--depth', '1', 'origin', repo.ref], {
-            stdio: 'ignore',
+          const fetchResult = await runGitCapture(['-C', cloneDest, 'fetch', '--depth', '1', '--quiet', 'origin', repo.ref], {
             env: gitEnv,
           });
           const checkoutCode =
-            fetchCode === 0
-              ? await runGit(['-C', cloneDest, 'checkout', repo.ref], { stdio: 'ignore', env: gitEnv })
-              : 1;
-          if (fetchCode !== 0 || checkoutCode !== 0) {
-            progress.finishSlot(slot, 'failed', repo.url);
+            fetchResult.code === 0
+              ? await runGitCapture(['-C', cloneDest, 'checkout', '--quiet', repo.ref], { env: gitEnv })
+              : { code: 1, stdout: '', stderr: fetchResult.stderr };
+          if (fetchResult.code !== 0 || checkoutCode.code !== 0) {
+            const error = formatGitError(fetchResult.code !== 0 ? fetchResult.stderr : checkoutCode.stderr);
+            progress.finishSlot(slot, 'failed', repo.url, error);
             return {
               updates: [] as PendingUpdate[],
-              error: `${ANSI.red}Failed to checkout ${repo.ref} from ${repo.url}${ANSI.reset}`,
+              error: `${ANSI.red}Failed to checkout ${repo.ref} from ${repo.url}: ${error}${ANSI.reset}`,
             };
           }
         }
@@ -139,7 +140,7 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
         progress.finishSlot(slot, 'checked', repo.url);
         return { updates };
       } catch (err) {
-        progress.finishSlot(slot, 'failed', repo.url);
+        progress.finishSlot(slot, 'failed', repo.url, String(err));
         return {
           updates: [] as PendingUpdate[],
           error: `${ANSI.red}Failed to check ${repo.url}: ${String(err)}${ANSI.reset}`,
@@ -349,11 +350,20 @@ function looksLikeCredentialFailure(stderr: string): boolean {
 }
 
 function formatGitError(stderr: string): string {
-  const firstLine = stderr
+  const firstLine = stripAnsi(stderr)
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find((line) => line.length > 0);
   return firstLine ?? 'unknown git error';
+}
+
+function summarizeFailure(error: string, repoUrl: string): string {
+  const clean = stripAnsi(error).replace(repoUrl, '').replace(/^Failed to (access|clone|check)\s*:?\s*/i, '');
+  return clean.replace(/^:\s*/, '').trim() || 'failed';
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
 async function createCredentialGitEnv(
@@ -421,8 +431,13 @@ type ProgressStatus = 'checked' | 'failed';
 
 function createProgress(params: { total: number; label: string; action: string; concurrency: number }) {
   type SlotState = {
-    status: 'idle' | 'running' | ProgressStatus;
+    status: 'idle' | 'running';
     message: string;
+  };
+  type FinishedEntry = {
+    status: ProgressStatus;
+    message: string;
+    detail?: string;
   };
 
   let done = 0;
@@ -434,7 +449,9 @@ function createProgress(params: { total: number; label: string; action: string; 
   const enabled = Boolean(process.stdout.isTTY);
   const frames = ['-', '\\', '|', '/'];
   const slots: SlotState[] = Array.from({ length: params.concurrency }, () => ({ status: 'idle', message: '' }));
-  const lineCount = params.concurrency + 2;
+  const finishedEntries: FinishedEntry[] = [];
+  const visibleRows = params.concurrency + 1;
+  const lineCount = visibleRows + 2;
 
   const render = (final = false) => {
     if (!enabled) return;
@@ -447,8 +464,8 @@ function createProgress(params: { total: number; label: string; action: string; 
       const failedText = failed > 0 ? ` (${failed} failed)` : '';
       const color = failed > 0 ? ANSI.yellow : ANSI.green;
       process.stdout.write(`\r\x1b[K${color}Checked${ANSI.reset} ${params.total} ${params.label} in ${elapsed}${failedText}\n`);
-      for (const slot of slots) {
-        process.stdout.write(`\r\x1b[K  ${formatSlot(slot, frame)}\n`);
+      for (const row of getVisibleRows(slots, finishedEntries, visibleRows)) {
+        process.stdout.write(`\r\x1b[K  ${formatProgressRow(row, frame)}\n`);
       }
       process.stdout.write(`\r\x1b[K${formatProgressBar(done, params.total)} ${done}/${params.total}\n`);
       rendered = false;
@@ -462,8 +479,8 @@ function createProgress(params: { total: number; label: string; action: string; 
     process.stdout.write(
       `\r\x1b[K${spinner} ${params.action} ${params.label} ${done}/${params.total}${failedText} ${ANSI.dim}${elapsed}${ANSI.reset}\n`,
     );
-    for (const slot of slots) {
-      process.stdout.write(`\r\x1b[K  ${formatSlot(slot, frame)}\n`);
+    for (const row of getVisibleRows(slots, finishedEntries, visibleRows)) {
+      process.stdout.write(`\r\x1b[K  ${formatProgressRow(row, frame)}\n`);
     }
     process.stdout.write(`\r\x1b[K${formatProgressBar(done, params.total)} ${done}/${params.total}\n`);
     rendered = true;
@@ -479,12 +496,13 @@ function createProgress(params: { total: number; label: string; action: string; 
       slots[slot] = { status: 'running', message };
       render();
     },
-    finishSlot(slot: number, status: ProgressStatus, message?: string) {
+    finishSlot(slot: number, status: ProgressStatus, message?: string, detail?: string) {
       done++;
       if (status === 'failed') {
         failed++;
       }
-      slots[slot] = { status, message: message ?? slots[slot]?.message ?? '' };
+      finishedEntries.push({ status, message: message ?? slots[slot]?.message ?? '', detail });
+      slots[slot] = { status: 'idle', message: '' };
       render();
     },
     finish() {
@@ -497,17 +515,44 @@ function createProgress(params: { total: number; label: string; action: string; 
   };
 }
 
-function formatSlot(slot: { status: 'idle' | 'running' | ProgressStatus; message: string }, frame: number): string {
-  const repo = slot.message ? truncateMiddle(slot.message, 72) : 'waiting';
-  if (slot.status === 'running') {
+type ProgressRow = {
+  status: 'idle' | 'running' | ProgressStatus;
+  message: string;
+  detail?: string;
+};
+
+function getVisibleRows(
+  slots: { status: 'idle' | 'running'; message: string }[],
+  finishedEntries: { status: ProgressStatus; message: string; detail?: string }[],
+  visibleRows: number,
+): ProgressRow[] {
+  const running = slots.filter((slot) => slot.status === 'running');
+  const failures = finishedEntries
+    .filter((entry) => entry.status === 'failed')
+    .slice(-Math.max(0, visibleRows - running.length));
+  const remaining = Math.max(0, visibleRows - failures.length - running.length);
+  const done = finishedEntries.filter((entry) => entry.status === 'checked').slice(-remaining);
+  const rows: ProgressRow[] = [...failures, ...running, ...done];
+
+  while (rows.length < visibleRows) {
+    rows.push({ status: 'idle', message: '' });
+  }
+
+  return rows.slice(0, visibleRows);
+}
+
+function formatProgressRow(row: ProgressRow, frame: number): string {
+  const repo = row.message ? truncateMiddle(row.message, 72) : 'waiting';
+  if (row.status === 'running') {
     const frames = ['-', '\\', '|', '/'];
     return `${frames[frame % frames.length]!} ${formatIndeterminateBar(frame)} ${repo}`;
   }
-  if (slot.status === 'checked') {
+  if (row.status === 'checked') {
     return `${ANSI.green}done${ANSI.reset} ${formatProgressBar(1, 1, 18)} ${repo}`;
   }
-  if (slot.status === 'failed') {
-    return `${ANSI.red}fail${ANSI.reset} ${formatProgressBar(1, 1, 18)} ${repo}`;
+  if (row.status === 'failed') {
+    const detail = row.detail ? `[${truncateMiddle(row.detail, 28)}] ` : '';
+    return `${ANSI.red}fail${ANSI.reset} ${detail}${repo}`;
   }
   return `${ANSI.dim}- ${formatProgressBar(0, 1, 18)} waiting${ANSI.reset}`;
 }

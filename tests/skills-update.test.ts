@@ -23,7 +23,21 @@ mock.module('../src/util/git-utils.js', () => ({
     }
     return 0;
   },
-  runGitCapture: async (args: string[]) => {
+  runGitCapture: async (args: string[], opts?: { env?: NodeJS.ProcessEnv }) => {
+    if (args.includes('clone')) {
+      const repoUrl = args[args.length - 2]!;
+      if (cloneFailures.has(repoUrl) || missingRepos.has(repoUrl) || (credentialFailures.has(repoUrl) && !opts?.env?.GIT_ASKPASS)) {
+        return {
+          code: 128,
+          stdout: '',
+          stderr: cloneFailures.has(repoUrl) ? 'fatal: clone failed' : 'ERROR: Repository not found.',
+        };
+      }
+      const cloneDest = args[args.length - 1]!;
+      await fs.cp(repoFixture, cloneDest, { recursive: true });
+      return { code: 0, stdout: '', stderr: '' };
+    }
+
     const repoUrl = args[args.length - 1]!;
     if (credentialFailures.has(repoUrl)) {
       return {
