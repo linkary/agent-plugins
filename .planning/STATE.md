@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 Phase: 1 of 4 (Reference Manifest Foundation)
 Plan: 0 of 2 in current phase
 Status: Ready to plan
-Last activity: 2026-04-25 - Completed quick task 260425-qo9: Clean duplicate credential notice and remote prefix in skills update progress
+Last activity: 2026-04-25 - Completed quick task 260425-qso: Avoid credential prompts for missing GitHub skill update repos
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -66,6 +66,7 @@ None yet.
 | 260425-q3t | Show parallel per-repo progress lines for ap skills update | 2026-04-25 | 6df2e39 | [260425-q3t-show-parallel-per-repo-progress-lines-fo](./quick/260425-q3t-show-parallel-per-repo-progress-lines-fo/) |
 | 260425-q8r | Keep failed repo entries visible in parallel skills update progress | 2026-04-25 | 84e7c9c | [260425-q8r-keep-failed-repo-entries-visible-in-para](./quick/260425-q8r-keep-failed-repo-entries-visible-in-para/) |
 | 260425-qo9 | Clean duplicate credential notice and remote prefix in skills update progress | 2026-04-25 | 8c792b8 | [260425-qo9-clean-duplicate-credential-notice-and-re](./quick/260425-qo9-clean-duplicate-credential-notice-and-re/) |
+| 260425-qso | Avoid credential prompts for missing GitHub skill update repos | 2026-04-25 | 8f8a9a1 | [260425-qso-avoid-credential-prompts-for-missing-git](./quick/260425-qso-avoid-credential-prompts-for-missing-git/) |
 
 ## Session Continuity
 
