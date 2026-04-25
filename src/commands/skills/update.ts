@@ -53,7 +53,7 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
   let missingDuringUpdate = 0;
 
   try {
-    const credentials = await collectCredentialsForRepos(
+    const preflight = await checkRepoCredentials(
       repoKeys.map((repoKey) => ({ repoKey, url: repos[repoKey]!.url })),
     );
     process.stdout.write(`Checking ${repoKeys.length} repo(s) in parallel...\n`);
@@ -62,12 +62,21 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
     const repoResults = await mapLimit(repoKeys, Math.min(4, repoKeys.length), async (repoKey) => {
       const repo = repos[repoKey]!;
       try {
+        const preflightError = preflight.failures.get(repoKey);
+        if (preflightError) {
+          progress.tick(`${ANSI.red}failed${ANSI.reset} ${repo.url}`);
+          return {
+            updates: [] as PendingUpdate[],
+            error: preflightError,
+          };
+        }
+
         const tmpDir = path.join(os.tmpdir(), `apd-update-${Math.random().toString(36).slice(2, 8)}`);
         tempDirs.push(tmpDir); // Track for cleanup
         await ensureDir(tmpDir);
         const cloneDest = path.join(tmpDir, 'repo');
 
-        const credential = credentials.get(repoKey);
+        const credential = preflight.credentials.get(repoKey);
         const gitEnv = credential ? await createCredentialGitEnv(credential, askpassScripts) : nonInteractiveGitEnv();
         const code = await runGit(['clone', '--depth', '1', repo.url, cloneDest], { stdio: 'ignore', env: gitEnv });
         if (code !== 0) {
@@ -269,25 +278,37 @@ function nonInteractiveGitEnv(): NodeJS.ProcessEnv {
   };
 }
 
-async function collectCredentialsForRepos(
+type CredentialPreflight = {
+  credentials: Map<string, GitCredential>;
+  failures: Map<string, string>;
+};
+
+async function checkRepoCredentials(
   repos: { repoKey: string; url: string }[],
-): Promise<Map<string, GitCredential>> {
+): Promise<CredentialPreflight> {
   const credentials = new Map<string, GitCredential>();
+  const failures = new Map<string, string>();
   const httpsRepos = repos.filter((repo) => /^https?:\/\//.test(repo.url));
 
   if (httpsRepos.length === 0) {
-    return credentials;
+    return { credentials, failures };
   }
 
   const preflight = await mapLimit(httpsRepos, Math.min(4, httpsRepos.length), async (repo) => {
     const result = await runGitCapture(['ls-remote', '--heads', repo.url], { env: nonInteractiveGitEnv() });
     return {
       repo,
-      needsCredential: result.code !== 0 && looksLikeCredentialFailure(result.stderr, repo.url),
+      code: result.code,
+      stderr: result.stderr,
+      needsCredential: result.code !== 0 && looksLikeCredentialFailure(result.stderr),
     };
   });
 
   for (const item of preflight) {
+    if (item.code !== 0 && !item.needsCredential) {
+      failures.set(item.repo.repoKey, `${ANSI.red}Failed to access ${item.repo.url}: ${formatGitError(item.stderr)}${ANSI.reset}`);
+      continue;
+    }
     if (!item.needsCredential) continue;
 
     process.stderr.write(`${ANSI.yellow}Credentials required for repo: ${item.repo.url}${ANSI.reset}\n`);
@@ -295,6 +316,7 @@ async function collectCredentialsForRepos(
       process.stderr.write(
         `${ANSI.red}Cannot prompt for credentials in non-interactive mode: ${item.repo.url}${ANSI.reset}\n`,
       );
+      failures.set(item.repo.repoKey, `${ANSI.red}Failed to access ${item.repo.url}: credentials required${ANSI.reset}`);
       continue;
     }
 
@@ -302,24 +324,32 @@ async function collectCredentialsForRepos(
     const password = await promptHidden(`Token/password for '${item.repo.url}': `);
     if (username.length === 0 || password.length === 0) {
       process.stderr.write(`${ANSI.red}Incomplete credentials for repo: ${item.repo.url}${ANSI.reset}\n`);
+      failures.set(item.repo.repoKey, `${ANSI.red}Failed to access ${item.repo.url}: incomplete credentials${ANSI.reset}`);
       continue;
     }
 
     credentials.set(item.repo.repoKey, { username, password });
   }
 
-  return credentials;
+  return { credentials, failures };
 }
 
-function looksLikeCredentialFailure(stderr: string, repoUrl: string): boolean {
+function looksLikeCredentialFailure(stderr: string): boolean {
   const text = stderr.toLowerCase();
   return (
     text.includes('could not read username') ||
     text.includes('authentication failed') ||
     text.includes('terminal prompts disabled') ||
-    text.includes('authentication required') ||
-    (text.includes('repository not found') && repoUrl.includes('github.com'))
+    text.includes('authentication required')
   );
+}
+
+function formatGitError(stderr: string): string {
+  const firstLine = stderr
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+  return firstLine ?? 'unknown git error';
 }
 
 async function createCredentialGitEnv(
