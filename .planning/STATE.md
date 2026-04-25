@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 Phase: 1 of 4 (Reference Manifest Foundation)
 Plan: 0 of 2 in current phase
 Status: Ready to plan
-Last activity: 2026-04-12 - Roadmap created and v1 requirements mapped to phases
+Last activity: 2026-04-25 - Completed quick task 260425-omy: Improve ap skills update repo diagnostics, parallel update progress, and credential-prompt behavior
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -55,6 +55,12 @@ None yet.
 
 - External verification is still needed for high-risk target claims around Cursor, Claude Code, Codex, Qoder, and OpenCode behavior.
 - The manifest schema boundary must stay specific enough to preserve special cases instead of flattening them away.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260425-omy | Improve ap skills update repo diagnostics, parallel update progress, and credential-prompt behavior | 2026-04-25 | 8cd2739 | [260425-omy-improve-ap-skills-update-repo-diagnostic](./quick/260425-omy-improve-ap-skills-update-repo-diagnostic/) |
 
 ## Session Continuity
 
