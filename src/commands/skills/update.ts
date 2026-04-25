@@ -62,12 +62,13 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
     }
 
     const progress = createProgress({ total: repoKeys.length, label: 'repos', action: 'Checking', concurrency });
-    const repoResults = await mapLimit(repoKeys, concurrency, async (repoKey) => {
+    const repoResults = await mapLimit(repoKeys, concurrency, async (repoKey, _index, slot) => {
       const repo = repos[repoKey]!;
+      progress.start(slot, repo.url);
       try {
         const preflightError = preflight.failures.get(repoKey);
         if (preflightError) {
-          progress.tick('failed', repo.url);
+          progress.finishSlot(slot, 'failed', repo.url);
           return {
             updates: [] as PendingUpdate[],
             error: preflightError,
@@ -83,7 +84,7 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
         const gitEnv = credential ? await createCredentialGitEnv(credential, askpassScripts) : nonInteractiveGitEnv();
         const code = await runGit(['clone', '--depth', '1', repo.url, cloneDest], { stdio: 'ignore', env: gitEnv });
         if (code !== 0) {
-          progress.tick('failed', repo.url);
+          progress.finishSlot(slot, 'failed', repo.url);
           return {
             updates: [] as PendingUpdate[],
             error: `${ANSI.red}Failed to clone ${repo.url}${ANSI.reset}`,
@@ -100,7 +101,7 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
               ? await runGit(['-C', cloneDest, 'checkout', repo.ref], { stdio: 'ignore', env: gitEnv })
               : 1;
           if (fetchCode !== 0 || checkoutCode !== 0) {
-            progress.tick('failed', repo.url);
+            progress.finishSlot(slot, 'failed', repo.url);
             return {
               updates: [] as PendingUpdate[],
               error: `${ANSI.red}Failed to checkout ${repo.ref} from ${repo.url}${ANSI.reset}`,
@@ -135,10 +136,10 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
             repoUrl: repo.url,
           });
         }
-        progress.tick('checked', repo.url);
+        progress.finishSlot(slot, 'checked', repo.url);
         return { updates };
       } catch (err) {
-        progress.tick('failed', repo.url);
+        progress.finishSlot(slot, 'failed', repo.url);
         return {
           updates: [] as PendingUpdate[],
           error: `${ANSI.red}Failed to check ${repo.url}: ${String(err)}${ANSI.reset}`,
@@ -419,57 +420,122 @@ async function promptHidden(question: string): Promise<string> {
 type ProgressStatus = 'checked' | 'failed';
 
 function createProgress(params: { total: number; label: string; action: string; concurrency: number }) {
+  type SlotState = {
+    status: 'idle' | 'running' | ProgressStatus;
+    message: string;
+  };
+
   let done = 0;
   let failed = 0;
-  let lastMessage = '';
   let frame = 0;
+  let rendered = false;
+  let timer: ReturnType<typeof setInterval> | null = null;
   const startedAt = Date.now();
   const enabled = Boolean(process.stdout.isTTY);
   const frames = ['-', '\\', '|', '/'];
+  const slots: SlotState[] = Array.from({ length: params.concurrency }, () => ({ status: 'idle', message: '' }));
+  const lineCount = params.concurrency + 2;
 
   const render = (final = false) => {
     if (!enabled) return;
+    if (rendered) {
+      process.stdout.write(`\x1b[${lineCount}A`);
+    }
+
     const elapsed = formatElapsed(Date.now() - startedAt);
     if (final) {
       const failedText = failed > 0 ? ` (${failed} failed)` : '';
       const color = failed > 0 ? ANSI.yellow : ANSI.green;
       process.stdout.write(`\r\x1b[K${color}Checked${ANSI.reset} ${params.total} ${params.label} in ${elapsed}${failedText}\n`);
+      for (const slot of slots) {
+        process.stdout.write(`\r\x1b[K  ${formatSlot(slot, frame)}\n`);
+      }
+      process.stdout.write(`\r\x1b[K${formatProgressBar(done, params.total)} ${done}/${params.total}\n`);
+      rendered = false;
       return;
     }
 
-    const width = 20;
-    const filled = params.total === 0 ? width : Math.floor((done / params.total) * width);
-    const hasRemaining = done < params.total;
-    const bar =
-      `${'='.repeat(filled)}` +
-      `${hasRemaining ? '>' : ''}` +
-      `${'-'.repeat(Math.max(0, width - filled - (hasRemaining ? 1 : 0)))}`;
-    const running = Math.min(params.concurrency, Math.max(0, params.total - done));
     const failedText = failed > 0 ? ` ${ANSI.red}failed ${failed}${ANSI.reset}` : '';
-    const suffix = lastMessage ? ` ${ANSI.dim}${truncateMiddle(lastMessage, 44)}${ANSI.reset}` : '';
     const spinner = frames[frame % frames.length]!;
     frame++;
 
     process.stdout.write(
-      `\r\x1b[K${spinner} ${params.action} ${params.label} [${bar}] ${done}/${params.total} running ${running}${failedText} ${elapsed}${suffix}`,
+      `\r\x1b[K${spinner} ${params.action} ${params.label} ${done}/${params.total}${failedText} ${ANSI.dim}${elapsed}${ANSI.reset}\n`,
     );
+    for (const slot of slots) {
+      process.stdout.write(`\r\x1b[K  ${formatSlot(slot, frame)}\n`);
+    }
+    process.stdout.write(`\r\x1b[K${formatProgressBar(done, params.total)} ${done}/${params.total}\n`);
+    rendered = true;
   };
 
   render();
+  if (enabled) {
+    timer = setInterval(() => render(), 120);
+  }
 
   return {
-    tick(status: ProgressStatus, message?: string) {
+    start(slot: number, message: string) {
+      slots[slot] = { status: 'running', message };
+      render();
+    },
+    finishSlot(slot: number, status: ProgressStatus, message?: string) {
       done++;
       if (status === 'failed') {
         failed++;
       }
-      lastMessage = message ?? '';
+      slots[slot] = { status, message: message ?? slots[slot]?.message ?? '' };
       render();
     },
     finish() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
       render(true);
     },
   };
+}
+
+function formatSlot(slot: { status: 'idle' | 'running' | ProgressStatus; message: string }, frame: number): string {
+  const repo = slot.message ? truncateMiddle(slot.message, 72) : 'waiting';
+  if (slot.status === 'running') {
+    const frames = ['-', '\\', '|', '/'];
+    return `${frames[frame % frames.length]!} ${formatIndeterminateBar(frame)} ${repo}`;
+  }
+  if (slot.status === 'checked') {
+    return `${ANSI.green}done${ANSI.reset} ${formatProgressBar(1, 1, 18)} ${repo}`;
+  }
+  if (slot.status === 'failed') {
+    return `${ANSI.red}fail${ANSI.reset} ${formatProgressBar(1, 1, 18)} ${repo}`;
+  }
+  return `${ANSI.dim}- ${formatProgressBar(0, 1, 18)} waiting${ANSI.reset}`;
+}
+
+function formatProgressBar(done: number, total: number, width = 28): string {
+  const filled = total === 0 ? width : Math.floor((done / total) * width);
+  const hasRemaining = done < total;
+  return (
+    '[' +
+    `${'='.repeat(filled)}` +
+    `${hasRemaining ? '>' : ''}` +
+    `${'-'.repeat(Math.max(0, width - filled - (hasRemaining ? 1 : 0)))}` +
+    ']'
+  );
+}
+
+function formatIndeterminateBar(frame: number): string {
+  const width = 18;
+  const segment = 5;
+  const start = frame % (width + segment);
+  let bar = '';
+
+  for (let i = 0; i < width; i++) {
+    const active = i >= start - segment && i < start;
+    bar += active ? '=' : '-';
+  }
+
+  return `[${bar}]`;
 }
 
 function formatElapsed(ms: number): string {
@@ -491,18 +557,18 @@ function truncateMiddle(value: string, maxLength: number): string {
 async function mapLimit<T, R>(
   items: T[],
   limit: number,
-  fn: (item: T, index: number) => Promise<R>,
+  fn: (item: T, index: number, workerIndex: number) => Promise<R>,
 ): Promise<R[]> {
   const results = new Array<R>(items.length);
   let next = 0;
   const workerCount = Math.max(1, Math.min(limit, items.length));
 
   await Promise.all(
-    Array.from({ length: workerCount }, async () => {
+    Array.from({ length: workerCount }, async (_unused, workerIndex) => {
       while (true) {
         const index = next++;
         if (index >= items.length) break;
-        results[index] = await fn(items[index]!, index);
+        results[index] = await fn(items[index]!, index, workerIndex);
       }
     }),
   );
