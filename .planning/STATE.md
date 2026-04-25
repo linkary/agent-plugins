@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 Phase: 1 of 4 (Reference Manifest Foundation)
 Plan: 0 of 2 in current phase
 Status: Ready to plan
-Last activity: 2026-04-25 - Completed quick task 260425-q3t: Show parallel per-repo progress lines for ap skills update
+Last activity: 2026-04-25 - Completed quick task 260425-q8r: Keep failed repo entries visible in parallel skills update progress
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -64,6 +64,7 @@ None yet.
 | 260425-psk | Treat missing GitHub skill update repos as failed instead of prompting for credentials | 2026-04-25 | bd61c8f | [260425-psk-treat-missing-github-skill-update-repos-](./quick/260425-psk-treat-missing-github-skill-update-repos-/) |
 | 260425-pzh | Make ap skills update progress look like uv style progress | 2026-04-25 | ba07893 | [260425-pzh-make-ap-skills-update-progress-look-like](./quick/260425-pzh-make-ap-skills-update-progress-look-like/) |
 | 260425-q3t | Show parallel per-repo progress lines for ap skills update | 2026-04-25 | 6df2e39 | [260425-q3t-show-parallel-per-repo-progress-lines-fo](./quick/260425-q3t-show-parallel-per-repo-progress-lines-fo/) |
+| 260425-q8r | Keep failed repo entries visible in parallel skills update progress | 2026-04-25 | 84e7c9c | [260425-q8r-keep-failed-repo-entries-visible-in-para](./quick/260425-q8r-keep-failed-repo-entries-visible-in-para/) |
 
 ## Session Continuity
 
