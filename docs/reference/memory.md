@@ -11,8 +11,7 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 | [Codex](https://developers.openai.com/codex/guides/agents-md) | supported | documented-only | [local](#codex-memory-local), [global](#codex-memory-global) | markdown | Low |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code/memory) | supported | documented-only | [local](#claude-code-memory-local), [global](#claude-code-memory-global) | markdown | Low |
 | Google Antigravity | supported | documented-only | [global](#antigravity-memory-global) | markdown | Low |
-| Openskills | undocumented | documented-only | Undocumented | — | Low |
-| Agentskills (Vercel Labs) | undocumented | documented-only | Undocumented | — | Low |
+| Agentskills | undocumented | documented-only | Undocumented | — | Low |
 | OpenCode | undocumented | documented-only | Undocumented | — | Low |
 | Qoder | undocumented | documented-only | Undocumented | — | Low |
 
@@ -133,26 +132,7 @@ Restrictions:
 Notes:
 None.
 
-## Openskills
-
-- Target support: `undocumented`
-- Repo support: `documented-only`
-- Scopes: Undocumented
-- Format: Undocumented
-- Reliability: Low
-- Evidence status: `implementation-only`
-- Evidence summary: Memory surfaces are documented from target docs and current global-rules behavior rather than a dedicated repo-managed family.
-- Sources: Target adapters (`src/targets/adapters.ts`)
-
-No scope-specific paths captured.
-
-Restrictions:
-- This page documents target instruction and memory surfaces that influence behavior but are not repo-managed families.
-
-Notes:
-None.
-
-## Agentskills (Vercel Labs)
+## Agentskills
 
 - Target support: `undocumented`
 - Repo support: `documented-only`

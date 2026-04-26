@@ -11,8 +11,7 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 | [Codex](https://developers.openai.com/codex/app/commands) | supported | managed | [local](#codex-commands-local), [global](#codex-commands-global) | unsupported | markdown | Low |
 | [Claude Code](https://code.claude.com/docs/en/slash-commands) | supported | documented-only | [local](#claude-code-commands-local), [global](#claude-code-commands-global) | unsupported | markdown | High |
 | Google Antigravity | supported | partial | [local](#antigravity-commands-local), [global](#antigravity-commands-global) | unsupported | markdown | Low |
-| Openskills | unsupported | unsupported | Undocumented | unsupported | — | Low |
-| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | unsupported | — | Low |
+| Agentskills | unsupported | unsupported | Undocumented | unsupported | — | Low |
 | [OpenCode](https://opencode.ai/docs/commands/) | supported | documented-only | [local](#opencode-commands-local), [global](#opencode-commands-global) | unsupported | markdown | High |
 | [Qoder](https://docs.qoder.com/user-guide/commands) | supported | documented-only | [local](#qoder-commands-local), [global](#qoder-commands-global) | unsupported | markdown | Medium |
 
@@ -161,27 +160,7 @@ Restrictions:
 Notes:
 None.
 
-## Openskills
-
-- Target support: `unsupported`
-- Repo support: `unsupported`
-- Scopes: Undocumented
-- Shared .agents support: `unsupported`
-- Format: —
-- Reliability: Low
-- Evidence status: `implementation-only`
-- Evidence summary: No official command surface is captured for this target in the current docs set.
-- Sources: Target adapters (`src/targets/adapters.ts`)
-
-No scope-specific paths captured.
-
-Restrictions:
-- Unsupported in the current target model.
-
-Notes:
-None.
-
-## Agentskills (Vercel Labs)
+## Agentskills
 
 - Target support: `unsupported`
 - Repo support: `unsupported`

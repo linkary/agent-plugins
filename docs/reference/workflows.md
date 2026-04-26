@@ -11,8 +11,7 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 | Codex | undocumented | documented-only | Undocumented | — | Low |
 | Claude Code | undocumented | documented-only | Undocumented | — | Low |
 | Google Antigravity | supported | documented-only | [local](#antigravity-workflows-local), [global](#antigravity-workflows-global) | markdown | Low |
-| Openskills | undocumented | documented-only | Undocumented | — | Low |
-| Agentskills (Vercel Labs) | undocumented | documented-only | Undocumented | — | Low |
+| Agentskills | undocumented | documented-only | Undocumented | — | Low |
 | OpenCode | undocumented | documented-only | Undocumented | — | Low |
 | Qoder | undocumented | documented-only | Undocumented | — | Low |
 
@@ -119,26 +118,7 @@ Restrictions:
 Notes:
 None.
 
-## Openskills
-
-- Target support: `undocumented`
-- Repo support: `documented-only`
-- Scopes: Undocumented
-- Format: Undocumented
-- Reliability: Low
-- Evidence status: `implementation-only`
-- Evidence summary: No stable repo-managed workflow surface exists for this target.
-- Sources: Target adapters (`src/targets/adapters.ts`)
-
-No scope-specific paths captured.
-
-Restrictions:
-None.
-
-Notes:
-None.
-
-## Agentskills (Vercel Labs)
+## Agentskills
 
 - Target support: `undocumented`
 - Repo support: `documented-only`

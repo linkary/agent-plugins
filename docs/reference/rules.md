@@ -11,8 +11,7 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 | [Codex](https://developers.openai.com/codex/guides/agents-md) | supported | documented-only | [local](#codex-rules-local), [global](#codex-rules-global) | unsupported | .rules | Low |
 | [Claude Code](https://code.claude.com/docs/en/memory) | supported | partial | [local](#claude-code-rules-local), [global](#claude-code-rules-global) | unsupported | markdown | High |
 | [Google Antigravity](https://codelabs.developers.google.com/getting-started-google-antigravity) | supported | documented-only | [local](#antigravity-rules-local) | unsupported | markdown | Low |
-| Openskills | unsupported | unsupported | Undocumented | unsupported | — | Low |
-| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | unsupported | — | Low |
+| Agentskills | unsupported | unsupported | Undocumented | unsupported | — | Low |
 | [OpenCode](https://opencode.ai/docs/rules) | supported | documented-only | [local](#opencode-rules-local), [global](#opencode-rules-global) | unsupported | markdown | Medium |
 | [Qoder](https://docs.qoder.com/user-guide/rules) | supported | documented-only | [local](#qoder-rules-local) | unsupported | markdown | High |
 
@@ -163,27 +162,7 @@ Restrictions:
 Notes:
 None.
 
-## Openskills
-
-- Target support: `unsupported`
-- Repo support: `unsupported`
-- Scopes: Undocumented
-- Shared .agents support: `unsupported`
-- Format: —
-- Reliability: Low
-- Evidence status: `implementation-only`
-- Evidence summary: Current repo rule adapters and transforms define this rule surface or incompatibility.
-- Sources: Target adapters (`src/targets/adapters.ts`); Rule transform (`src/util/rule-transform.ts`); Rules sync special cases (`src/commands/rules/sync.ts`)
-
-No scope-specific paths captured.
-
-Restrictions:
-None.
-
-Notes:
-None.
-
-## Agentskills (Vercel Labs)
+## Agentskills
 
 - Target support: `unsupported`
 - Repo support: `unsupported`

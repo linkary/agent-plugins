@@ -32,7 +32,7 @@ export const CLI_OPTIONS = {
   target: {
     short: 't',
     arg: '<tools>',
-    desc: 'Target tools (cursor|gemini|codex|claude-code|antigravity|openskills|agents|opencode|qoder|all)',
+    desc: 'Target tools (cursor|gemini|codex|claude-code|antigravity|agents|opencode|qoder|all)',
   },
   scope: { arg: '<scope>', desc: 'Scope: global (default) or local' },
   global: { short: 'g', desc: 'Alias for --scope=global' },

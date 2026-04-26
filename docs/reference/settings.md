@@ -11,8 +11,7 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 | [Codex](https://developers.openai.com/codex/config-reference) | supported | documented-only | [local](#codex-settings-local), [global](#codex-settings-global) | toml | Low |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code/settings) | supported | documented-only | [local](#claude-code-settings-local), [global](#claude-code-settings-global) | json | Low |
 | Google Antigravity | undocumented | documented-only | Undocumented | — | Low |
-| Openskills | undocumented | documented-only | Undocumented | — | Low |
-| Agentskills (Vercel Labs) | undocumented | documented-only | Undocumented | — | Low |
+| Agentskills | undocumented | documented-only | Undocumented | — | Low |
 | [OpenCode](https://opencode.ai/docs/config/) | supported | documented-only | [local](#opencode-settings-local), [global](#opencode-settings-global) | json | Low |
 | Qoder | supported | documented-only | [local](#qoder-settings-local), [global](#qoder-settings-global) | json | Low |
 
@@ -136,26 +135,7 @@ Restrictions:
 Notes:
 None.
 
-## Openskills
-
-- Target support: `undocumented`
-- Repo support: `documented-only`
-- Scopes: Undocumented
-- Format: Undocumented
-- Reliability: Low
-- Evidence status: `implementation-only`
-- Evidence summary: Settings are documented from target docs and current adapter behavior rather than a dedicated repo-managed family.
-- Sources: Target adapters (`src/targets/adapters.ts`)
-
-No scope-specific paths captured.
-
-Restrictions:
-- This page documents target settings that matter to agent-plugins but are not themselves repo-managed families.
-
-Notes:
-None.
-
-## Agentskills (Vercel Labs)
+## Agentskills
 
 - Target support: `undocumented`
 - Repo support: `documented-only`

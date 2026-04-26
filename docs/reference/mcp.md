@@ -11,8 +11,7 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 | [Codex](https://developers.openai.com/codex/mcp) | supported | documented-only | [local](#codex-mcp-local), [global](#codex-mcp-global) | unsupported | toml | High |
 | [Claude Code](https://code.claude.com/docs/en/mcp) | supported | documented-only | [local](#claude-code-mcp-local), [global](#claude-code-mcp-global) | unsupported | json | High |
 | [Google Antigravity](https://developers.google.com/knowledge/mcp) | supported | partial | [global](#antigravity-mcp-global) | unsupported | json | Medium |
-| Openskills | unsupported | unsupported | Undocumented | unsupported | — | Low |
-| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | unsupported | — | Low |
+| Agentskills | unsupported | unsupported | Undocumented | unsupported | — | Low |
 | [OpenCode](https://opencode.ai/docs/mcp-servers) | supported | documented-only | [local](#opencode-mcp-local), [global](#opencode-mcp-global) | unsupported | json | High |
 | [Qoder](https://docs.qoder.com/user-guide/chat/model-context-protocol) | supported | documented-only | [local](#qoder-mcp-local), [global](#qoder-mcp-global) | unsupported | json | High |
 
@@ -158,27 +157,7 @@ Restrictions:
 Notes:
 None.
 
-## Openskills
-
-- Target support: `unsupported`
-- Repo support: `unsupported`
-- Scopes: Undocumented
-- Shared .agents support: `unsupported`
-- Format: —
-- Reliability: Low
-- Evidence status: `implementation-only`
-- Evidence summary: Current repo adapters and MCP transforms define supported config files and lossy/incompatible cases.
-- Sources: Target adapters (`src/targets/adapters.ts`); MCP transform (`src/util/mcp-transform.ts`); MCP config IO (`src/util/mcp-config-io.ts`)
-
-No scope-specific paths captured.
-
-Restrictions:
-None.
-
-Notes:
-None.
-
-## Agentskills (Vercel Labs)
+## Agentskills
 
 - Target support: `unsupported`
 - Repo support: `unsupported`

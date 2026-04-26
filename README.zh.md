@@ -231,7 +231,7 @@ ap c show         # commands show
 
 `--target` 支持 `all`、逗号分隔（如 `--target cursor,codex`）或重复传入（如 `--target cursor --target codex`）。
 
-支持的目标：`cursor`、`gemini`、`codex`、`claude-code`、`antigravity`、`openskills`、`agents`、`opencode`、`qoder`。
+支持的目标：`cursor`、`gemini`、`codex`、`claude-code`、`antigravity`、`agents`、`opencode`、`qoder`。
 
 ## 同步目标与默认路径（macOS）
 
@@ -247,8 +247,7 @@ Qoder 的 rules 是例外：`ap rules sync --target qoder` 会默认使用 `loca
 | Codex                | `<project>/.codex/skills/`  | `$CODEX_HOME/skills/`                  |
 | Claude Code          | `<project>/.claude/skills/` | `~/.claude/skills/`                    |
 | Antigravity          | `<project>/.agent/skills/`  | `~/.gemini/antigravity/global_skills/` |
-| Openskills           | `<project>/.agent/skills/`  | `~/.agent/skills/`                     |
-| Agents (Vercel Labs) | `<project>/.agents/skills/` | `~/.agents/skills/`                    |
+| Agentskills            | `<project>/.agents/skills/` | `~/.agents/skills/`                    |
 | OpenCode             | `<project>/.opencode/skills/` | `~/.opencode/skills/`                |
 | Qoder                | `<project>/.qoder/skills/`    | `~/.qoder/skills/`                   |
 
@@ -261,8 +260,7 @@ Qoder 的 rules 是例外：`ap rules sync --target qoder` 会默认使用 `loca
 | Codex                | `<project>/.codex/commands/`  | `$CODEX_HOME/commands/`                  |
 | Claude Code          | `<project>/.claude/commands/` | `~/.claude/commands/`                    |
 | Antigravity          | `<project>/.agent/commands/`  | `~/.gemini/antigravity/global_commands/` |
-| Openskills           | `<project>/.agent/commands/`  | `~/.agent/commands/`                     |
-| Agents (Vercel Labs) | `<project>/.agents/commands/` | `~/.agents/commands/`                    |
+| Agentskills            | `<project>/.agents/commands/` | `~/.agents/commands/`                    |
 | OpenCode             | `<project>/.opencode/commands/` | `~/.opencode/commands/`               |
 | Qoder                | `<project>/.qoder/commands/`    | `~/.qoder/commands/`                  |
 
@@ -275,8 +273,7 @@ Qoder 的 rules 是例外：`ap rules sync --target qoder` 会默认使用 `loca
 | Codex                | `<project>/.codex/rules/`  | `$CODEX_HOME/rules/`                  |
 | Claude Code          | `<project>/.claude/rules/` | `~/.claude/rules/`                    |
 | Antigravity          | `<project>/.agent/rules/`  | `~/.gemini/antigravity/global_rules/` |
-| Openskills           | `<project>/.agent/rules/`  | `~/.agent/rules/`                     |
-| Agents (Vercel Labs) | `<project>/.agents/rules/` | `~/.agents/rules/`                    |
+| Agentskills            | `<project>/.agents/rules/` | `~/.agents/rules/`                    |
 | OpenCode             | `<project>/.opencode/rules/` | `~/.opencode/rules/`                |
 | Qoder                | `<project>/.qoder/rules/`    | `-`                                |
 
@@ -294,7 +291,7 @@ Qoder 特殊说明（local）：
 - 支持 prompt-rule 并带转换：`cursor`、`claude-code`、`qoder`
 - 对 prompt-rule 判定为不兼容并跳过：
   - `codex`（使用执行策略 `.rules`）
-  - `gemini`、`antigravity`、`openskills`、`agents`、`opencode`
+  - `gemini`、`antigravity`、`agents`、`opencode`
 
 ## 配置与状态文件
 

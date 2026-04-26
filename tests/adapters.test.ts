@@ -13,16 +13,15 @@ describe('adapters', () => {
   const projectRoot = '/Users/test/myproject';
 
   describe('getAdapters', () => {
-    it('should return all 9 adapters', () => {
+    it('should return all 8 adapters', () => {
       const adapters = getAdapters();
-      expect(adapters.length).toBe(9);
+      expect(adapters.length).toBe(8);
       expect(adapters.map((a) => a.id)).toEqual([
         'cursor',
         'gemini',
         'codex',
         'claude-code',
         'antigravity',
-        'openskills',
         'agents',
         'opencode',
         'qoder',
@@ -50,7 +49,6 @@ describe('adapters', () => {
       expect(resolveAdapter('claudecode')?.id).toBe('claude-code');
       expect(resolveAdapter('gemini-cli')?.id).toBe('gemini');
       expect(resolveAdapter('anti-gravity')?.id).toBe('antigravity');
-      expect(resolveAdapter('openskills')?.id).toBe('openskills');
       expect(resolveAdapter('open-code')?.id).toBe('opencode');
       expect(resolveAdapter('qoder')?.id).toBe('qoder');
     });
@@ -168,19 +166,6 @@ describe('adapters', () => {
       });
     });
 
-    describe('openskills', () => {
-      const adapter = resolveAdapter('openskills')!;
-
-      it('should resolve global path to ~/.agent/skills', () => {
-        const dir = adapter.resolveSkillsDir({ scope: 'global', projectRoot, homeDir });
-        expect(dir).toBe(path.join(homeDir, '.agent', 'skills'));
-      });
-
-      it('should resolve local path to .agent/skills', () => {
-        const dir = adapter.resolveSkillsDir({ scope: 'local', projectRoot, homeDir });
-        expect(dir).toBe(path.join(projectRoot, '.agent', 'skills'));
-      });
-    });
 
     describe('agents', () => {
       const adapter = resolveAdapter('agents')!;
@@ -295,14 +280,14 @@ describe('adapters', () => {
     });
 
     it('should return empty agents path for skills-only targets', () => {
-      expect(resolveAdapter('openskills')!.resolveAgentsDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+      expect(resolveAdapter('agents')!.resolveAgentsDir({ scope: 'global', projectRoot, homeDir })).toBe('');
       expect(resolveAdapter('agents')!.resolveAgentsDir({ scope: 'local', projectRoot, homeDir })).toBe('');
     });
   });
 
   describe('resolveCommandsDir', () => {
     it('should return empty command paths for skills-only targets', () => {
-      expect(resolveAdapter('openskills')!.resolveCommandsDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+      expect(resolveAdapter('agents')!.resolveCommandsDir({ scope: 'global', projectRoot, homeDir })).toBe('');
       expect(resolveAdapter('agents')!.resolveCommandsDir({ scope: 'local', projectRoot, homeDir })).toBe('');
     });
   });
@@ -335,7 +320,7 @@ describe('adapters', () => {
     });
 
     it('should return empty rule paths for skills-only targets', () => {
-      expect(resolveAdapter('openskills')!.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe('');
+      expect(resolveAdapter('agents')!.resolveRulesDir({ scope: 'global', projectRoot, homeDir })).toBe('');
       expect(resolveAdapter('agents')!.resolveRulesDir({ scope: 'local', projectRoot, homeDir })).toBe('');
     });
   });
@@ -346,12 +331,9 @@ describe('adapters', () => {
       const commands = filterCommandAdapters(all).map((adapter) => adapter.id);
       const agents = filterAgentAdapters(all).map((adapter) => adapter.id);
       const rules = filterRuleAdapters(all).map((adapter) => adapter.id);
-      // openskills and agents are skills-only
-      expect(commands).not.toContain('openskills');
+      // agents is skills-only
       expect(commands).not.toContain('agents');
-      expect(agents).not.toContain('openskills');
       expect(agents).not.toContain('agents');
-      expect(rules).not.toContain('openskills');
       expect(rules).not.toContain('agents');
       // antigravity does not support agents sync, but DOES support commands (workflows) and rules
       expect(commands).toContain('antigravity');

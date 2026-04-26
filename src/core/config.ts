@@ -25,7 +25,6 @@ function defaultConfig(): ConfigV1 {
       codex: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
       'claude-code': { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
       antigravity: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
-      openskills: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
       agents: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
       opencode: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
       qoder: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },

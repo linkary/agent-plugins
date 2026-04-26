@@ -231,7 +231,7 @@ ap c show         # commands show
 
 `--target` supports `all`, comma-separated values (e.g., `--target cursor,codex`), or repeated flags (e.g., `--target cursor --target codex`).
 
-Supported targets: `cursor`, `gemini`, `codex`, `claude-code`, `antigravity`, `openskills`, `agents`, `opencode`, `qoder`.
+Supported targets: `cursor`, `gemini`, `codex`, `claude-code`, `antigravity`, `agents`, `opencode`, `qoder`.
 
 ## Sync Targets and Default Paths (macOS)
 
@@ -247,8 +247,7 @@ Qoder rules are the exception: `ap rules sync --target qoder` defaults to `local
 | Codex                | `<project>/.codex/skills/`  | `$CODEX_HOME/skills/`                  |
 | Claude Code          | `<project>/.claude/skills/` | `~/.claude/skills/`                    |
 | Antigravity          | `<project>/.agent/skills/`  | `~/.gemini/antigravity/global_skills/` |
-| Openskills           | `<project>/.agent/skills/`  | `~/.agent/skills/`                     |
-| Agents (Vercel Labs) | `<project>/.agents/skills/` | `~/.agents/skills/`                    |
+| Agentskills            | `<project>/.agents/skills/` | `~/.agents/skills/`                    |
 | OpenCode             | `<project>/.opencode/skills/` | `~/.opencode/skills/`                |
 | Qoder                | `<project>/.qoder/skills/`    | `~/.qoder/skills/`                   |
 
@@ -261,8 +260,7 @@ Qoder rules are the exception: `ap rules sync --target qoder` defaults to `local
 | Codex                | `<project>/.codex/commands/`  | `$CODEX_HOME/commands/`                  |
 | Claude Code          | `<project>/.claude/commands/` | `~/.claude/commands/`                    |
 | Antigravity          | `<project>/.agent/commands/`  | `~/.gemini/antigravity/global_commands/` |
-| Openskills           | `<project>/.agent/commands/`  | `~/.agent/commands/`                     |
-| Agents (Vercel Labs) | `<project>/.agents/commands/` | `~/.agents/commands/`                    |
+| Agentskills            | `<project>/.agents/commands/` | `~/.agents/commands/`                    |
 | OpenCode             | `<project>/.opencode/commands/` | `~/.opencode/commands/`               |
 | Qoder                | `<project>/.qoder/commands/`    | `~/.qoder/commands/`                  |
 
@@ -275,8 +273,7 @@ Qoder rules are the exception: `ap rules sync --target qoder` defaults to `local
 | Codex                | `<project>/.codex/rules/`  | `$CODEX_HOME/rules/`                  |
 | Claude Code          | `<project>/.claude/rules/` | `~/.claude/rules/`                    |
 | Antigravity          | `<project>/.agent/rules/`  | `~/.gemini/antigravity/global_rules/` |
-| Openskills           | `<project>/.agent/rules/`  | `~/.agent/rules/`                     |
-| Agents (Vercel Labs) | `<project>/.agents/rules/` | `~/.agents/rules/`                    |
+| Agentskills            | `<project>/.agents/rules/` | `~/.agents/rules/`                    |
 | OpenCode             | `<project>/.opencode/rules/` | `~/.opencode/rules/`                |
 | Qoder                | `<project>/.qoder/rules/`    | `-`                                |
 
@@ -294,7 +291,7 @@ Qoder special case (local scope):
 - Prompt-rule sync/collect with conversion: `cursor`, `claude-code`, `qoder`
 - Skipped as incompatible for prompt rules:
   - `codex` (uses execution-policy `.rules`)
-  - `gemini`, `antigravity`, `openskills`, `agents`, `opencode`
+  - `gemini`, `antigravity`, `agents`, `opencode`
 
 ## Configuration and State Files
 

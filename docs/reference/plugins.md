@@ -11,8 +11,7 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 | [Codex](https://developers.openai.com/codex/skills) | supported | documented-only | Undocumented | package | Low |
 | Claude Code | undocumented | documented-only | Undocumented | — | Low |
 | Google Antigravity | undocumented | documented-only | Undocumented | — | Low |
-| Openskills | undocumented | documented-only | Undocumented | — | Low |
-| Agentskills (Vercel Labs) | undocumented | documented-only | Undocumented | — | Low |
+| Agentskills | undocumented | documented-only | Undocumented | — | Low |
 | [OpenCode](https://opencode.ai/docs/plugins/) | supported | documented-only | Undocumented | package | Low |
 | Qoder | undocumented | documented-only | Undocumented | — | Low |
 
@@ -112,26 +111,7 @@ Restrictions:
 Notes:
 None.
 
-## Openskills
-
-- Target support: `undocumented`
-- Repo support: `documented-only`
-- Scopes: Undocumented
-- Format: Undocumented
-- Reliability: Low
-- Evidence status: `implementation-only`
-- Evidence summary: No stable repo-managed plugin surface exists; only documentation can be generated here.
-- Sources: Target adapters (`src/targets/adapters.ts`)
-
-No scope-specific paths captured.
-
-Restrictions:
-- agent-plugins does not currently manage plugins as a first-class family.
-
-Notes:
-None.
-
-## Agentskills (Vercel Labs)
+## Agentskills
 
 - Target support: `undocumented`
 - Repo support: `documented-only`

@@ -10,7 +10,6 @@ export type TargetId =
   | 'codex'
   | 'claude-code'
   | 'antigravity'
-  | 'openskills'
   | 'agents'
   | 'opencode'
   | 'qoder';
@@ -35,13 +34,13 @@ export type TargetAdapter = {
   resolveMcpConfig?(params: ResolveParams): McpConfigSpec | null;
 };
 
-const SKILLS_ONLY_TARGET_IDS = new Set<TargetId>(['openskills', 'agents']);
+const SKILLS_ONLY_TARGET_IDS = new Set<TargetId>(['agents']);
 
 /** Targets that do not support agents sync. */
-const NO_AGENTS_IDS = new Set<TargetId>(['openskills', 'agents', 'antigravity']);
+const NO_AGENTS_IDS = new Set<TargetId>(['agents', 'antigravity']);
 
 /** Targets that do not support commands sync. */
-const NO_COMMANDS_IDS = new Set<TargetId>(['openskills', 'agents']);
+const NO_COMMANDS_IDS = new Set<TargetId>(['agents']);
 
 function getCodexHomeDir(homeDir: string): string {
   const override = process.env.CODEX_HOME;
@@ -182,19 +181,8 @@ const adapters: TargetAdapter[] = [
         : null,
   },
   {
-    id: 'openskills',
-    label: 'Openskills',
-    color: ANSI.brightCyan,
-    aliases: ['openskills'],
-    resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global' ? path.join(homeDir, '.agent', 'skills') : path.join(projectRoot, '.agent', 'skills'),
-    resolveAgentsDir: () => '',
-    resolveCommandsDir: () => '',
-    resolveRulesDir: () => '',
-  },
-  {
     id: 'agents',
-    label: 'Agentskills (Vercel Labs)',
+    label: 'Agentskills',
     color: ANSI.orange,
     aliases: ['agents'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
