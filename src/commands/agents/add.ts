@@ -8,7 +8,7 @@ import {
 } from '../../core/agent-store.js';
 import { loadRegistry, saveRegistry } from '../../core/registry.js';
 import { listDirNames, pathExists, removeDir } from '../../util/fs-utils.js';
-import { promptMultiSelect } from '../../util/prompt.js';
+import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import {
   isProbablyGitUrl,
   isGitHubShorthand,
@@ -23,6 +23,13 @@ import {
   readAgentSpecFromEntry,
 } from '../../util/agent-transform.js';
 import { ANSI } from '../../util/ansi.js';
+import {
+  classifySourceConflict,
+  removeGitSourceTracking,
+  sourceLabel,
+  suggestAliasName,
+  uniqueAliasName,
+} from '../../util/source-conflict.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
@@ -152,11 +159,47 @@ export async function cmdAgentsAdd(positionals: string[], flags: ParsedFlags, _c
       registry.agentRepos ??= {};
       const now = new Date().toISOString();
       const addedAgentNames: string[] = [];
+      const incomingSource = { type: 'git' as const, url: source, ref: refFlag };
 
       for (const { name, srcDir } of agentsToCopy) {
-        const destExists = (await resolveCentralAgentEntry(name)) !== null;
-        if (destExists && !force && !interactive) {
-          process.stderr.write(`Agent already exists: ${name} (use --force to overwrite)\n`);
+        let targetName = name;
+        let destExists = (await resolveCentralAgentEntry(targetName)) !== null;
+        const existingRecord = registry.agents[targetName];
+        const contentStatus = await detectAgentStatus(srcDir, targetName);
+        const conflictStatus = classifySourceConflict({
+          existingSource: existingRecord?.source,
+          incomingSource,
+          contentStatus,
+        });
+        if (conflictStatus === 'different-source conflict' && !force) {
+          if (interactive) {
+            const action = await promptChoice({
+              message: `Agent "${targetName}" already exists from ${sourceLabel(existingRecord?.source)}. Incoming source: ${sourceLabel(incomingSource)}.`,
+              options: [
+                { key: 's', label: 'Skip' },
+                { key: 'r', label: 'Replace existing' },
+                { key: 'a', label: `Install as alias (${suggestAliasName(targetName, incomingSource)})` },
+              ],
+            });
+            if (action === 's') {
+              process.stdout.write(`Skipped: ${targetName}\n`);
+              continue;
+            }
+            if (action === 'a') {
+              targetName = await uniqueAliasName(suggestAliasName(targetName, incomingSource), async (candidate) =>
+                (await resolveCentralAgentEntry(candidate)) !== null,
+              );
+              destExists = false;
+            }
+          } else {
+            process.stderr.write(
+              `Agent already exists from a different source: ${targetName} (${sourceLabel(existingRecord?.source)}). Use --force to replace or --name <alias> for a single-agent repo.\n`,
+            );
+            continue;
+          }
+        }
+        if (destExists && !force && !interactive && conflictStatus !== 'same-source update') {
+          process.stderr.write(`Agent already exists: ${targetName} (use --force to overwrite)\n`);
           continue;
         }
         const sourceEntry = await classifyFilesystemAgentPath(srcDir, name);
@@ -170,19 +213,22 @@ export async function cmdAgentsAdd(positionals: string[], flags: ParsedFlags, _c
           continue;
         }
         if (dryRun) {
-          process.stdout.write(`[dry-run] add ${name}\n`);
+          process.stdout.write(`[dry-run] add ${targetName}\n`);
           continue;
         }
-        await writeCentralAgentSpec({ ...spec, name }, { sourceDir: sourceEntry.form === 'directory' ? sourceEntry.path : undefined });
+        if (destExists && targetName === name) {
+          removeGitSourceTracking({ registry, kind: 'agents', name, source: existingRecord?.source });
+        }
+        await writeCentralAgentSpec({ ...spec, name: targetName }, { sourceDir: sourceEntry.form === 'directory' ? sourceEntry.path : undefined });
 
-        registry.agents[name] = {
-          name,
-          addedAt: registry.agents[name]?.addedAt ?? now,
+        registry.agents[targetName] = {
+          name: targetName,
+          addedAt: registry.agents[targetName]?.addedAt ?? now,
           updatedAt: now,
-          source: { type: 'git', url: source, ref: refFlag },
+          source: incomingSource,
         };
-        addedAgentNames.push(name);
-        process.stdout.write(`Added: ${name}\n`);
+        addedAgentNames.push(targetName);
+        process.stdout.write(`Added: ${targetName}\n`);
       }
 
       if (!dryRun && addedAgentNames.length > 0) {
@@ -225,16 +271,11 @@ export async function cmdAgentsAdd(positionals: string[], flags: ParsedFlags, _c
   }
 
   const resolvedName = nameFlag ?? path.basename(source);
-  const destExists = (await resolveCentralAgentEntry(resolvedName)) !== null;
-  if (destExists && !force) {
-    process.stderr.write(`Agent already exists: ${resolvedName}\nUse --force to overwrite.\n`);
-    return 1;
-  }
-
-  if (dryRun) {
-    process.stdout.write(`[dry-run] add ${resolvedName}\n`);
-    return 0;
-  }
+  let targetName = resolvedName;
+  let destExists = (await resolveCentralAgentEntry(targetName)) !== null;
+  const incomingSource = { type: 'local' as const, path: srcPath };
+  const registry = await loadRegistry();
+  registry.agents ??= {};
 
   const sourceEntry = await classifyFilesystemAgentPath(srcPath, resolvedName);
   if (!sourceEntry) {
@@ -246,19 +287,67 @@ export async function cmdAgentsAdd(positionals: string[], flags: ParsedFlags, _c
     process.stderr.write(`Could not parse agent: ${resolvedName}\n`);
     return 1;
   }
-  await writeCentralAgentSpec({ ...spec, name: resolvedName }, { sourceDir: sourceEntry.path });
+  const existingRecord = registry.agents[targetName];
+  if (destExists) {
+    const contentStatus = await detectAgentStatus(srcPath, targetName);
+    const conflictStatus = classifySourceConflict({
+      existingSource: existingRecord?.source,
+      incomingSource,
+      contentStatus,
+    });
+    if (conflictStatus === 'different-source conflict' && !force) {
+      if (interactive) {
+        const action = await promptChoice({
+          message: `Agent "${targetName}" already exists from ${sourceLabel(existingRecord?.source)}. Incoming source: ${sourceLabel(incomingSource)}.`,
+          options: [
+            { key: 's', label: 'Skip' },
+            { key: 'r', label: 'Replace existing' },
+            { key: 'a', label: `Install as alias (${suggestAliasName(targetName, incomingSource)})` },
+          ],
+        });
+        if (action === 's') {
+          process.stdout.write(`Skipped: ${targetName}\n`);
+          return 0;
+        }
+        if (action === 'a') {
+          targetName = await uniqueAliasName(suggestAliasName(targetName, incomingSource), async (candidate) =>
+            (await resolveCentralAgentEntry(candidate)) !== null,
+          );
+          destExists = false;
+        }
+      } else {
+        process.stderr.write(
+          `Agent already exists from a different source: ${targetName} (${sourceLabel(existingRecord?.source)}). Use --force to replace or --name <alias>.\n`,
+        );
+        return 1;
+      }
+    } else if (!force && !interactive && conflictStatus !== 'same-source update') {
+      process.stderr.write(`Agent already exists: ${targetName}\nUse --force to overwrite.\n`);
+      return 1;
+    }
+  }
 
-  const registry = await loadRegistry();
-  registry.agents ??= {};
+  if (dryRun) {
+    process.stdout.write(`[dry-run] add ${targetName}\n`);
+    return 0;
+  }
+  if (destExists && targetName === resolvedName) {
+    removeGitSourceTracking({ registry, kind: 'agents', name: targetName, source: existingRecord?.source });
+  }
+  await writeCentralAgentSpec(
+    { ...spec, name: targetName },
+    { sourceDir: sourceEntry.form === 'directory' ? sourceEntry.path : undefined },
+  );
+
   const now = new Date().toISOString();
-  registry.agents[resolvedName] = {
-    name: resolvedName,
-    addedAt: registry.agents[resolvedName]?.addedAt ?? now,
+  registry.agents[targetName] = {
+    name: targetName,
+    addedAt: registry.agents[targetName]?.addedAt ?? now,
     updatedAt: now,
-    source: { type: 'local', path: srcPath },
+    source: incomingSource,
   };
   await saveRegistry(registry);
 
-  process.stdout.write(`Added local agent: ${resolvedName}\n`);
+  process.stdout.write(`Added local agent: ${targetName}\n`);
   return 0;
 }

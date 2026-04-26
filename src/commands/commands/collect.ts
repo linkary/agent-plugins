@@ -32,6 +32,7 @@ import { promptChoice, promptConfirm, promptMultiSelect } from '../../util/promp
 import type { CliRunContext } from '../../runner/cli.js';
 import { parseCommandMeta } from '../../util/command-meta.js';
 import { formatTargetReviewLine } from '../../util/review-display.js';
+import { removeGitSourceTracking } from '../../util/source-conflict.js';
 
 const IGNORED_DIR_NAMES = ['.git'];
 
@@ -398,15 +399,20 @@ export async function cmdCommandsCollect(
     }
 
     const now = new Date().toISOString();
-    registry.commands[targetName] = registry.commands[targetName] ?? {
+    const existingRecord = registry.commands[targetName];
+    removeGitSourceTracking({
+      registry,
+      kind: 'commands',
+      name: targetName,
+      source: existingRecord?.source,
+    });
+    registry.commands[targetName] = {
       name: targetName,
       form,
-      addedAt: now,
+      addedAt: existingRecord?.addedAt ?? now,
       updatedAt: now,
       source: { type: 'collected', from: { target: adapter.id, scope, path: mdPath } },
     };
-    registry.commands[targetName]!.updatedAt = now;
-    registry.commands[targetName]!.form = form;
     context.commands[targetName] = { hash: srcHash, syncedAt: now };
 
     process.stdout.write(`Collected: ${targetName}\n`);

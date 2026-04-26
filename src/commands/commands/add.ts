@@ -5,13 +5,14 @@ import {
   ensureCentralCommandStore,
   getCentralCommandFile,
   getCentralCommandDir,
+  detectCommandForm,
   findEntryMd,
 } from '../../core/command-store.js';
 import { loadRegistry, saveRegistry, normalizeRepoUrl } from '../../core/registry.js';
 import { pathExists, removeDir, ensureDir, listDirNames } from '../../util/fs-utils.js';
 import { copyDir } from '../../util/copy-dir.js';
-import { copyItem } from '../../util/item-utils.js';
-import { promptMultiSelect } from '../../util/prompt.js';
+import { computeCommandHash, copyItem } from '../../util/item-utils.js';
+import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import {
   isProbablyGitUrl,
   isGitHubShorthand,
@@ -20,6 +21,14 @@ import {
   runGit,
 } from '../../util/git-utils.js';
 import { getApgHomeDir } from '../../util/apg-paths.js';
+import {
+  classifySourceConflict,
+  removeGitSourceTracking,
+  sourceLabel,
+  suggestAliasName,
+  uniqueAliasName,
+} from '../../util/source-conflict.js';
+import { parseCommandMeta } from '../../util/command-meta.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
@@ -88,7 +97,8 @@ async function copyCommandToCentral(
 
   if (cmd.form === 'directory') {
     const destExists = await pathExists(destDirPath);
-    if (destExists && !force) {
+    const destFileExists = await pathExists(destFilePath);
+    if ((destExists || destFileExists) && !force) {
       process.stderr.write(`Command already exists: ${cmd.name} (use --force to overwrite)\n`);
       return false;
     }
@@ -97,6 +107,7 @@ async function copyCommandToCentral(
       return true;
     }
     if (destExists) await removeDir(destDirPath);
+    if (destFileExists) await fs.rm(destFilePath, { force: true });
     await copyDir(cmd.srcDir, destDirPath, { ignoreNames: ['.git'] });
     return true;
   }
@@ -104,7 +115,7 @@ async function copyCommandToCentral(
   // file-form
   const mdExists = await pathExists(destFilePath);
   const resourceDestPath = path.join(destRoot, cmd.name);
-  const resourceExists = cmd.resourceDirPath && (await pathExists(resourceDestPath));
+  const resourceExists = await pathExists(resourceDestPath);
 
   if ((mdExists || resourceExists) && !force) {
     process.stderr.write(`Command already exists: ${cmd.name} (use --force to overwrite)\n`);
@@ -123,6 +134,76 @@ async function copyCommandToCentral(
     await copyDir(cmd.resourceDirPath, resourceDestPath, { ignoreNames: ['.git'] });
   }
   return true;
+}
+
+function renameCommand(cmd: ScannedCommand, name: string): ScannedCommand {
+  return cmd.form === 'directory'
+    ? { ...cmd, name }
+    : { ...cmd, name };
+}
+
+type CompareStatus = 'identical' | 'new' | 'update' | 'missing';
+
+function mergeResourceRefs(...lists: (string[] | undefined)[]): string[] | undefined {
+  const merged = new Set<string>();
+  for (const list of lists) {
+    if (!list) continue;
+    for (const item of list) {
+      if (item.trim()) merged.add(item.trim());
+    }
+  }
+  return merged.size > 0 ? [...merged] : undefined;
+}
+
+async function computeFileCommandStateHash(params: {
+  commandName: string;
+  commandsDir: string;
+  mdPath: string;
+  includeImplicitResourceDir: boolean;
+}): Promise<string> {
+  const { commandName, commandsDir, mdPath, includeImplicitResourceDir } = params;
+  const meta = await parseCommandMeta(mdPath);
+  const sharedResources = mergeResourceRefs(meta.resources, includeImplicitResourceDir ? [commandName] : undefined);
+
+  return await computeCommandHash({
+    commandName,
+    commandsDir,
+    form: 'file',
+    sharedResources,
+  });
+}
+
+async function compareCommandStatus(
+  scanned: ScannedCommand,
+  commandsDir: string,
+  centralForm: 'directory' | 'file' | null,
+): Promise<CompareStatus> {
+  const name = scanned.name;
+  if (!centralForm) return 'new';
+
+  const srcHash =
+    scanned.form === 'directory'
+      ? await computeCommandHash({ commandName: name, commandsDir, form: 'directory' })
+      : await computeFileCommandStateHash({
+          commandName: name,
+          commandsDir,
+          mdPath: scanned.mdPath,
+          includeImplicitResourceDir: Boolean(scanned.resourceDirPath),
+        });
+
+  const centralRoot = path.join(getApgHomeDir(), 'commands');
+  const destHash =
+    centralForm === 'directory'
+      ? await computeCommandHash({ commandName: name, commandsDir: centralRoot, form: 'directory' })
+      : await computeFileCommandStateHash({
+          commandName: name,
+          commandsDir: centralRoot,
+          mdPath: getCentralCommandFile(name),
+          includeImplicitResourceDir: await pathExists(path.join(centralRoot, name)),
+        });
+
+  if (srcHash === destHash) return 'identical';
+  return 'update';
 }
 
 // ─── Entry point ───────────────────────────────────────────────────────────
@@ -212,23 +293,72 @@ export async function cmdCommandsAdd(positionals: string[], flags: ParsedFlags, 
       if (!registry.commandRepos) registry.commandRepos = {};
       const now = new Date().toISOString();
       const addedCommandNames: string[] = [];
+      const incomingSource = { type: 'git' as const, url: source, ref: refFlag };
 
       for (const cmd of toCopy) {
-        const ok = await copyCommandToCentral(cmd, centralDir, dryRun, force);
+        let targetCmd = cmd;
+        const existingRecord = registry.commands?.[targetCmd.name];
+        const centralForm = await detectCommandForm(targetCmd.name);
+        const rawContentStatus = await compareCommandStatus(cmd, searchDir, centralForm);
+        const contentStatus = rawContentStatus === 'missing' ? 'update' : rawContentStatus;
+        const conflictStatus = classifySourceConflict({
+          existingSource: existingRecord?.source,
+          incomingSource,
+          contentStatus,
+        });
+
+        if (conflictStatus === 'identical') {
+          process.stdout.write(`Up-to-date: ${targetCmd.name}\n`);
+          continue;
+        }
+
+        if (conflictStatus === 'different-source conflict' && !force) {
+          if (interactive) {
+            const action = await promptChoice({
+              message: `Command "${targetCmd.name}" already exists from ${sourceLabel(existingRecord?.source)}. Incoming source: ${sourceLabel(incomingSource)}.`,
+              options: [
+                { key: 's', label: 'Skip' },
+                { key: 'r', label: 'Replace existing' },
+                { key: 'a', label: `Install as alias (${suggestAliasName(targetCmd.name, incomingSource)})` },
+              ],
+            });
+            if (action === 's') {
+              process.stdout.write(`Skipped: ${targetCmd.name}\n`);
+              continue;
+            }
+            if (action === 'a') {
+              const alias = await uniqueAliasName(suggestAliasName(targetCmd.name, incomingSource), async (candidate) =>
+                (await detectCommandForm(candidate)) !== null,
+              );
+              targetCmd = renameCommand(targetCmd, alias);
+            }
+          } else {
+            process.stderr.write(
+              `Command already exists from a different source: ${targetCmd.name} (${sourceLabel(existingRecord?.source)}). Use --force to replace or --name <alias> for a single-command source.\n`,
+            );
+            continue;
+          }
+        }
+
+        if (targetCmd.name === cmd.name && (conflictStatus === 'same-source update' || force || interactive)) {
+          removeGitSourceTracking({ registry, kind: 'commands', name: targetCmd.name, source: existingRecord?.source });
+        }
+
+        const ok = await copyCommandToCentral(targetCmd, centralDir, dryRun, true);
         if (!ok) continue;
 
         if (dryRun) continue;
 
-        const form = cmd.form;
-        registry.commands[cmd.name] = {
-          name: cmd.name,
+        const form = targetCmd.form;
+        registry.commands[targetCmd.name] = {
+          name: targetCmd.name,
           form,
-          addedAt: registry.commands[cmd.name]?.addedAt ?? now,
+          addedAt: registry.commands[targetCmd.name]?.addedAt ?? now,
           updatedAt: now,
-          source: { type: 'git', url: source, ref: refFlag },
+          source: incomingSource,
         };
-        addedCommandNames.push(cmd.name);
-        process.stdout.write(`Added: ${cmd.name}\n`);
+        addedCommandNames.push(targetCmd.name);
+        process.stdout.write(`Added: ${targetCmd.name}\n`);
       }
 
       if (!dryRun && addedCommandNames.length > 0) {
@@ -275,46 +405,104 @@ export async function cmdCommandsAdd(positionals: string[], flags: ParsedFlags, 
     }
     const baseName = path.basename(srcPath, '.md');
     const resolvedName = nameFlag ?? baseName;
+    let targetName = resolvedName;
     const resourceDirPath = path.join(path.dirname(srcPath), baseName);
     const hasResourceDir = (await pathExists(resourceDirPath)) && (await fs.stat(resourceDirPath)).isDirectory();
 
     const centralDir = getApgHomeDir();
     const destRoot = path.join(centralDir, 'commands');
-    const destFilePath = path.join(destRoot, `${resolvedName}.md`);
-    const destExists = await pathExists(destFilePath);
+    let destFilePath = path.join(destRoot, `${targetName}.md`);
+    let destExists = await pathExists(destFilePath);
+    const registry = await loadRegistry();
+    if (!registry.commands) registry.commands = {};
+    const incomingSource = { type: 'local' as const, path: srcPath };
+    const existingRecord = registry.commands[targetName];
+    let centralForm = await detectCommandForm(targetName);
+    const scannedCommand: ScannedCommand = {
+      name: targetName,
+      form: 'file',
+      mdPath: srcPath,
+      resourceDirPath: hasResourceDir ? resourceDirPath : undefined,
+    };
 
-    if (destExists && !force) {
-      process.stderr.write(`Command already exists: ${resolvedName}\nUse --force to overwrite.\n`);
-      return 1;
+    if (centralForm) {
+      const rawContentStatus = await compareCommandStatus(scannedCommand, path.dirname(srcPath), centralForm);
+      const contentStatus = rawContentStatus === 'missing' ? 'update' : rawContentStatus;
+      const conflictStatus = classifySourceConflict({
+        existingSource: existingRecord?.source,
+        incomingSource,
+        contentStatus,
+      });
+      if (conflictStatus === 'identical') {
+        process.stdout.write(`Up-to-date: ${targetName}\n`);
+        return 0;
+      }
+      if (conflictStatus === 'different-source conflict' && !force) {
+        if (interactive) {
+          const action = await promptChoice({
+            message: `Command "${targetName}" already exists from ${sourceLabel(existingRecord?.source)}. Incoming source: ${sourceLabel(incomingSource)}.`,
+            options: [
+              { key: 's', label: 'Skip' },
+              { key: 'r', label: 'Replace existing' },
+              { key: 'a', label: `Install as alias (${suggestAliasName(targetName, incomingSource)})` },
+            ],
+          });
+          if (action === 's') {
+            process.stdout.write(`Skipped: ${targetName}\n`);
+            return 0;
+          }
+          if (action === 'a') {
+            targetName = await uniqueAliasName(suggestAliasName(targetName, incomingSource), async (candidate) =>
+              (await detectCommandForm(candidate)) !== null,
+            );
+            destFilePath = path.join(destRoot, `${targetName}.md`);
+            destExists = false;
+            centralForm = null;
+          }
+        } else {
+          process.stderr.write(
+            `Command already exists from a different source: ${targetName} (${sourceLabel(existingRecord?.source)}). Use --force to replace or --name <alias>.\n`,
+          );
+          return 1;
+        }
+      } else if (!force && conflictStatus !== 'same-source update') {
+        process.stderr.write(`Command already exists: ${targetName}\nUse --force to overwrite.\n`);
+        return 1;
+      }
     }
 
     if (dryRun) {
-      process.stdout.write(`[dry-run] add ${resolvedName} (file) -> ${destFilePath}\n`);
+      process.stdout.write(`[dry-run] add ${targetName} (file) -> ${destFilePath}\n`);
       return 0;
     }
 
     await ensureDir(destRoot);
-    if (destExists) await fs.rm(destFilePath, { force: true });
+    if (destExists || centralForm) {
+      removeGitSourceTracking({ registry, kind: 'commands', name: targetName, source: existingRecord?.source });
+      if (centralForm === 'directory') {
+        await removeDir(getCentralCommandDir(targetName));
+      } else {
+        await fs.rm(destFilePath, { force: true });
+      }
+    }
     await copyItem(srcPath, destFilePath);
 
     if (hasResourceDir) {
-      const resourceDestPath = path.join(destRoot, resolvedName);
+      const resourceDestPath = path.join(destRoot, targetName);
       if (await pathExists(resourceDestPath)) await removeDir(resourceDestPath);
       await copyDir(resourceDirPath, resourceDestPath, { ignoreNames: ['.git'] });
     }
 
-    const registry = await loadRegistry();
-    if (!registry.commands) registry.commands = {};
     const now = new Date().toISOString();
-    registry.commands[resolvedName] = {
-      name: resolvedName,
+    registry.commands[targetName] = {
+      name: targetName,
       form: 'file',
-      addedAt: registry.commands[resolvedName]?.addedAt ?? now,
+      addedAt: registry.commands[targetName]?.addedAt ?? now,
       updatedAt: now,
-      source: { type: 'local', path: srcPath },
+      source: incomingSource,
     };
     await saveRegistry(registry);
-    process.stdout.write(`Added local command: ${resolvedName}\n`);
+    process.stdout.write(`Added local command: ${targetName}\n`);
     return 0;
   }
 
@@ -349,19 +537,68 @@ export async function cmdCommandsAdd(positionals: string[], flags: ParsedFlags, 
   }
 
   for (const cmd of toCopy) {
-    const ok = await copyCommandToCentral(cmd, destRoot, dryRun, force);
+    let targetCmd = cmd;
+    const incomingSource = { type: 'local' as const, path: srcPath };
+    const existingRecord = registry.commands[targetCmd.name];
+    const centralForm = await detectCommandForm(targetCmd.name);
+    const rawContentStatus = await compareCommandStatus(targetCmd, srcPath, centralForm);
+    const contentStatus = rawContentStatus === 'missing' ? 'update' : rawContentStatus;
+    const conflictStatus = classifySourceConflict({
+      existingSource: existingRecord?.source,
+      incomingSource,
+      contentStatus,
+    });
+
+    if (conflictStatus === 'identical') {
+      process.stdout.write(`Up-to-date: ${targetCmd.name}\n`);
+      continue;
+    }
+
+    if (conflictStatus === 'different-source conflict' && !force) {
+      if (interactive) {
+        const action = await promptChoice({
+          message: `Command "${targetCmd.name}" already exists from ${sourceLabel(existingRecord?.source)}. Incoming source: ${sourceLabel(incomingSource)}.`,
+          options: [
+            { key: 's', label: 'Skip' },
+            { key: 'r', label: 'Replace existing' },
+            { key: 'a', label: `Install as alias (${suggestAliasName(targetCmd.name, incomingSource)})` },
+          ],
+        });
+        if (action === 's') {
+          process.stdout.write(`Skipped: ${targetCmd.name}\n`);
+          continue;
+        }
+        if (action === 'a') {
+          const alias = await uniqueAliasName(suggestAliasName(targetCmd.name, incomingSource), async (candidate) =>
+            (await detectCommandForm(candidate)) !== null,
+          );
+          targetCmd = renameCommand(targetCmd, alias);
+        }
+      } else {
+        process.stderr.write(
+          `Command already exists from a different source: ${targetCmd.name} (${sourceLabel(existingRecord?.source)}). Use --force to replace or --name <alias>.\n`,
+        );
+        continue;
+      }
+    }
+
+    if (targetCmd.name === cmd.name && (conflictStatus === 'same-source update' || force || interactive)) {
+      removeGitSourceTracking({ registry, kind: 'commands', name: targetCmd.name, source: existingRecord?.source });
+    }
+
+    const ok = await copyCommandToCentral(targetCmd, destRoot, dryRun, true);
     if (!ok) continue;
 
     if (dryRun) continue;
 
-    registry.commands[cmd.name] = {
-      name: cmd.name,
-      form: cmd.form,
-      addedAt: registry.commands[cmd.name]?.addedAt ?? now,
+    registry.commands[targetCmd.name] = {
+      name: targetCmd.name,
+      form: targetCmd.form,
+      addedAt: registry.commands[targetCmd.name]?.addedAt ?? now,
       updatedAt: now,
-      source: { type: 'local', path: srcPath },
+      source: incomingSource,
     };
-    process.stdout.write(`Added local command: ${cmd.name}\n`);
+    process.stdout.write(`Added local command: ${targetCmd.name}\n`);
   }
 
   await saveRegistry(registry);

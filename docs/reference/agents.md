@@ -1,18 +1,17 @@
 # Agents Reference
 
-Reviewed: 2026-04-17
+Reviewed: 2026-04-26
 
 This page is official-doc-first. Vendor docs are treated as authoritative. Current repo behavior is only used to fill gaps and is labeled in the evidence status.
 
 | Target | Support | Repo Support | Scopes | Shared .agents | Format | Reliability |
 | --- | --- | --- | --- | --- | --- | --- |
-| [Cursor](https://docs.cursor.com/agent/modes) | supported | documented-only | [local](#cursor-agents-local), [global](#cursor-agents-global) | unsupported | markdown | Low |
-| Gemini CLI | undocumented | managed | [local](#gemini-agents-local), [global](#gemini-agents-global) | not documented | markdown | Low |
+| [Cursor](https://docs.cursor.com/agent/modes) | supported | documented-only | [local](#cursor-agents-local), [global](#cursor-agents-global) | unsupported | markdown | Medium |
+| [Gemini CLI](https://geminicli.com/docs/agents) | supported | managed | [local](#gemini-agents-local), [global](#gemini-agents-global) | not documented | markdown | Medium |
 | [Codex](https://developers.openai.com/codex/subagents) | supported | managed | [local](#codex-agents-local), [global](#codex-agents-global) | unsupported | toml | High |
 | [Claude Code](https://code.claude.com/docs/en/sub-agents) | supported | documented-only | [local](#claude-code-agents-local), [global](#claude-code-agents-global) | unsupported | markdown | High |
 | Google Antigravity | unsupported | unsupported | Undocumented | unsupported | — | Low |
-| Openskills | unsupported | unsupported | Undocumented | unsupported | — | Low |
-| Agentskills (Vercel Labs) | unsupported | unsupported | Undocumented | unsupported | — | Low |
+| Agentskills | unsupported | unsupported | Undocumented | unsupported | — | Low |
 | [OpenCode](https://opencode.ai/docs/agents/) | supported | documented-only | [local](#opencode-agents-local), [global](#opencode-agents-global) | unsupported | markdown | Medium |
 | [Qoder](https://docs.qoder.com/en/cli/user-guide/subagent) | supported | documented-only | [local](#qoder-agents-local), [global](#qoder-agents-global) | unsupported | markdown | High |
 
@@ -23,10 +22,10 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 - Scopes: [local](#cursor-agents-local), [global](#cursor-agents-global)
 - Shared .agents support: `unsupported`
 - Format: markdown
-- Reliability: Low
-- Evidence status: `disputed`
-- Evidence summary: Cursor officially documents custom modes, but the `.cursor/agents` markdown layout remains a current repo convention rather than a vendor-documented storage model.
-- Sources: [Cursor modes](https://docs.cursor.com/agent/modes); Target adapters (`src/targets/adapters.ts`); Agent transform (`src/util/agent-transform.ts`)
+- Reliability: Medium
+- Evidence status: `official+implementation`
+- Evidence summary: Cursor now officially documents subagent discovery at `.cursor/agents/` and `~/.cursor/agents/`. The repo's markdown agent layout matches the vendor-documented model.
+- Sources: [Cursor agents](https://docs.cursor.com/agent/modes); Target adapters (`src/targets/adapters.ts`); Agent transform (`src/util/agent-transform.ts`)
 
 ### Local path {#cursor-agents-local}
 
@@ -39,23 +38,23 @@ This page is official-doc-first. Vendor docs are treated as authoritative. Curre
 - Path: ~/.cursor/agents
 
 Restrictions:
-- Cursor docs describe settings-managed custom modes with tool selection and instructions, not a documented `.cursor/agents` folder.
-- The repo currently maps this surface to markdown files under `.cursor/agents` and `~/.cursor/agents`.
+- Cursor documents subagents as specialized, independent AI instances in `.cursor/agents/` (project) and `~/.cursor/agents/` (global).
+- Subagents operate with isolated context and are delegated to by the parent agent.
 
 Notes:
-- Treat the paths and markdown format here as repo behavior layered on top of Cursor’s documented custom-mode feature.
+- The repo's file-based agent model matches Cursor's documented subagent directory layout.
 
 ## Gemini CLI
 
-- Target support: `undocumented`
+- Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#gemini-agents-local), [global](#gemini-agents-global)
 - Shared .agents support: `not documented`
 - Format: markdown
-- Reliability: Low
-- Evidence status: `implementation-only`
-- Evidence summary: No official Gemini CLI agent or subagent storage documentation was found during this audit; the `.gemini/agents` markdown surface is defined by the current repo adapters.
-- Sources: Target adapters (`src/targets/adapters.ts`); Agent transform (`src/util/agent-transform.ts`)
+- Reliability: Medium
+- Evidence status: `official+implementation`
+- Evidence summary: Gemini CLI officially documents subagents ("specialists") as Markdown files with YAML frontmatter in `.gemini/agents/` and `~/.gemini/agents/`. The repo's adapter matches this layout.
+- Sources: [Gemini CLI agents](https://geminicli.com/docs/agents); Target adapters (`src/targets/adapters.ts`); Agent transform (`src/util/agent-transform.ts`)
 
 ### Local path {#gemini-agents-local}
 
@@ -68,10 +67,12 @@ Notes:
 - Path: ~/.gemini/agents
 
 Restrictions:
-- No official Gemini CLI page was found that documents a dedicated custom-agent directory or on-disk agent file format.
+- Gemini CLI documents subagents as Markdown files with YAML frontmatter defining `name`, `description`, `model`, `tools`, and `mcpServers`.
+- Subagents operate with isolated context to prevent context rot.
+- Management via `/agents list`, `/agents reload`, and `/agents config` commands within the CLI.
 
 Notes:
-- The `.gemini/agents` paths are current repo conventions, not vendor-documented folders.
+- Gemini also supports `.agents/` as a compatibility alias for agents discovery alongside `.gemini/`, though this is less prominently documented than the skills compatibility path.
 
 ## Codex
 
@@ -154,27 +155,7 @@ Restrictions:
 Notes:
 None.
 
-## Openskills
-
-- Target support: `unsupported`
-- Repo support: `unsupported`
-- Scopes: Undocumented
-- Shared .agents support: `unsupported`
-- Format: —
-- Reliability: Low
-- Evidence status: `implementation-only`
-- Evidence summary: The current repo target model marks Openskills as not supporting agent sync.
-- Sources: Target adapters (`src/targets/adapters.ts`)
-
-No scope-specific paths captured.
-
-Restrictions:
-- Unsupported in the current target model.
-
-Notes:
-None.
-
-## Agentskills (Vercel Labs)
+## Agentskills
 
 - Target support: `unsupported`
 - Repo support: `unsupported`

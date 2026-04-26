@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-04-12)
 Phase: 1 of 4 (Reference Manifest Foundation)
 Plan: 0 of 2 in current phase
 Status: Ready to plan
-Last activity: 2026-04-25 - Completed quick task 260425-qso: Avoid credential prompts for missing GitHub skill update repos
+Last activity: 2026-04-26 - Completed quick task 260426-c6l: Implement shared same-name conflict handling across ap artifacts
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -67,6 +67,8 @@ None yet.
 | 260425-q8r | Keep failed repo entries visible in parallel skills update progress | 2026-04-25 | 84e7c9c | [260425-q8r-keep-failed-repo-entries-visible-in-para](./quick/260425-q8r-keep-failed-repo-entries-visible-in-para/) |
 | 260425-qo9 | Clean duplicate credential notice and remote prefix in skills update progress | 2026-04-25 | 8c792b8 | [260425-qo9-clean-duplicate-credential-notice-and-re](./quick/260425-qo9-clean-duplicate-credential-notice-and-re/) |
 | 260425-qso | Avoid credential prompts for missing GitHub skill update repos | 2026-04-25 | 8f8a9a1 | [260425-qso-avoid-credential-prompts-for-missing-git](./quick/260425-qso-avoid-credential-prompts-for-missing-git/) |
+| 260425-t1z | Fix skills update repeatedly reporting updated skills | 2026-04-25 | pending | [260425-t1z-fix-skills-update-repeatedly-reporting-u](./quick/260425-t1z-fix-skills-update-repeatedly-reporting-u/) |
+| 260426-c6l | Implement shared same-name conflict handling across ap artifacts | 2026-04-26 | pending | [260426-c6l-implement-shared-same-name-conflict-hand](./quick/260426-c6l-implement-shared-same-name-conflict-hand/) |
 
 ## Session Continuity
 

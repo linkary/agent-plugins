@@ -36,6 +36,14 @@ export async function cmdAgentsUpdate(positionals: string[], flags: ParsedFlags,
     process.stdout.write('(no repos tracked - use "ap agents add <repo>" to add agents from GitHub)\n');
     return 0;
   }
+  const activeRepoKeys = repoKeys.filter((repoKey) =>
+    repos[repoKey]!.skills.some((agentName) => isCurrentAgentRepoSource(registry, agentName, repoKey)),
+  );
+
+  if (activeRepoKeys.length === 0) {
+    process.stdout.write('All agents up-to-date.\n');
+    return 0;
+  }
 
   let totalUpdated = 0;
   const tempDirs: string[] = [];
@@ -51,9 +59,9 @@ export async function cmdAgentsUpdate(positionals: string[], flags: ParsedFlags,
   const allUpdates: PendingUpdate[] = [];
 
   try {
-    process.stdout.write(`Checking ${repoKeys.length} repo(s)...\n`);
+    process.stdout.write(`Checking ${activeRepoKeys.length} repo(s)...\n`);
 
-    for (const repoKey of repoKeys) {
+    for (const repoKey of activeRepoKeys) {
       const repo = repos[repoKey]!;
 
       const tmpDir = path.join(os.tmpdir(), `apd-update-agent-${Math.random().toString(36).slice(2, 8)}`);
@@ -79,7 +87,8 @@ export async function cmdAgentsUpdate(positionals: string[], flags: ParsedFlags,
         if (stat.isDirectory()) searchDir = agentsSubdir;
       }
 
-      for (const agentName of repo.skills) {
+      const agentNames = repo.skills.filter((agentName) => isCurrentAgentRepoSource(registry, agentName, repoKey));
+      for (const agentName of agentNames) {
         const srcDir = path.join(searchDir, agentName);
         if (!(await pathExists(srcDir)) || !(await isAgentDir(srcDir))) {
           allUpdates.push({ agentName, srcDir, repoKey, status: 'missing', repoUrl: repo.url });
@@ -173,6 +182,15 @@ export async function cmdAgentsUpdate(positionals: string[], flags: ParsedFlags,
   if (!dryRun && totalUpdated > 0) await saveRegistry(registry);
   process.stdout.write(`\n${totalUpdated} agent(s) updated.\n`);
   return 0;
+}
+
+function isCurrentAgentRepoSource(
+  registry: Awaited<ReturnType<typeof loadRegistry>>,
+  agentName: string,
+  repoKey: string,
+): boolean {
+  const record = registry.agents?.[agentName];
+  return Boolean(record?.source.type === 'git' && normalizeRepoUrl(record.source.url) === repoKey);
 }
 
 async function updateSpecificAgents(

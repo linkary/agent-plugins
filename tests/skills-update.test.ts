@@ -9,6 +9,7 @@ let repoFixture = '';
 let cloneFailures = new Set<string>();
 let credentialFailures = new Set<string>();
 let missingRepos = new Set<string>();
+let cloneAttempts: string[] = [];
 let originalFetch: typeof globalThis.fetch | undefined;
 
 mock.module('../src/util/git-utils.js', () => ({
@@ -27,6 +28,7 @@ mock.module('../src/util/git-utils.js', () => ({
   runGitCapture: async (args: string[], opts?: { env?: NodeJS.ProcessEnv }) => {
     if (args.includes('clone')) {
       const repoUrl = args[args.length - 2]!;
+      cloneAttempts.push(repoUrl);
       if (cloneFailures.has(repoUrl) || missingRepos.has(repoUrl) || (credentialFailures.has(repoUrl) && !opts?.env?.GIT_ASKPASS)) {
         return {
           code: 128,
@@ -84,6 +86,7 @@ describe('skills update', () => {
     cloneFailures = new Set<string>();
     credentialFailures = new Set<string>();
     missingRepos = new Set<string>();
+    cloneAttempts = [];
     originalFetch = globalThis.fetch;
     globalThis.fetch = (async (input: string | URL | Request) => {
       const url = String(input);
@@ -201,6 +204,26 @@ describe('skills update', () => {
     const updated = await fs.readFile(path.join(tmpHome, 'skills', 'skill-a', 'SKILL.md'), 'utf8');
     expect(updated).toBe('new-a');
     expect(stderr).toContain(`Failed to clone ${badRepoUrl}`);
+  });
+
+  it('ignores duplicate repo entries that are not the skill current source', async () => {
+    const staleRepoUrl = 'https://example.com/stale-skills';
+
+    const now = '2024-01-01T00:00:00Z';
+    const registryPath = path.join(tmpHome, 'registry.json');
+    const registry = JSON.parse(await fs.readFile(registryPath, 'utf8'));
+    registry.repos[normalizeRepoUrl(staleRepoUrl)] = {
+      url: staleRepoUrl,
+      skills: ['skill-a'],
+      addedAt: now,
+      updatedAt: now,
+    };
+    await fs.writeFile(registryPath, JSON.stringify(registry, null, 2));
+
+    const code = await cmdSkillsUpdate([], { all: true }, { cwd: tmpHome });
+    expect(code).toBe(0);
+    expect(cloneAttempts).toContain(repoUrl);
+    expect(cloneAttempts).not.toContain(staleRepoUrl);
   });
 
   it('does not print a duplicate credentials-required line before non-interactive failure', async () => {

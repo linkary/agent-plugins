@@ -15,6 +15,7 @@ import type { ParsedFlags } from '../../util/options.js';
 import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
 import { formatTargetReviewLine } from '../../util/review-display.js';
+import { removeGitSourceTracking } from '../../util/source-conflict.js';
 
 const IGNORED_DIR_NAMES = ['.git'];
 
@@ -322,13 +323,15 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
     
     // Update registry/state
     const now = new Date().toISOString();
-    registry.skills[targetName] = registry.skills[targetName] ?? {
+    if (targetName === name) {
+      removeGitSourceTracking({ registry, kind: 'skills', name: targetName, source: registry.skills[targetName]?.source });
+    }
+    registry.skills[targetName] = {
       name: targetName,
-      addedAt: now,
+      addedAt: registry.skills[targetName]?.addedAt ?? now,
       updatedAt: now,
       source: { type: 'collected', from: { target: adapter.id, scope, path: srcDir } },
     };
-    registry.skills[targetName]!.updatedAt = now;
     context.skills[name] = { hash: srcHash, syncedAt: now };
     
     process.stdout.write(`Collected: ${targetName}\n`);

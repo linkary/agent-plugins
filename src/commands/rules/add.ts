@@ -8,6 +8,14 @@ import { InvalidRulePathError, isRuleFileName, normalizeRulePath, scanRuleFileEn
 import { ANSI } from '../../util/ansi.js';
 import { expandGitHubShorthand, guessNameFromGitUrl, isGitHubShorthand, isProbablyGitUrl, runGit } from '../../util/git-utils.js';
 import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
+import { promptChoice } from '../../util/prompt.js';
+import {
+  classifySourceConflict,
+  removeGitSourceTracking,
+  sourceLabel,
+  suggestAliasName,
+  uniqueAliasName,
+} from '../../util/source-conflict.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
@@ -26,6 +34,12 @@ function withPreferredName(entry: AddRuleEntry, nameFlag: string | undefined): A
 
 function isInvalidRulePathError(err: unknown): err is InvalidRulePathError {
   return err instanceof InvalidRulePathError;
+}
+
+function suggestRuleAlias(name: string, source: Parameters<typeof suggestAliasName>[1]): string {
+  const ext = path.extname(name) || '.mdc';
+  const base = name.slice(0, name.length - ext.length);
+  return normalizeRulePath(`${suggestAliasName(base, source)}${ext}`);
 }
 
 async function collectRulesFromLocalSource(source: string): Promise<AddRuleEntry[]> {
@@ -56,6 +70,7 @@ export async function cmdRulesAdd(positionals: string[], flags: ParsedFlags, _ct
   const refFlag = typeof flags.ref === 'string' ? flags.ref : undefined;
   const dryRun = flags['dry-run'] === true;
   const force = flags.force === true || flags.overwrite === true;
+  const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
 
   if (isGitHubShorthand(source)) {
     source = expandGitHubShorthand(source);
@@ -108,6 +123,7 @@ export async function cmdRulesAdd(positionals: string[], flags: ParsedFlags, _ct
       registry.ruleRepos ??= {};
       const now = new Date().toISOString();
       const addedNames: string[] = [];
+      const incomingSource = { type: 'git' as const, url: source, ref: refFlag };
 
       for (const entry of entries) {
         let name: string;
@@ -120,36 +136,72 @@ export async function cmdRulesAdd(positionals: string[], flags: ParsedFlags, _ct
           }
           throw err;
         }
-        const dest = getCentralRulePath(name);
+        let targetName = name;
+        let dest = getCentralRulePath(targetName);
         const destExists = await pathExists(dest);
+        const existingRecord = registry.rules[targetName];
 
         if (destExists) {
           const [srcHash, destHash] = await Promise.all([computeItemHash(entry.absolutePath), computeItemHash(dest)]);
           if (srcHash === destHash) {
-            process.stdout.write(`Up-to-date: ${name}\n`);
+            process.stdout.write(`Up-to-date: ${targetName}\n`);
             continue;
           }
-          if (!force) {
-            process.stderr.write(`Rule already exists: ${name} (use --force to overwrite)\n`);
+          const conflictStatus = classifySourceConflict({
+            existingSource: existingRecord?.source,
+            incomingSource,
+            contentStatus: 'update',
+          });
+          if (conflictStatus === 'different-source conflict' && !force) {
+            if (interactive) {
+              const action = await promptChoice({
+                message: `Rule "${targetName}" already exists from ${sourceLabel(existingRecord?.source)}. Incoming source: ${sourceLabel(incomingSource)}.`,
+                options: [
+                  { key: 's', label: 'Skip' },
+                  { key: 'r', label: 'Replace existing' },
+                  { key: 'a', label: `Install as alias (${suggestRuleAlias(targetName, incomingSource)})` },
+                ],
+              });
+              if (action === 's') {
+                process.stdout.write(`Skipped: ${targetName}\n`);
+                continue;
+              }
+              if (action === 'a') {
+                targetName = await uniqueAliasName(suggestRuleAlias(targetName, incomingSource), async (candidate) =>
+                  pathExists(getCentralRulePath(candidate)),
+                );
+                dest = getCentralRulePath(targetName);
+              }
+            } else {
+              process.stderr.write(
+                `Rule already exists from a different source: ${targetName} (${sourceLabel(existingRecord?.source)}). Use --force to replace or --name <alias> for a single-rule source.\n`,
+              );
+              continue;
+            }
+          } else if (!force && conflictStatus !== 'same-source update') {
+            process.stderr.write(`Rule already exists: ${targetName} (use --force to overwrite)\n`);
             continue;
           }
         }
 
         if (dryRun) {
-          process.stdout.write(`[dry-run] add ${name} -> ${dest}\n`);
+          process.stdout.write(`[dry-run] add ${targetName} -> ${dest}\n`);
           continue;
         }
 
         await ensureDir(path.dirname(dest));
         await copyItem(entry.absolutePath, dest);
-        registry.rules[name] = {
-          name,
-          addedAt: registry.rules[name]?.addedAt ?? now,
+        if (targetName === name) {
+          removeGitSourceTracking({ registry, kind: 'rules', name: targetName, source: existingRecord?.source });
+        }
+        registry.rules[targetName] = {
+          name: targetName,
+          addedAt: registry.rules[targetName]?.addedAt ?? now,
           updatedAt: now,
-          source: { type: 'git', url: source, ref: refFlag },
+          source: incomingSource,
         };
-        addedNames.push(name);
-        process.stdout.write(`Added: ${name}\n`);
+        addedNames.push(targetName);
+        process.stdout.write(`Added: ${targetName}\n`);
       }
 
       if (!dryRun && addedNames.length > 0) {
@@ -199,6 +251,7 @@ export async function cmdRulesAdd(positionals: string[], flags: ParsedFlags, _ct
   const registry = await loadRegistry();
   registry.rules ??= {};
   const now = new Date().toISOString();
+  const incomingSource = { type: 'local' as const, path: path.resolve(source) };
 
   for (const entry of entries) {
     let name: string;
@@ -211,34 +264,70 @@ export async function cmdRulesAdd(positionals: string[], flags: ParsedFlags, _ct
       }
       throw err;
     }
-    const dest = getCentralRulePath(name);
+    let targetName = name;
+    let dest = getCentralRulePath(targetName);
     const destExists = await pathExists(dest);
+    const existingRecord = registry.rules[targetName];
     if (destExists) {
       const [srcHash, destHash] = await Promise.all([computeItemHash(entry.absolutePath), computeItemHash(dest)]);
       if (srcHash === destHash) {
-        process.stdout.write(`Up-to-date: ${name}\n`);
+        process.stdout.write(`Up-to-date: ${targetName}\n`);
         continue;
       }
-      if (!force) {
-        process.stderr.write(`Rule already exists: ${name} (use --force to overwrite)\n`);
+      const conflictStatus = classifySourceConflict({
+        existingSource: existingRecord?.source,
+        incomingSource,
+        contentStatus: 'update',
+      });
+      if (conflictStatus === 'different-source conflict' && !force) {
+        if (interactive) {
+          const action = await promptChoice({
+            message: `Rule "${targetName}" already exists from ${sourceLabel(existingRecord?.source)}. Incoming source: ${sourceLabel(incomingSource)}.`,
+            options: [
+              { key: 's', label: 'Skip' },
+              { key: 'r', label: 'Replace existing' },
+              { key: 'a', label: `Install as alias (${suggestRuleAlias(targetName, incomingSource)})` },
+            ],
+          });
+          if (action === 's') {
+            process.stdout.write(`Skipped: ${targetName}\n`);
+            continue;
+          }
+          if (action === 'a') {
+            targetName = await uniqueAliasName(suggestRuleAlias(targetName, incomingSource), async (candidate) =>
+              pathExists(getCentralRulePath(candidate)),
+            );
+            dest = getCentralRulePath(targetName);
+          }
+        } else {
+          process.stderr.write(
+            `Rule already exists from a different source: ${targetName} (${sourceLabel(existingRecord?.source)}). Use --force to replace or --name <alias>.\n`,
+          );
+          continue;
+        }
+      } else if (!force && conflictStatus !== 'same-source update') {
+        process.stderr.write(`Rule already exists: ${targetName} (use --force to overwrite)\n`);
         continue;
       }
     }
 
     if (dryRun) {
-      process.stdout.write(`[dry-run] add ${name} -> ${dest}\n`);
+      process.stdout.write(`[dry-run] add ${targetName} -> ${dest}\n`);
       continue;
     }
 
     await ensureDir(path.dirname(dest));
     await copyItem(entry.absolutePath, dest);
-    registry.rules[name] = {
-      name,
-      addedAt: registry.rules[name]?.addedAt ?? now,
+    if (targetName === name) {
+      removeGitSourceTracking({ registry, kind: 'rules', name: targetName, source: existingRecord?.source });
+    }
+    registry.rules[targetName] = {
+      name: targetName,
+      addedAt: registry.rules[targetName]?.addedAt ?? now,
       updatedAt: now,
-      source: { type: 'local', path: path.resolve(source) },
+      source: incomingSource,
     };
-    process.stdout.write(`Added: ${name}\n`);
+    process.stdout.write(`Added: ${targetName}\n`);
   }
 
   if (!dryRun) await saveRegistry(registry);

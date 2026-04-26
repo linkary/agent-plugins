@@ -148,6 +148,14 @@ export async function cmdCommandsUpdate(positionals: string[], flags: ParsedFlag
     process.stdout.write('(no command repos tracked - use "ap commands add <repo>" to add commands from GitHub)\n');
     return 0;
   }
+  const activeRepoKeys = repoKeys.filter((repoKey) =>
+    repos[repoKey]!.skills.some((commandName) => isCurrentCommandRepoSource(registry, commandName, repoKey)),
+  );
+
+  if (activeRepoKeys.length === 0) {
+    process.stdout.write('All commands up-to-date.\n');
+    return 0;
+  }
 
   let totalUpdated = 0;
   const tempDirs: string[] = [];
@@ -166,9 +174,9 @@ export async function cmdCommandsUpdate(positionals: string[], flags: ParsedFlag
   const allUpdates: PendingUpdate[] = [];
 
   try {
-    process.stdout.write(`Checking ${repoKeys.length} repo(s)...\n`);
+    process.stdout.write(`Checking ${activeRepoKeys.length} repo(s)...\n`);
 
-    for (const repoKey of repoKeys) {
+    for (const repoKey of activeRepoKeys) {
       const repo = repos[repoKey]!;
       const tmpDir = path.join(os.tmpdir(), `apd-cmd-update-${Math.random().toString(36).slice(2, 8)}`);
       tempDirs.push(tmpDir);
@@ -196,7 +204,8 @@ export async function cmdCommandsUpdate(positionals: string[], flags: ParsedFlag
       const scanned = await scanCommandsInDir(searchDir);
       const scannedMap = new Map(scanned.map((c) => [c.name, c]));
 
-      for (const commandName of repo.skills) {
+      const commandNames = repo.skills.filter((commandName) => isCurrentCommandRepoSource(registry, commandName, repoKey));
+      for (const commandName of commandNames) {
         const scannedCmd = scannedMap.get(commandName);
         if (!scannedCmd) {
           allUpdates.push({
@@ -310,6 +319,15 @@ export async function cmdCommandsUpdate(positionals: string[], flags: ParsedFlag
   if (!dryRun && totalUpdated > 0) await saveRegistry(registry);
   process.stdout.write(`\n${totalUpdated} command(s) updated.\n`);
   return 0;
+}
+
+function isCurrentCommandRepoSource(
+  registry: Awaited<ReturnType<typeof loadRegistry>>,
+  commandName: string,
+  repoKey: string,
+): boolean {
+  const record = registry.commands?.[commandName];
+  return Boolean(record?.source.type === 'git' && normalizeRepoUrl(record.source.url) === repoKey);
 }
 
 async function updateSpecificCommands(

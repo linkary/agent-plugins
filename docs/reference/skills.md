@@ -1,18 +1,17 @@
 # Skills Reference
 
-Reviewed: 2026-04-17
+Reviewed: 2026-04-26
 
 This page is official-doc-first. Vendor docs are treated as authoritative. Current repo behavior is only used to fill gaps and is labeled in the evidence status.
 
 | Target | Support | Repo Support | Scopes | Shared .agents | Format | Reliability |
 | --- | --- | --- | --- | --- | --- | --- |
 | [Cursor](https://agentskills.io/specification) | supported | managed | [local](#cursor-skills-local), [global](#cursor-skills-global) | not documented | package | Low |
-| [Gemini CLI](https://agentskills.io/specification) | supported | managed | [local](#gemini-skills-local), [global](#gemini-skills-global), [shared](#gemini-skills-shared) | repo-only | package | Low |
+| [Gemini CLI](https://agentskills.io/specification) | supported | managed | [local](#gemini-skills-local), [global](#gemini-skills-global), [shared](#gemini-skills-shared) | compatibility | package | Low |
 | [Codex](https://developers.openai.com/codex/skills) | supported | documented-only | [local](#codex-skills-local), [global](#codex-skills-global) | native | package | High |
 | [Claude Code](https://agentskills.io/specification) | supported | managed | [local](#claude-code-skills-local), [global](#claude-code-skills-global) | not documented | package | High |
 | [Google Antigravity](https://agentskills.io/specification) | supported | managed | [local](#antigravity-skills-local), [global](#antigravity-skills-global) | not documented | package | Low |
-| [Openskills](https://agentskills.io/specification) | supported | managed | [local](#openskills-skills-local), [global](#openskills-skills-global) | unsupported | package | Low |
-| Agentskills (Vercel Labs) | supported | managed | [local](#agents-skills-local), [global](#agents-skills-global), [shared](#agents-skills-shared) | repo-only | package | Low |
+| Agentskills | supported | managed | [local](#agents-skills-local), [global](#agents-skills-global), [shared](#agents-skills-shared) | repo-only | package | Low |
 | [OpenCode](https://opencode.ai/docs/skills) | supported | managed | [local](#opencode-skills-local), [global](#opencode-skills-global), [shared](#opencode-skills-shared) | compatibility | package | High |
 | [Qoder](https://docs.qoder.com/cli/Skills) | supported | managed | [local](#qoder-skills-local), [global](#qoder-skills-global) | not documented | package | High |
 
@@ -49,12 +48,12 @@ None.
 - Target support: `supported`
 - Repo support: `managed`
 - Scopes: [local](#gemini-skills-local), [global](#gemini-skills-global), [shared](#gemini-skills-shared)
-- Shared .agents support: `repo-only`
+- Shared .agents support: `compatibility`
 - Format: package
 - Reliability: Low
-- Evidence status: `implementation-only`
-- Evidence summary: Current repo adapters define skill sync directories for this target.
-- Sources: [Agent Skills specification](https://agentskills.io/specification); Target adapters (`src/targets/adapters.ts`)
+- Evidence status: `official+implementation`
+- Evidence summary: Gemini CLI officially documents `.agents/skills/` and `~/.agents/skills/` as compatibility discovery paths alongside native `.gemini/skills/`. The repo's organize logic uses `.agents/skills` as a shared destination for Gemini-compatible skills.
+- Sources: [Agent Skills specification](https://agentskills.io/specification); [Gemini CLI skills](https://geminicli.com/docs/skills); Target adapters (`src/targets/adapters.ts`)
 
 ### Local path {#gemini-skills-local}
 
@@ -70,17 +69,17 @@ None.
 
 - Scope: `shared`
 - Path: local owner: <project>/.agents/skills; global owner: ~/.agents/skills
-- Note: Organize can promote exact duplicate Gemini skills into the shared .agents/skills destination.
-- Path evidence status: `implementation-only`
+- Note: Gemini CLI discovers skills from `.agents/skills/` as a compatibility path. Organize can also promote exact duplicate Gemini skills into this shared destination.
+- Path evidence status: `official+implementation`
 - Path reliability: Low
-- Path evidence summary: The repo can consolidate exact duplicate Gemini skills into the shared .agents/skills destination.
-- Path sources: Shared-skill compatibility map (`src/util/organize-compat.ts`); Skills organize flow (`src/commands/skills/organize.ts`); Skills organize tests (`tests/skills-organize.test.ts`)
+- Path evidence summary: Gemini CLI officially documents `.agents/skills` as a compatibility discovery path. The repo can also consolidate exact duplicate Gemini skills into the shared `.agents/skills` destination.
+- Path sources: [Gemini CLI skills](https://geminicli.com/docs/skills); Shared-skill compatibility map (`src/util/organize-compat.ts`); Skills organize flow (`src/commands/skills/organize.ts`); Skills organize tests (`tests/skills-organize.test.ts`)
 
 Restrictions:
-- Gemini CLI does not currently document `.agents/skills` or `~/.agents/skills` as native or compatibility skill paths.
+- Gemini CLI documents `.agents/skills` as a compatibility discovery path, not its primary native storage root.
 
 Notes:
-- The shared `.agents/skills` destination here is repo compatibility behavior from skills organize, not a vendor-documented Gemini storage location.
+- The shared `.agents/skills` destination is both a vendor-documented compatibility path and the repo's organize promotion target.
 
 ## Codex
 
@@ -169,35 +168,7 @@ None.
 Notes:
 None.
 
-## Openskills
-
-- Target support: `supported`
-- Repo support: `managed`
-- Scopes: [local](#openskills-skills-local), [global](#openskills-skills-global)
-- Shared .agents support: `unsupported`
-- Format: package
-- Reliability: Low
-- Evidence status: `implementation-only`
-- Evidence summary: Current repo adapters define skill sync directories for this target.
-- Sources: [Agent Skills specification](https://agentskills.io/specification); Target adapters (`src/targets/adapters.ts`)
-
-### Local path {#openskills-skills-local}
-
-- Scope: `local`
-- Path: <project>/.agent/skills
-
-### Global path {#openskills-skills-global}
-
-- Scope: `global`
-- Path: ~/.agent/skills
-
-Restrictions:
-None.
-
-Notes:
-None.
-
-## Agentskills (Vercel Labs)
+## Agentskills
 
 - Target support: `supported`
 - Repo support: `managed`

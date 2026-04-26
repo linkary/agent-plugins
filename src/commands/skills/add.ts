@@ -5,10 +5,17 @@ import { ensureCentralStore, getCentralSkillPath } from '../../core/skill-store.
 import { loadRegistry, saveRegistry } from '../../core/registry.js';
 import { ensureDir, listDirNames, pathExists, removeDir } from '../../util/fs-utils.js';
 import { copyDir } from '../../util/copy-dir.js';
-import { promptMultiSelect } from '../../util/prompt.js';
+import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import { detectSkillStatus, type SkillStatus } from '../../util/skill-compare.js';
 import { isProbablyGitUrl, isGitHubShorthand, expandGitHubShorthand, guessNameFromGitUrl, runGit, isSkillDir } from '../../util/git-utils.js';
 import { ANSI } from '../../util/ansi.js';
+import {
+  classifySourceConflict,
+  removeGitSourceTracking,
+  sourceLabel,
+  suggestAliasName,
+  uniqueAliasName,
+} from '../../util/source-conflict.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
@@ -147,39 +154,79 @@ export async function cmdSkillsAdd(positionals: string[], flags: ParsedFlags, _c
       const registry = await loadRegistry();
       const now = new Date().toISOString();
 
+      const incomingSource = { type: 'git' as const, url: source, ref: refFlag };
       const addedSkillNames: string[] = [];
 
       for (const { name, srcDir } of skillsToCopy) {
-        const dest = getCentralSkillPath(name);
+        let targetName = name;
+        let dest = getCentralSkillPath(targetName);
         const destExists = await pathExists(dest);
+        const existingRecord = registry.skills[targetName];
+        const contentStatus = (await detectSkillStatus(srcDir, dest)).status;
+        const conflictStatus = classifySourceConflict({
+          existingSource: existingRecord?.source,
+          incomingSource,
+          contentStatus,
+        });
+
+        if (conflictStatus === 'different-source conflict' && !force) {
+          if (interactive) {
+            const action = await promptChoice({
+              message: `Skill "${targetName}" already exists from ${sourceLabel(existingRecord?.source)}. Incoming source: ${sourceLabel(incomingSource)}.`,
+              options: [
+                { key: 's', label: 'Skip' },
+                { key: 'r', label: 'Replace existing' },
+                { key: 'a', label: `Install as alias (${suggestAliasName(targetName, incomingSource)})` },
+              ],
+            });
+            if (action === 's') {
+              process.stdout.write(`Skipped: ${targetName}\n`);
+              continue;
+            }
+            if (action === 'a') {
+              targetName = await uniqueAliasName(suggestAliasName(targetName, incomingSource), async (candidate) =>
+                pathExists(getCentralSkillPath(candidate)),
+              );
+              dest = getCentralSkillPath(targetName);
+            }
+          } else {
+            process.stderr.write(
+              `Skill already exists from a different source: ${targetName} (${sourceLabel(existingRecord?.source)}). Use --force to replace or --name <alias> for a single-skill repo.\n`,
+            );
+            continue;
+          }
+        }
 
         // In interactive mode, user explicitly selected this skill, so no warning needed
         // In non-interactive mode, we already filtered out replace items unless --force
-        if (destExists && !force && !interactive) {
-          process.stderr.write(`Skill already exists: ${name} (use --force to overwrite)\n`);
+        if ((await pathExists(dest)) && !force && !interactive && conflictStatus !== 'same-source update') {
+          process.stderr.write(`Skill already exists: ${targetName} (use --force to overwrite)\n`);
           continue;
         }
 
         if (dryRun) {
-          process.stdout.write(`[dry-run] add ${name} -> ${dest}\n`);
+          process.stdout.write(`[dry-run] add ${targetName} -> ${dest}\n`);
           continue;
         }
 
-        if (destExists) {
+        if (await pathExists(dest)) {
+          if (targetName === name) {
+            removeGitSourceTracking({ registry, kind: 'skills', name, source: existingRecord?.source });
+          }
           await removeDir(dest);
         }
 
         await copyDir(srcDir, dest, { ignoreNames: ['.git'] });
 
-        registry.skills[name] = {
-          name,
-          addedAt: registry.skills[name]?.addedAt ?? now,
+        registry.skills[targetName] = {
+          name: targetName,
+          addedAt: registry.skills[targetName]?.addedAt ?? now,
           updatedAt: now,
-          source: { type: 'git', url: source, ref: refFlag },
+          source: incomingSource,
         };
-        addedSkillNames.push(name);
+        addedSkillNames.push(targetName);
 
-        process.stdout.write(`Added: ${name}\n`);
+        process.stdout.write(`Added: ${targetName}\n`);
       }
 
       // Save repo record for tracking
@@ -227,35 +274,75 @@ export async function cmdSkillsAdd(positionals: string[], flags: ParsedFlags, _c
   }
 
   const resolvedName = nameFlag ?? path.basename(source);
-  const dest = getCentralSkillPath(resolvedName);
+  let targetName = resolvedName;
+  let dest = getCentralSkillPath(targetName);
 
   const destExists = await pathExists(dest);
-  if (destExists && !force) {
-    process.stderr.write(`Skill already exists: ${resolvedName}\nUse --force to overwrite.\n`);
-    return 1;
+  const incomingSource = { type: 'local' as const, path: srcPath };
+  const registry = await loadRegistry();
+  const existingRecord = registry.skills[targetName];
+  if (destExists) {
+    const contentStatus = (await detectSkillStatus(srcPath, dest)).status;
+    const conflictStatus = classifySourceConflict({
+      existingSource: existingRecord?.source,
+      incomingSource,
+      contentStatus,
+    });
+    if (conflictStatus === 'different-source conflict' && !force) {
+      if (interactive) {
+        const action = await promptChoice({
+          message: `Skill "${targetName}" already exists from ${sourceLabel(existingRecord?.source)}. Incoming source: ${sourceLabel(incomingSource)}.`,
+          options: [
+            { key: 's', label: 'Skip' },
+            { key: 'r', label: 'Replace existing' },
+            { key: 'a', label: `Install as alias (${suggestAliasName(targetName, incomingSource)})` },
+          ],
+        });
+        if (action === 's') {
+          process.stdout.write(`Skipped: ${targetName}\n`);
+          return 0;
+        }
+        if (action === 'a') {
+          targetName = await uniqueAliasName(suggestAliasName(targetName, incomingSource), async (candidate) =>
+            pathExists(getCentralSkillPath(candidate)),
+          );
+          dest = getCentralSkillPath(targetName);
+        }
+      } else {
+        process.stderr.write(
+          `Skill already exists from a different source: ${targetName} (${sourceLabel(existingRecord?.source)}). Use --force to replace or --name <alias>.\n`,
+        );
+        return 1;
+      }
+    } else if (!force && !interactive && conflictStatus !== 'same-source update') {
+      process.stderr.write(`Skill already exists: ${targetName}\nUse --force to overwrite.\n`);
+      return 1;
+    }
   }
 
   if (dryRun) {
-    process.stdout.write(`[dry-run] add ${resolvedName} -> ${dest}\n`);
+    process.stdout.write(`[dry-run] add ${targetName} -> ${dest}\n`);
     return 0;
   }
 
-  if (destExists) {
+  if (await pathExists(dest)) {
+    if (targetName === resolvedName) {
+      removeGitSourceTracking({ registry, kind: 'skills', name: targetName, source: existingRecord?.source });
+    }
     await removeDir(dest);
   }
 
   await copyDir(srcPath, dest, { ignoreNames: ['.git'] });
 
-  const registry = await loadRegistry();
   const now = new Date().toISOString();
-  registry.skills[resolvedName] = {
-    name: resolvedName,
-    addedAt: registry.skills[resolvedName]?.addedAt ?? now,
+  registry.skills[targetName] = {
+    name: targetName,
+    addedAt: registry.skills[targetName]?.addedAt ?? now,
     updatedAt: now,
-    source: { type: 'local', path: srcPath },
+    source: incomingSource,
   };
   await saveRegistry(registry);
 
-  process.stdout.write(`Added local skill: ${resolvedName}\n`);
+  process.stdout.write(`Added local skill: ${targetName}\n`);
   return 0;
 }

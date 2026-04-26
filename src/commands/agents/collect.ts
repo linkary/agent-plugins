@@ -32,6 +32,7 @@ import {
   readAgentSpecFromEntry,
   scanFilesystemAgents,
 } from '../../util/agent-transform.js';
+import { removeGitSourceTracking } from '../../util/source-conflict.js';
 
 type AgentEntry = {
   name: string;
@@ -299,13 +300,15 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
     );
 
     const now = new Date().toISOString();
-    registry.agents[targetName] = registry.agents[targetName] ?? {
+    if (targetName === name) {
+      removeGitSourceTracking({ registry, kind: 'agents', name: targetName, source: registry.agents[targetName]?.source });
+    }
+    registry.agents[targetName] = {
       name: targetName,
-      addedAt: now,
+      addedAt: registry.agents[targetName]?.addedAt ?? now,
       updatedAt: now,
       source: { type: 'collected', from: { target: adapter.id, scope, path: sourceEntry.path } },
     };
-    registry.agents[targetName]!.updatedAt = now;
     context.agents[name] = { hash: srcHash, syncedAt: now };
 
     process.stdout.write(`Collected: ${targetName}\n`);

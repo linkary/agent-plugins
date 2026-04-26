@@ -35,6 +35,14 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
     process.stdout.write('(no repos tracked - use "ap skills add <repo>" to add skills from GitHub)\n');
     return 0;
   }
+  const activeRepoKeys = repoKeys.filter((repoKey) =>
+    repos[repoKey]!.skills.some((skillName) => isCurrentRepoSkill(registry, skillName, repoKey)),
+  );
+
+  if (activeRepoKeys.length === 0) {
+    process.stdout.write('All skills up-to-date.\n');
+    return 0;
+  }
 
   let totalUpdated = 0;
   const tempDirs: string[] = [];
@@ -54,18 +62,24 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
 
   try {
     const preflight = await checkRepoCredentials(
-      repoKeys.map((repoKey) => ({ repoKey, url: repos[repoKey]!.url })),
+      activeRepoKeys.map((repoKey) => ({ repoKey, url: repos[repoKey]!.url })),
     );
-    const concurrency = Math.min(4, repoKeys.length);
+    const concurrency = Math.min(4, activeRepoKeys.length);
     if (!process.stdout.isTTY) {
-      process.stdout.write(`Checking ${repoKeys.length} repo(s)...\n`);
+      process.stdout.write(`Checking ${activeRepoKeys.length} repo(s)...\n`);
     }
 
-    const progress = createProgress({ total: repoKeys.length, label: 'repos', action: 'Checking', concurrency });
-    const repoResults = await mapLimit(repoKeys, concurrency, async (repoKey, _index, slot) => {
+    const progress = createProgress({ total: activeRepoKeys.length, label: 'repos', action: 'Checking', concurrency });
+    const repoResults = await mapLimit(activeRepoKeys, concurrency, async (repoKey, _index, slot) => {
       const repo = repos[repoKey]!;
       progress.start(slot, repo.url);
       try {
+        const skillNames = repo.skills.filter((skillName) => isCurrentRepoSkill(registry, skillName, repoKey));
+        if (skillNames.length === 0) {
+          progress.finishSlot(slot, 'checked', repo.url);
+          return { updates: [] as PendingUpdate[] };
+        }
+
         const preflightError = preflight.failures.get(repoKey);
         if (preflightError) {
           progress.finishSlot(slot, 'failed', repo.url, summarizeFailure(preflightError, repo.url));
@@ -120,7 +134,7 @@ export async function cmdSkillsUpdate(positionals: string[], flags: ParsedFlags,
         }
 
         const updates: PendingUpdate[] = [];
-        for (const skillName of repo.skills) {
+        for (const skillName of skillNames) {
           const srcDir = path.join(searchDir, skillName);
           if (!(await pathExists(srcDir)) || !(await isSkillDir(srcDir))) {
             updates.push({ skillName, srcDir, repoKey, status: 'missing', repoUrl: repo.url });
@@ -275,6 +289,19 @@ type GitCredential = {
   username: string;
   password: string;
 };
+
+function isCurrentRepoSkill(
+  registry: Awaited<ReturnType<typeof loadRegistry>>,
+  skillName: string,
+  repoKey: string,
+): boolean {
+  const record = registry.skills[skillName];
+  if (!record || record.source.type !== 'git') {
+    return false;
+  }
+
+  return normalizeRepoUrl(record.source.url) === repoKey;
+}
 
 function nonInteractiveGitEnv(): NodeJS.ProcessEnv {
   return {
