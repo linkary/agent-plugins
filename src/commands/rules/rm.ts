@@ -20,6 +20,7 @@ import {
   filterRuleAdapters,
   getAdapters,
   getColoredLabel,
+  isQoderFamily,
   resolveAdapter,
   type TargetId,
 } from '../../targets/adapters.js';
@@ -201,7 +202,7 @@ async function removeFromTarget(
 
   // 全局 → item 级移除
   if (scope === 'global') {
-    if (adapter.id === 'qoder') {
+    if (isQoderFamily(adapter.id)) {
       process.stderr.write('Qoder global rules are not supported. Use --scope local.\n');
       return 1;
     }

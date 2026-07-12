@@ -19,6 +19,8 @@ mock.module('../src/util/prompt.js', () => ({
   promptSelect: async () => 'no',
 }));
 
+const { cmdSkillsCollect } = await import('../src/commands/skills/collect.js');
+
 let tmpHomeDir = '';
 let tmpApgHome = '';
 let tmpProjectRoot = '';
@@ -64,12 +66,12 @@ describe('skills collect preview labels', () => {
     await fs.mkdir(sourceSkillDir, { recursive: true });
     await fs.writeFile(path.join(sourceSkillDir, 'SKILL.md'), '# alpha\n', 'utf8');
 
-    const { cmdSkillsCollect } = await import(`../src/commands/skills/collect.js?skills-collect-preview=${Math.random()}`);
     const code = await cmdSkillsCollect([], { target: 'cursor', scope: 'local', cwd: tmpProjectRoot, 'dry-run': true }, { cwd: tmpProjectRoot });
 
     expect(code).toBe(0);
     const options = capturedPromptParams?.options as Array<{ label: string; value: string }>;
     expect(options).toHaveLength(1);
-    expect(options[0]?.label.replace(/\x1b\[[0-9;]*m/g, '')).toBe('alpha -> Cursor (local) [new]');
+    const label = options[0]?.label.replace(/\x1b\[[0-9;]*m/g, '') ?? '';
+    expect(label).toMatch(/^alpha ← Cursor \(local\) \[new\] \d+ B \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
   });
 });

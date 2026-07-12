@@ -8,7 +8,7 @@
  *   Phase 4: Write — merge selected items into central store
  */
 import os from 'node:os';
-import { filterRuleAdapters, getAdapters, getColoredLabel } from '../../targets/adapters.js';
+import { filterRuleAdapters, getAdapters, getColoredLabel, isQoderFamily } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { ANSI } from '../../util/ansi.js';
 import {
@@ -64,7 +64,7 @@ export async function cmdRulesCollect(
   const allItems: RuleWithStatus[] = [];
 
   for (const adapter of selected) {
-    if (adapter.id === 'qoder') {
+    if (isQoderFamily(adapter.id)) {
       process.stderr.write(
         `${ANSI.dim}Skipped ${getColoredLabel(adapter)}: global rules are not supported; collect from --scope local is not implemented${ANSI.reset}\n`,
       );

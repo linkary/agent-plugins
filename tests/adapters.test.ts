@@ -13,9 +13,9 @@ describe('adapters', () => {
   const projectRoot = '/Users/test/myproject';
 
   describe('getAdapters', () => {
-    it('should return all 8 adapters', () => {
+    it('should return all 9 adapters', () => {
       const adapters = getAdapters();
-      expect(adapters.length).toBe(8);
+      expect(adapters.length).toBe(9);
       expect(adapters.map((a) => a.id)).toEqual([
         'cursor',
         'gemini',
@@ -25,6 +25,7 @@ describe('adapters', () => {
         'agents',
         'opencode',
         'qoder',
+        'qodercli',
       ]);
     });
 

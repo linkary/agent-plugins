@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 import { loadConfig } from '../../core/config.js';
-import { filterRuleAdapters, getAdapters, getColoredLabel } from '../../targets/adapters.js';
+import { filterRuleAdapters, getAdapters, getColoredLabel, isQoderFamily } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { scanRuleFileEntries } from '../../util/rule-utils.js';
@@ -40,7 +40,7 @@ export async function cmdRulesOrganize(positionals: string[], flags: ParsedFlags
 
   for (const adapter of selectedAdapters) {
     const targetConfig = config.targets[adapter.id];
-    const defaultScope = !scopeFlag && adapter.id === 'qoder' ? 'local' : targetConfig?.defaultScope;
+    const defaultScope = !scopeFlag && isQoderFamily(adapter.id) ? 'local' : targetConfig?.defaultScope;
     const { scope, projectRoot, homeDir } = await resolveTargetContext({
       scopeFlag,
       cwdFlag,

@@ -24,6 +24,8 @@ mock.module('../src/util/prompt.js', () => ({
   promptChoice: async () => 'c',
 }));
 
+const { cmdSkillsRemove } = await import('../src/commands/skills/rm.js');
+
 let tmpHomeDir = '';
 let tmpApgHome = '';
 let tmpProjectRoot = '';
@@ -76,7 +78,6 @@ describe('skills rm review confirmation', () => {
       throw new Error(`Unexpected prompt: ${message}`);
     };
 
-    const { cmdSkillsRemove } = await import(`../src/commands/skills/rm.js?skills-rm-central=${Math.random()}`);
     const code = await cmdSkillsRemove([], {}, { cwd: tmpProjectRoot });
 
     expect(code).toBe(0);
@@ -95,11 +96,10 @@ describe('skills rm review confirmation', () => {
       throw new Error(`Unexpected prompt: ${message}`);
     };
 
-    const { cmdSkillsRemove } = await import(`../src/commands/skills/rm.js?skills-rm-target=${Math.random()}`);
     const code = await cmdSkillsRemove([], { target: 'cursor', scope: 'local', cwd: tmpProjectRoot }, { cwd: tmpProjectRoot });
 
     expect(code).toBe(0);
     expect(capturedReviewParams?.message).toBe('Remove 1 skill(s) from targets?');
-    expect(capturedReviewParams?.detailLines).toEqual(['alpha -> Cursor (local)']);
+    expect(capturedReviewParams?.detailLines?.map((l: string) => l.replace(/\x1b\[[0-9;]*m/g, ''))).toEqual(['alpha → Cursor (local)']);
   });
 });

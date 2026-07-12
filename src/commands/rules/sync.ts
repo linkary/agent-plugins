@@ -9,7 +9,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { filterRuleAdapters, getAdapters, getColoredLabel } from '../../targets/adapters.js';
+import { filterRuleAdapters, getAdapters, getColoredLabel, isQoderFamily } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { ANSI } from '../../util/ansi.js';
 import {
@@ -205,7 +205,7 @@ export async function cmdRulesSync(
 
   for (const adapter of selected) {
     const targetConfig = config.targets[adapter.id];
-    const defaultScope = scopeFlag ? targetConfig?.defaultScope : adapter.id === 'qoder' ? 'local' : targetConfig?.defaultScope;
+    const defaultScope = scopeFlag ? targetConfig?.defaultScope : isQoderFamily(adapter.id) ? 'local' : targetConfig?.defaultScope;
     const { scope, projectRoot } = await resolveTargetContext({
       scopeFlag,
       cwdFlag,
@@ -213,7 +213,7 @@ export async function cmdRulesSync(
       currentCwd: ctx.cwd,
     });
 
-    if (adapter.id === 'qoder' && scope === 'local') {
+    if (isQoderFamily(adapter.id) && scope === 'local') {
       const rulesDir = adapter.resolveRulesDir({ scope, projectRoot, homeDir });
       const targetPath = path.join(rulesDir, QODER_MANAGED_RULE_FILE);
       const targetItems = await readQoderManagedItems(rulesDir);
@@ -267,7 +267,7 @@ export async function cmdRulesSync(
       continue;
     }
 
-    if (adapter.id === 'qoder' && scope === 'global') {
+    if (isQoderFamily(adapter.id) && scope === 'global') {
       process.stderr.write(
         `${ANSI.dim}Skipped ${getColoredLabel(adapter)}: global rules are not supported; use --scope local${ANSI.reset}\n`,
       );

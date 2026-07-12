@@ -28,6 +28,7 @@ function defaultConfig(): ConfigV1 {
       agents: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
       opencode: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
       qoder: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
+      qodercli: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
     },
   };
 }

@@ -140,6 +140,7 @@ export function getRuleCapability(target: TargetId): RuleCapability {
       return { kind: 'prompt', format: 'cursor-mdc', extension: '.mdc' };
     case 'claude-code':
     case 'qoder':
+    case 'qodercli':
     case 'antigravity':
       return { kind: 'prompt', format: 'claude-md', extension: '.md' };
     case 'codex':

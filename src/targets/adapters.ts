@@ -12,7 +12,8 @@ export type TargetId =
   | 'antigravity'
   | 'agents'
   | 'opencode'
-  | 'qoder';
+  | 'qoder'
+  | 'qodercli';
 
 export type ResolveParams = {
   scope: Scope;
@@ -243,6 +244,29 @@ const adapters: TargetAdapter[] = [
             serversKey: 'mcpServers',
           },
   },
+  {
+    id: 'qodercli',
+    label: 'QoderCLI',
+    color: ANSI.pink,
+    aliases: ['qodercli', 'qoder-cli'],
+    agentFormat: 'filesystem-markdown',
+    resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.qoder', 'skills') : path.join(projectRoot, '.qoder', 'skills'),
+    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.qoder', 'agents') : path.join(projectRoot, '.qoder', 'agents'),
+    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? path.join(homeDir, '.qoder', 'commands') : path.join(projectRoot, '.qoder', 'commands'),
+    resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
+      scope === 'global' ? '' : path.join(projectRoot, '.qoder', 'rules'),
+    resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
+      configPath:
+        scope === 'global'
+          ? path.join(homeDir, '.qoder', 'settings.json')
+          : path.join(projectRoot, '.qoder', 'settings.json'),
+      format: 'json',
+      serversKey: 'mcpServers',
+    }),
+  },
 ];
 
 export function getAdapters(): TargetAdapter[] {
@@ -272,4 +296,8 @@ export function resolveAdapter(input: string): TargetAdapter | null {
     if (adapter.aliases.includes(normalized)) return adapter;
   }
   return null;
+}
+
+export function isQoderFamily(id: TargetId): boolean {
+  return id === 'qoder' || id === 'qodercli';
 }
