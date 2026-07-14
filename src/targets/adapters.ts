@@ -20,12 +20,31 @@ export type ResolveParams = {
   homeDir: string;
 };
 
+/** 安装检测上下文(可注入 platform/env/homeDir 以便跨平台测试)。 */
+export type DetectContext = {
+  homeDir: string;
+  platform: NodeJS.Platform;
+  env: NodeJS.ProcessEnv;
+};
+
+/**
+ * 「已安装」证据:
+ * - bin:  可执行文件在 PATH 中可解析
+ * - path: 供应商自有文件/目录存在(应用包、应用数据目录、auth/session 文件等)
+ * 证据之间为 OR 关系。切勿使用 agent-plugins 自身会写入的路径(skills/agents/commands/rules、各类 MCP 配置)。
+ */
+export type InstallEvidence = { kind: 'bin'; name: string } | { kind: 'path'; path: string };
+
 export type TargetAdapter = {
   id: TargetId;
   label: string;
   color: string; // ANSI color code for this adapter
   aliases: string[];
   agentFormat?: 'filesystem-markdown' | 'codex-toml';
+  /** true 表示始终可用(如 ~/.agents 全局约定),跳过安装检测。 */
+  alwaysAvailable?: boolean;
+  /** 返回「已安装」证据(OR 关系);未定义且非 alwaysAvailable 时视为不可检测(默认隐藏)。 */
+  detectInstall?(ctx: DetectContext): InstallEvidence[];
   resolveSkillsDir(params: ResolveParams): string;
   resolveAgentsDir(params: ResolveParams): string;
   resolveCommandsDir(params: ResolveParams): string;
@@ -41,6 +60,12 @@ const NO_AGENTS_IDS = new Set<TargetId>(['agents', 'antigravity']);
 
 /** Targets that do not support commands sync. */
 const NO_COMMANDS_IDS = new Set<TargetId>(['agents']);
+
+/** Windows 下 %LOCALAPPDATA%\Programs\... 安装路径。 */
+function winProgramsPath(ctx: DetectContext, ...segments: string[]): string {
+  const base = ctx.env.LOCALAPPDATA || path.join(ctx.homeDir, 'AppData', 'Local');
+  return path.join(base, 'Programs', ...segments);
+}
 
 function getCodexHomeDir(homeDir: string): string {
   const override = process.env.CODEX_HOME;
@@ -66,6 +91,17 @@ const adapters: TargetAdapter[] = [
     color: ANSI.brightMagenta,
     aliases: ['cursor'],
     agentFormat: 'filesystem-markdown',
+    // GUI IDE:仅以应用本体为准。数据目录/扩展目录/`cursor` CLI shim 在卸载后都会残留,不能作为依据
+    //(例如残留的 `cursor` shim 运行时会报 "No Cursor IDE installation found")。
+    detectInstall: (ctx) => {
+      if (ctx.platform === 'darwin')
+        return [
+          { kind: 'path', path: '/Applications/Cursor.app' },
+          { kind: 'path', path: path.join(ctx.homeDir, 'Applications', 'Cursor.app') },
+        ];
+      if (ctx.platform === 'win32') return [{ kind: 'path', path: winProgramsPath(ctx, 'Cursor', 'Cursor.exe') }];
+      return [{ kind: 'bin', name: 'cursor' }]; // Linux 等:以 PATH 上的可执行文件为准
+    },
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.cursor', 'skills') : path.join(projectRoot, '.cursor', 'skills'),
     resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
@@ -88,6 +124,8 @@ const adapters: TargetAdapter[] = [
     color: ANSI.cyan,
     aliases: ['codex'],
     agentFormat: 'codex-toml',
+    // CLI:仅以 PATH 上可解析的可执行文件为准(auth.json/sessions/config.toml 卸载后残留,不能用)。
+    detectInstall: () => [{ kind: 'bin', name: 'codex' }],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(getCodexHomeDir(homeDir), 'skills') : path.join(projectRoot, '.codex', 'skills'),
     resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
@@ -110,6 +148,12 @@ const adapters: TargetAdapter[] = [
     color: ANSI.anthropicClay,
     aliases: ['claude', 'claude-code', 'claudecode'],
     agentFormat: 'filesystem-markdown',
+    // CLI:PATH 可执行文件,或原生安装器放置的实际二进制 ~/.claude/bin/claude。
+    // 不使用 ~/.claude.json / projects / history / credentials(ap 写入或卸载后残留)。
+    detectInstall: (ctx) => [
+      { kind: 'bin', name: 'claude' },
+      { kind: 'path', path: path.join(ctx.homeDir, '.claude', 'bin', 'claude') },
+    ],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.claude', 'skills') : path.join(projectRoot, '.claude', 'skills'),
     resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
@@ -135,6 +179,17 @@ const adapters: TargetAdapter[] = [
     label: 'Google Antigravity',
     color: ANSI.skyBlue,
     aliases: ['antigravity', 'anti-gravity'],
+    // GUI IDE 应用本体,或 agy CLI;不使用应用数据目录(~/Library/Application Support/Antigravity 卸载后残留)。
+    detectInstall: (ctx) => {
+      const ev: InstallEvidence[] = [{ kind: 'bin', name: 'agy' }];
+      if (ctx.platform === 'darwin') {
+        ev.push({ kind: 'path', path: '/Applications/Antigravity.app' });
+        ev.push({ kind: 'path', path: '/Applications/Antigravity IDE.app' });
+        ev.push({ kind: 'path', path: path.join(ctx.homeDir, 'Applications', 'Antigravity.app') });
+      }
+      if (ctx.platform === 'win32') ev.push({ kind: 'path', path: winProgramsPath(ctx, 'Antigravity', 'Antigravity.exe') });
+      return ev;
+    },
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
         ? path.join(homeDir, '.gemini', 'antigravity', 'skills')
@@ -160,6 +215,8 @@ const adapters: TargetAdapter[] = [
     label: 'Agentskills',
     color: ANSI.orange,
     aliases: ['agents'],
+    // ~/.agents 是被多种工具识别的全局约定,并非独立应用;始终可用。
+    alwaysAvailable: true,
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.agents', 'skills') : path.join(projectRoot, '.agents', 'skills'),
     resolveAgentsDir: () => '',
@@ -172,6 +229,12 @@ const adapters: TargetAdapter[] = [
     color: ANSI.teal,
     aliases: ['opencode', 'open-code'],
     agentFormat: 'filesystem-markdown',
+    // CLI:PATH 可执行文件,或安装脚本放置的实际二进制 ~/.opencode/bin/opencode。
+    // 不使用 ~/.local/share/opencode 或 ~/.config/opencode(数据/配置,卸载后残留)。
+    detectInstall: (ctx) => [
+      { kind: 'bin', name: 'opencode' },
+      { kind: 'path', path: path.join(ctx.homeDir, '.opencode', 'bin', 'opencode') },
+    ],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.opencode', 'skills') : path.join(projectRoot, '.opencode', 'skills'),
     resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
@@ -197,6 +260,12 @@ const adapters: TargetAdapter[] = [
     color: ANSI.qoderGreen,
     aliases: ['qoder'],
     agentFormat: 'filesystem-markdown',
+    // Qoder IDE(GUI):仅以应用本体为准(~/.qoder 子目录及其 CLI 缓存卸载后残留)。
+    detectInstall: (ctx) => {
+      if (ctx.platform === 'darwin') return [{ kind: 'path', path: '/Applications/Qoder.app' }];
+      if (ctx.platform === 'win32') return [{ kind: 'path', path: winProgramsPath(ctx, 'Qoder', 'Qoder.exe') }];
+      return [{ kind: 'bin', name: 'qoder' }]; // Linux 等
+    },
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.qoder', 'skills') : path.join(projectRoot, '.qoder', 'skills'),
     resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
@@ -224,6 +293,8 @@ const adapters: TargetAdapter[] = [
     color: ANSI.qoderGreen,
     aliases: ['qodercli', 'qoder-cli'],
     agentFormat: 'filesystem-markdown',
+    // Qoder CLI:npm 包 @qoder-ai/qodercli 提供的 `qodercli` 可执行文件。
+    detectInstall: () => [{ kind: 'bin', name: 'qodercli' }],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global' ? path.join(homeDir, '.qoder', 'skills') : path.join(projectRoot, '.qoder', 'skills'),
     resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>

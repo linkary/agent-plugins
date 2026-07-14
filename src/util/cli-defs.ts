@@ -34,6 +34,7 @@ export const CLI_OPTIONS = {
     arg: '<tools>',
     desc: 'Target tools (cursor|gemini|codex|claude-code|antigravity|agents|opencode|qoder|qodercli|all)',
   },
+  'all-targets': { short: 'A', desc: 'List all targets for selection, not just installed ones' },
   scope: { arg: '<scope>', desc: 'Scope: global (default) or local' },
   global: { short: 'g', desc: 'Alias for --scope=global' },
   local: { short: 'l', desc: 'Alias for --scope=local' },
@@ -62,7 +63,7 @@ export const SUBCOMMANDS = {
     desc: 'Remove skill(s)',
     args: '[skill...]',
     aliases: ['remove', 'del', 'delete'],
-    options: ['target', 'scope', 'global', 'local', 'cwd', 'dry-run'],
+    options: ['target', 'scope', 'global', 'local', 'cwd', 'dry-run', 'all-targets'],
   },
   update: {
     desc: 'Update skill(s) from original source',
@@ -74,13 +75,13 @@ export const SUBCOMMANDS = {
     desc: 'Sync central skills → target tools',
     args: '[skill...]',
     aliases: ['sy'],
-    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd', 'all-targets'],
   },
   collect: {
     desc: 'Collect skills from target tools → central',
     args: '[skill...]',
     aliases: ['col', 'c'],
-    options: ['target', 'scope', 'all', 'force', 'dry-run'],
+    options: ['target', 'scope', 'all', 'force', 'dry-run', 'all-targets'],
   },
   find: {
     desc: 'Find skills by keyword (local + remote)',
@@ -97,13 +98,13 @@ export const SUBCOMMANDS = {
     desc: 'Browse and inspect skills',
     args: '[skill]',
     aliases: ['info', 's'],
-    options: ['target', 'scope', 'global', 'local', 'cwd'],
+    options: ['target', 'scope', 'global', 'local', 'cwd', 'all-targets'],
   },
   organize: {
     desc: 'Organize duplicate skills across target tools',
     args: '[skill...]',
     aliases: ['o'],
-    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd', 'all-targets'],
   },
 } as const satisfies Record<string, SubcommandDef>;
 
@@ -119,7 +120,7 @@ export const AGENT_SUBCOMMANDS = {
     desc: 'Remove agent(s)',
     args: '[agent...]',
     aliases: ['remove', 'del', 'delete'],
-    options: ['target', 'scope', 'global', 'local', 'cwd', 'dry-run'],
+    options: ['target', 'scope', 'global', 'local', 'cwd', 'dry-run', 'all-targets'],
   },
   update: {
     desc: 'Update agent(s) from original source',
@@ -131,13 +132,13 @@ export const AGENT_SUBCOMMANDS = {
     desc: 'Sync central agents → target tools',
     args: '[agent...]',
     aliases: ['sy'],
-    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd', 'all-targets'],
   },
   collect: {
     desc: 'Collect agents from target tools → central',
     args: '[agent...]',
     aliases: ['col', 'c'],
-    options: ['target', 'scope', 'all', 'force', 'dry-run'],
+    options: ['target', 'scope', 'all', 'force', 'dry-run', 'all-targets'],
   },
   find: {
     desc: 'Find agents by keyword (local + remote)',
@@ -154,13 +155,13 @@ export const AGENT_SUBCOMMANDS = {
     desc: 'Browse and inspect agents',
     args: '[agent]',
     aliases: ['info', 's'],
-    options: ['target', 'scope', 'global', 'local', 'cwd'],
+    options: ['target', 'scope', 'global', 'local', 'cwd', 'all-targets'],
   },
   organize: {
     desc: 'Organize duplicate agents across target tools',
     args: '[agent...]',
     aliases: ['o'],
-    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd', 'all-targets'],
   },
 } as const satisfies Record<string, SubcommandDef>;
 
@@ -176,7 +177,7 @@ export const COMMAND_SUBCOMMANDS = {
     desc: 'Remove command(s)',
     args: '[command...]',
     aliases: ['remove', 'del', 'delete'],
-    options: ['target', 'scope', 'global', 'local', 'cwd', 'dry-run'],
+    options: ['target', 'scope', 'global', 'local', 'cwd', 'dry-run', 'all-targets'],
   },
   update: {
     desc: 'Update command(s) from original source',
@@ -188,13 +189,13 @@ export const COMMAND_SUBCOMMANDS = {
     desc: 'Sync central commands → target tools',
     args: '[command...]',
     aliases: ['sy'],
-    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd', 'all-targets'],
   },
   collect: {
     desc: 'Collect commands from target tools → central',
     args: '[command...]',
     aliases: ['col', 'c'],
-    options: ['target', 'scope', 'all', 'force', 'dry-run'],
+    options: ['target', 'scope', 'all', 'force', 'dry-run', 'all-targets'],
   },
   find: {
     desc: 'Find commands by keyword (local + remote)',
@@ -211,13 +212,13 @@ export const COMMAND_SUBCOMMANDS = {
     desc: 'Browse and inspect commands',
     args: '[command]',
     aliases: ['info', 's'],
-    options: ['target', 'scope', 'global', 'local', 'cwd'],
+    options: ['target', 'scope', 'global', 'local', 'cwd', 'all-targets'],
   },
   organize: {
     desc: 'Organize duplicate commands across target tools',
     args: '[command...]',
     aliases: ['o'],
-    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd', 'all-targets'],
   },
 } as const satisfies Record<string, SubcommandDef>;
 
@@ -233,19 +234,19 @@ export const RULE_SUBCOMMANDS = {
     desc: 'Remove rule(s)',
     args: '[rule...]',
     aliases: ['remove', 'del', 'delete'],
-    options: ['target', 'scope', 'global', 'local', 'cwd', 'dry-run'],
+    options: ['target', 'scope', 'global', 'local', 'cwd', 'dry-run', 'all-targets'],
   },
   sync: {
     desc: 'Sync central rules → target tools',
     args: '[rule...]',
     aliases: ['sy'],
-    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd', 'all-targets'],
   },
   collect: {
     desc: 'Collect rules from target tools → central',
     args: '[rule...]',
     aliases: ['col', 'c'],
-    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd', 'all-targets'],
   },
   find: {
     desc: 'Find rules by keyword (local + remote)',
@@ -262,7 +263,7 @@ export const RULE_SUBCOMMANDS = {
     desc: 'Browse and inspect rules',
     args: '[rule]',
     aliases: ['info', 's'],
-    options: ['target', 'scope', 'global', 'local', 'cwd'],
+    options: ['target', 'scope', 'global', 'local', 'cwd', 'all-targets'],
   },
   validate: {
     desc: 'Validate rule format and conflict risks',
@@ -273,7 +274,7 @@ export const RULE_SUBCOMMANDS = {
     desc: 'Organize duplicate compatible rules across target tools',
     args: '[rule...]',
     aliases: ['o'],
-    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd', 'all-targets'],
   },
 } as const satisfies Record<string, SubcommandDef>;
 
@@ -301,13 +302,13 @@ export const MCP_SUBCOMMANDS = {
     desc: 'Sync central MCP servers → target tool configs',
     args: '[server...]',
     aliases: ['sy'],
-    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd', 'all-targets'],
   },
   collect: {
     desc: 'Collect MCP servers from target tool configs → central',
     args: '[server...]',
     aliases: ['col', 'c'],
-    options: ['target', 'scope', 'all', 'force', 'dry-run'],
+    options: ['target', 'scope', 'all', 'force', 'dry-run', 'all-targets'],
   },
   find: {
     desc: 'Find MCP servers by keyword (local + remote)',
@@ -330,7 +331,7 @@ export const MCP_SUBCOMMANDS = {
     desc: 'Organize duplicate MCP servers across target tools',
     args: '[server...]',
     aliases: ['o'],
-    options: ['target', 'scope', 'force', 'dry-run', 'cwd'],
+    options: ['target', 'scope', 'force', 'dry-run', 'cwd', 'all-targets'],
   },
 } as const satisfies Record<string, SubcommandDef>;
 

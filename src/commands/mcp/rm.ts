@@ -19,6 +19,7 @@ import {
   type TargetMcpServer,
 } from './manage-utils.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
+import { resolveCandidateAdapters } from '../../targets/installed-targets.js';
 import type { ConfigV1 } from '../../core/config.js';
 import type { McpConfigSpec } from '../../core/mcp-types.js';
 import type { ParsedFlags } from '../../util/options.js';
@@ -76,7 +77,13 @@ export async function cmdMcpRemove(positionals: string[], flags: ParsedFlags, ct
 // ─── 全交互模式：多选目标（含 Central）──────────────────────────────────
 
 async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext): Promise<number> {
-  const mcpAdapters = filterMcpAdapters(getAdapters());
+  // 默认只列出已安装目标(--all-targets/-A 列出全部);Central 始终可选。
+  const { candidates: mcpAdapters, source } = await resolveCandidateAdapters(filterMcpAdapters(getAdapters()), {
+    allTargets: flags['all-targets'] === true,
+  });
+  if (source === 'fallback-empty') {
+    process.stderr.write('No installed targets detected; showing all targets.\n');
+  }
 
   const targetOptions = [
     { label: 'Central', value: CENTRAL_VALUE },

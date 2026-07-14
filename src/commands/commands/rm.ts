@@ -17,6 +17,7 @@ import {
   resolveAdapter,
 } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
+import { resolveCandidateAdapters } from '../../targets/installed-targets.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { promptMultiSelect, promptReviewConfirm, promptSelect } from '../../util/prompt.js';
 import { isProbablyGitUrl, isGitHubShorthand } from '../../util/git-utils.js';
@@ -130,7 +131,13 @@ export async function cmdCommandsRemove(positionals: string[], flags: ParsedFlag
 // ─── 全交互模式：多选目标（含 Central）──────────────────────────────────
 
 async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext): Promise<number> {
-  const adapters = filterCommandAdapters(getAdapters());
+  // 默认只列出已安装目标(--all-targets/-A 列出全部);Central 始终可选。
+  const { candidates: adapters, source } = await resolveCandidateAdapters(filterCommandAdapters(getAdapters()), {
+    allTargets: flags['all-targets'] === true,
+  });
+  if (source === 'fallback-empty') {
+    process.stderr.write('No installed targets detected; showing all targets.\n');
+  }
 
   const targetOptions = [
     { label: 'Central', value: CENTRAL_VALUE },

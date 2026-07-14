@@ -28,4 +28,65 @@ describe('select-targets', () => {
     });
     expect(selected.map((adapter) => adapter.id)).toEqual(['cursor', 'codex']);
   });
+
+  test('auto-selects the only installed target without a prompt (non-interactive)', async () => {
+    const adapters = getAdapters();
+    const onlyCursor = adapters.filter((a) => a.id === 'cursor');
+    const selected = await selectTargetAdapters({
+      adapters,
+      flags: {},
+      interactive: false,
+      mode: 'multi',
+      promptMessage: 'unused',
+      filterInstalled: async () => onlyCursor,
+    });
+    expect(selected.map((a) => a.id)).toEqual(['cursor']);
+  });
+
+  test('requires explicit target when multiple installed and non-interactive', async () => {
+    const adapters = getAdapters();
+    const twoInstalled = adapters.filter((a) => a.id === 'cursor' || a.id === 'codex');
+    const selected = await selectTargetAdapters({
+      adapters,
+      flags: {},
+      interactive: false,
+      mode: 'multi',
+      promptMessage: 'unused',
+      filterInstalled: async () => twoInstalled,
+    });
+    expect(selected).toEqual([]);
+  });
+
+  test('--all-targets skips installed filtering (no auto-skip even with one installed)', async () => {
+    const adapters = getAdapters();
+    let filterCalled = false;
+    const selected = await selectTargetAdapters({
+      adapters,
+      flags: { 'all-targets': true },
+      interactive: false,
+      mode: 'multi',
+      promptMessage: 'unused',
+      filterInstalled: async () => {
+        filterCalled = true;
+        return adapters.filter((a) => a.id === 'cursor');
+      },
+    });
+    // allTargets bypasses the installed filter entirely; with >1 candidate and no TTY it cannot prompt.
+    expect(filterCalled).toBe(false);
+    expect(selected).toEqual([]);
+  });
+
+  test('falls back to all targets when nothing detected as installed', async () => {
+    const adapters = getAdapters();
+    // Nothing installed -> candidates = all -> >1 and non-interactive -> no auto-skip, cannot prompt.
+    const selected = await selectTargetAdapters({
+      adapters,
+      flags: {},
+      interactive: false,
+      mode: 'multi',
+      promptMessage: 'unused',
+      filterInstalled: async () => [],
+    });
+    expect(selected).toEqual([]);
+  });
 });

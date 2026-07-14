@@ -11,6 +11,7 @@ import { isProbablyGitUrl, isGitHubShorthand } from '../../util/git-utils.js';
 import { ANSI } from '../../util/ansi.js';
 import { gatherTargetSkills, findSyncedCopies, type SyncedCopy } from './manage-utils.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
+import { resolveCandidateAdapters } from '../../targets/installed-targets.js';
 import { formatTargetReviewLine, formatTargetSummaryLines } from '../../util/review-display.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
@@ -103,7 +104,13 @@ export async function cmdSkillsRemove(positionals: string[], flags: ParsedFlags,
 // ─── 全交互模式：多选目标（含 Central）──────────────────────────────────
 
 async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext): Promise<number> {
-  const adapters = getAdapters();
+  // 默认只列出已安装目标(--all-targets/-A 列出全部);Central 始终可选。
+  const { candidates: adapters, source } = await resolveCandidateAdapters(getAdapters(), {
+    allTargets: flags['all-targets'] === true,
+  });
+  if (source === 'fallback-empty') {
+    process.stderr.write('No installed targets detected; showing all targets.\n');
+  }
 
   // 第一步：多选目标（Central + 所有适配器）
   const targetOptions = [

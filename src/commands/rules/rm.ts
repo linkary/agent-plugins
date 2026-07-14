@@ -29,6 +29,7 @@ import { promptMultiSelect, promptReviewConfirm } from '../../util/prompt.js';
 import { isGitHubShorthand, isProbablyGitUrl } from '../../util/git-utils.js';
 import { ANSI } from '../../util/ansi.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
+import { resolveCandidateAdapters } from '../../targets/installed-targets.js';
 import { InvalidRulePathError, normalizeRulePath, removeFileAndEmptyParents } from '../../util/rule-utils.js';
 import {
   getGlobalRulesStore,
@@ -276,7 +277,13 @@ async function removeFromTarget(
 // ---------------------------------------------------------------------------
 
 async function interactiveRemove(flags: ParsedFlags, ctx: CliRunContext, dryRun: boolean): Promise<number> {
-  const adapters = filterRuleAdapters(getAdapters());
+  // 默认只列出已安装目标(--all-targets/-A 列出全部);Central 始终可选。
+  const { candidates: adapters, source } = await resolveCandidateAdapters(filterRuleAdapters(getAdapters()), {
+    allTargets: flags['all-targets'] === true,
+  });
+  if (source === 'fallback-empty') {
+    process.stderr.write('No installed targets detected; showing all targets.\n');
+  }
   const options = [
     { label: 'Central (_global.json)', value: CENTRAL_VALUE },
     ...adapters.map((a) => ({ label: getColoredLabel(a), value: a.id })),

@@ -7,7 +7,7 @@ import {
   MCP_SUBCOMMANDS,
 } from '../util/cli-defs.js';
 import { PKG_NAME, PKG_VERSION } from '../meta.js';
-import type { SubcommandDef } from '../util/cli-defs.js';
+import type { SubcommandDef, OptionDef } from '../util/cli-defs.js';
 
 /**
  * 从 CLI 元数据动态生成帮助文本。
@@ -92,7 +92,7 @@ function formatMainHelp(): string {
 
   lines.push('');
   lines.push('Common Options:');
-  lines.push(formatOptionsBlock(['target', 'scope', 'cwd']));
+  lines.push(formatOptionsBlock(['target', 'all-targets', 'scope', 'cwd']));
 
   lines.push('');
   lines.push('Aliases:');
@@ -129,7 +129,7 @@ function formatGroupHelp(group: string, subcommands: Record<string, SubcommandDe
 
   lines.push('');
   lines.push('Common Options:');
-  lines.push(formatOptionsBlock(['target', 'scope', 'cwd']));
+  lines.push(formatOptionsBlock(['target', 'all-targets', 'scope', 'cwd']));
   lines.push('');
 
   return lines.join('\n');
@@ -180,7 +180,7 @@ function formatOptionsBlock(keys: readonly (keyof typeof CLI_OPTIONS)[]): string
   const lines: string[] = [];
 
   for (const key of keys) {
-    const opt = CLI_OPTIONS[key];
+    const opt: OptionDef = CLI_OPTIONS[key];
     const shortPart = opt.short
       ? opt.short
           .split(',')

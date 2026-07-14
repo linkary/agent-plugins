@@ -1,7 +1,7 @@
 import { getColoredLabel, resolveAdapter, type TargetAdapter } from './adapters.js';
 import type { ParsedFlags } from '../util/options.js';
 import { promptMultiSelect, promptSelect } from '../util/prompt.js';
-import { ANSI } from '../util/ansi.js';
+import { resolveCandidateAdapters } from './installed-targets.js';
 
 export type TargetSelectionMode = 'single' | 'multi';
 
@@ -21,6 +21,8 @@ export async function selectTargetAdapters(params: {
   interactive: boolean;
   mode: TargetSelectionMode;
   promptMessage: string;
+  /** 可注入的已安装目标过滤器（默认基于文件系统检测），便于测试。 */
+  filterInstalled?: (adapters: TargetAdapter[]) => Promise<TargetAdapter[]>;
 }): Promise<TargetAdapter[]> {
   const { adapters, flags, interactive, mode, promptMessage } = params;
   const selectableById = new Map(adapters.map((adapter) => [adapter.id, adapter]));
@@ -61,6 +63,24 @@ export async function selectTargetAdapters(params: {
     return unique;
   }
 
+  // 无显式 --target:默认只在「已安装」的目标中选择;--all-targets/-A 可列出全部。
+  const allTargets = flags['all-targets'] === true;
+  const { candidates, source } = await resolveCandidateAdapters(adapters, {
+    allTargets,
+    filterInstalled: params.filterInstalled,
+  });
+  if (source === 'fallback-empty') {
+    // 未检测到任何已安装目标:回退到全部,避免无从选择。
+    process.stderr.write('No installed targets detected; showing all targets.\n');
+  }
+
+  // 仅剩一个已安装目标时自动选择,跳过交互(通过 --all-targets 显式列出全部时不跳过)。
+  if (source === 'installed' && candidates.length === 1) {
+    const only = candidates[0];
+    process.stdout.write(`Using target: ${getColoredLabel(only)} (only installed target)\n`);
+    return [only];
+  }
+
   if (!interactive) {
     process.stderr.write('Missing --target and no TTY available for interactive selection.\n');
     return [];
@@ -69,9 +89,9 @@ export async function selectTargetAdapters(params: {
   if (mode === 'single') {
     const id = await promptSelect({
       message: promptMessage,
-      options: adapters.map((a) => ({ label: getColoredLabel(a), value: a.id })),
+      options: candidates.map((a) => ({ label: getColoredLabel(a), value: a.id })),
     });
-    const adapter = adapters.find((a) => a.id === id);
+    const adapter = candidates.find((a) => a.id === id);
     if (!adapter) {
       process.stderr.write('No target selected.\n');
       return [];
@@ -79,10 +99,10 @@ export async function selectTargetAdapters(params: {
     return [adapter];
   }
 
-  // Multi mode: show list with all pre-selected
+  // Multi mode: show installed targets (or all with --all-targets)
   const ids = await promptMultiSelect({
     message: promptMessage,
-    options: adapters.map((a) => ({ label: getColoredLabel(a), value: a.id })),
+    options: candidates.map((a) => ({ label: getColoredLabel(a), value: a.id })),
     defaultSelected: [],
   });
   if (ids.length === 0) {
