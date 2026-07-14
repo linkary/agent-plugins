@@ -31,7 +31,6 @@ export const ANSI = {
 
   // Brand theme colors (256-color approximations)
   anthropicClay: '\x1b[38;5;173m', // Anthropic coral/clay #D97757
-  googleBlue: '\x1b[38;5;33m', // Google blue #4285F4
   skyBlue: '\x1b[38;5;75m', // Antigravity electric/sky blue
   qoderGreen: '\x1b[38;5;41m', // Qoder #2ADB5C vivid green
 } as const;

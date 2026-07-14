@@ -1,7 +1,7 @@
 {
   "name": "agent-plugins",
   "version": "0.3.0",
-  "description": "LLM skills & commands manager and sync tool (ap)",
+  "description": "Manage and sync AI agent skills, commands, rules and MCP configs across Cursor, Claude Code, Codex, Antigravity, OpenCode and Qoder",
   "type": "module",
   "main": "dist/cli.mjs",
   "bin": {
@@ -19,8 +19,8 @@
     "dist",
     "bin"
   ],
-  "keywords": [],
-  "author": "",
+  "keywords": ["ai", "agent", "skills", "cli", "cursor", "claude", "codex", "mcp", "sync", "rules", "opencode", "qoder", "antigravity"],
+  "author": "linkary",
   "license": "ISC",
   "engines": {
     "node": ">=20"

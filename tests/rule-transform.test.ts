@@ -22,7 +22,7 @@ describe('rule-transform', () => {
       extension: '.md',
     });
     expect(getRuleCapability('codex').kind).toBe('exec');
-    expect(getRuleCapability('gemini').kind).toBe('unsupported');
+    expect(getRuleCapability('opencode').kind).toBe('unsupported');
   });
 
   it('converts cursor mdc rule to claude md shape', () => {

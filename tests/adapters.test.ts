@@ -13,12 +13,11 @@ describe('adapters', () => {
   const projectRoot = '/Users/test/myproject';
 
   describe('getAdapters', () => {
-    it('should return all 9 adapters', () => {
+    it('should return all 8 adapters', () => {
       const adapters = getAdapters();
-      expect(adapters.length).toBe(9);
+      expect(adapters.length).toBe(8);
       expect(adapters.map((a) => a.id)).toEqual([
         'cursor',
-        'gemini',
         'codex',
         'claude-code',
         'antigravity',
@@ -39,7 +38,6 @@ describe('adapters', () => {
   describe('resolveAdapter', () => {
     it('should resolve by id', () => {
       expect(resolveAdapter('cursor')?.id).toBe('cursor');
-      expect(resolveAdapter('gemini')?.id).toBe('gemini');
       expect(resolveAdapter('codex')?.id).toBe('codex');
       expect(resolveAdapter('claude-code')?.id).toBe('claude-code');
       expect(resolveAdapter('antigravity')?.id).toBe('antigravity');
@@ -48,7 +46,6 @@ describe('adapters', () => {
     it('should resolve by alias', () => {
       expect(resolveAdapter('claude')?.id).toBe('claude-code');
       expect(resolveAdapter('claudecode')?.id).toBe('claude-code');
-      expect(resolveAdapter('gemini-cli')?.id).toBe('gemini');
       expect(resolveAdapter('anti-gravity')?.id).toBe('antigravity');
       expect(resolveAdapter('open-code')?.id).toBe('opencode');
       expect(resolveAdapter('qoder')?.id).toBe('qoder');
@@ -77,20 +74,6 @@ describe('adapters', () => {
       it('should resolve local path', () => {
         const dir = adapter.resolveSkillsDir({ scope: 'local', projectRoot, homeDir });
         expect(dir).toBe(path.join(projectRoot, '.cursor', 'skills'));
-      });
-    });
-
-    describe('gemini', () => {
-      const adapter = resolveAdapter('gemini')!;
-
-      it('should resolve global path', () => {
-        const dir = adapter.resolveSkillsDir({ scope: 'global', projectRoot, homeDir });
-        expect(dir).toBe(path.join(homeDir, '.gemini', 'skills'));
-      });
-
-      it('should resolve local path', () => {
-        const dir = adapter.resolveSkillsDir({ scope: 'local', projectRoot, homeDir });
-        expect(dir).toBe(path.join(projectRoot, '.gemini', 'skills'));
       });
     });
 

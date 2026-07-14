@@ -5,7 +5,7 @@ import { selectTargetAdapters } from '../src/targets/select-targets.js';
 describe('select-targets', () => {
   test('resolves only from provided adapter list', async () => {
     const all = getAdapters();
-    const subset = all.filter((adapter) => adapter.id === 'gemini');
+    const subset = all.filter((adapter) => adapter.id === 'codex');
     const selected = await selectTargetAdapters({
       adapters: subset,
       flags: { target: 'cursor' },
@@ -18,7 +18,7 @@ describe('select-targets', () => {
 
   test('supports --target=all against provided adapter list', async () => {
     const all = getAdapters();
-    const subset = all.filter((adapter) => adapter.id === 'cursor' || adapter.id === 'gemini');
+    const subset = all.filter((adapter) => adapter.id === 'cursor' || adapter.id === 'codex');
     const selected = await selectTargetAdapters({
       adapters: subset,
       flags: { target: 'all' },
@@ -26,6 +26,6 @@ describe('select-targets', () => {
       mode: 'multi',
       promptMessage: 'unused',
     });
-    expect(selected.map((adapter) => adapter.id)).toEqual(['cursor', 'gemini']);
+    expect(selected.map((adapter) => adapter.id)).toEqual(['cursor', 'codex']);
   });
 });

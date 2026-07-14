@@ -1,6 +1,6 @@
 # agent-plugins (ap)
 
-一个用于 **LLM Agent Skills**、**Subagent** 与 **Commands** 的集中管理与跨工具同步 CLI。
+一个用于 **LLM Agent Skills**、**Subagent**、**Commands**、**Rules** 与 **MCP 服务配置** 的集中管理与跨工具同步 CLI。
 
 <div align="center">
   <a href="assets/intro.mp4">
@@ -223,7 +223,7 @@ ap c show         # commands show
 ### 兼容性感知的 Organize
 
 - `organize` 只按精确 canonical 内容比较；同名不代表可合并。
-- v1 里只有 skills 支持安全提升到共享目录：Gemini CLI + Agents 可以整理到 `.agents/skills`。
+- v1 里只有 skills 支持安全提升到共享目录：Agents 可以整理到 `.agents/skills`。
 - commands、agents、rules、MCP 的官方存储模型目前仍以各工具自有格式为主，所以大多数跨工具场景仍以预览 / report-only 为主。
 - `organize` 不会改写 `config.json`；如果 include 配置还保留旧 target，后续 `sync` 仍可能把被移除的副本重新生成出来。
 
@@ -231,7 +231,7 @@ ap c show         # commands show
 
 `--target` 支持 `all`、逗号分隔（如 `--target cursor,codex`）或重复传入（如 `--target cursor --target codex`）。
 
-支持的目标：`cursor`、`gemini`、`codex`、`claude-code`、`antigravity`、`agents`、`opencode`、`qoder`。
+支持的目标：`cursor`、`codex`、`claude-code`、`antigravity`、`agents`、`opencode`、`qoder`、`qodercli`。
 
 ## 同步目标与默认路径（macOS）
 
@@ -243,39 +243,36 @@ Qoder 的 rules 是例外：`ap rules sync --target qoder` 会默认使用 `loca
 | 目标                 | local                       | global                                 |
 | -------------------- | --------------------------- | -------------------------------------- |
 | Cursor               | `<project>/.cursor/skills/` | `~/.cursor/skills/`                    |
-| Gemini CLI           | `<project>/.gemini/skills/` | `~/.gemini/skills/`                    |
 | Codex                | `<project>/.codex/skills/`  | `$CODEX_HOME/skills/`                  |
 | Claude Code          | `<project>/.claude/skills/` | `~/.claude/skills/`                    |
 | Antigravity          | `<project>/.agent/skills/`  | `~/.gemini/antigravity/global_skills/` |
 | Agentskills            | `<project>/.agents/skills/` | `~/.agents/skills/`                    |
 | OpenCode             | `<project>/.opencode/skills/` | `~/.opencode/skills/`                |
-| Qoder                | `<project>/.qoder/skills/`    | `~/.qoder/skills/`                   |
+| Qoder / QoderCLI     | `<project>/.qoder/skills/`    | `~/.qoder/skills/`                   |
 
 ### Commands 路径
 
 | 目标                 | local                         | global                                   |
 | -------------------- | ----------------------------- | ---------------------------------------- |
 | Cursor               | `<project>/.cursor/commands/` | `~/.cursor/commands/`                    |
-| Gemini CLI           | `<project>/.gemini/commands/` | `~/.gemini/commands/`                    |
 | Codex                | `<project>/.codex/commands/`  | `$CODEX_HOME/commands/`                  |
 | Claude Code          | `<project>/.claude/commands/` | `~/.claude/commands/`                    |
 | Antigravity          | `<project>/.agent/commands/`  | `~/.gemini/antigravity/global_commands/` |
 | Agentskills            | `<project>/.agents/commands/` | `~/.agents/commands/`                    |
 | OpenCode             | `<project>/.opencode/commands/` | `~/.opencode/commands/`               |
-| Qoder                | `<project>/.qoder/commands/`    | `~/.qoder/commands/`                  |
+| Qoder / QoderCLI     | `<project>/.qoder/commands/`    | `~/.qoder/commands/`                  |
 
 ### Rules 路径
 
 | 目标                 | local                      | global                                |
 | -------------------- | -------------------------- | ------------------------------------- |
 | Cursor               | `<project>/.cursor/rules/` | `~/.cursor/rules/`                    |
-| Gemini CLI           | `<project>/.gemini/rules/` | `~/.gemini/rules/`                    |
 | Codex                | `<project>/.codex/rules/`  | `$CODEX_HOME/rules/`                  |
 | Claude Code          | `<project>/.claude/rules/` | `~/.claude/rules/`                    |
 | Antigravity          | `<project>/.agent/rules/`  | `~/.gemini/antigravity/global_rules/` |
 | Agentskills            | `<project>/.agents/rules/` | `~/.agents/rules/`                    |
 | OpenCode             | `<project>/.opencode/rules/` | `~/.opencode/rules/`                |
-| Qoder                | `<project>/.qoder/rules/`    | `-`                                |
+| Qoder / QoderCLI     | `<project>/.qoder/rules/`    | `-`                                |
 
 Cursor 特殊说明（global）：
 
@@ -291,7 +288,7 @@ Qoder 特殊说明（local）：
 - 支持 prompt-rule 并带转换：`cursor`、`claude-code`、`qoder`
 - 对 prompt-rule 判定为不兼容并跳过：
   - `codex`（使用执行策略 `.rules`）
-  - `gemini`、`antigravity`、`agents`、`opencode`
+  - `antigravity`、`agents`、`opencode`
 
 ## 配置与状态文件
 

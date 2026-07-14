@@ -12,7 +12,7 @@ const SHARED_SKILL_DESTINATIONS: SharedSkillDestination[] = [
   {
     key: 'agents-skills',
     ownerTarget: 'agents',
-    memberTargets: ['agents', 'gemini'],
+    memberTargets: ['agents'],
   },
 ];
 
@@ -21,7 +21,7 @@ export function getSharedSkillDestinations(): SharedSkillDestination[] {
 }
 
 export function getSkillCapabilities(target: TargetId): OrganizeCapability[] {
-  if (target === 'agents' || target === 'gemini') {
+  if (target === 'agents') {
     return ['promote-to-shared', 'prune-shadowed'];
   }
   return ['report-only'];

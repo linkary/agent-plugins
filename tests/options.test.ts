@@ -10,8 +10,8 @@ describe('parseOptions', () => {
     });
 
     it('should parse long flags with values', () => {
-      const { flags } = parseOptions(['--target', 'gemini']);
-      expect(flags.target).toBe('gemini');
+      const { flags } = parseOptions(['--target', 'codex']);
+      expect(flags.target).toBe('codex');
     });
 
     it('should parse long flags with = syntax', () => {
@@ -57,8 +57,8 @@ describe('parseOptions', () => {
     });
 
     it('should handle short flags with values', () => {
-      const { flags } = parseOptions(['-t', 'gemini']);
-      expect(flags.target).toBe('gemini');
+      const { flags } = parseOptions(['-t', 'codex']);
+      expect(flags.target).toBe('codex');
     });
 
     it('should handle combined short boolean flags', () => {
@@ -100,10 +100,10 @@ describe('parseOptions', () => {
 
   describe('mixed arguments', () => {
     it('should handle mixed positionals and flags', () => {
-      const { positionals, flags } = parseOptions(['skill1', '-f', 'skill2', '--target', 'gemini']);
+      const { positionals, flags } = parseOptions(['skill1', '-f', 'skill2', '--target', 'codex']);
       expect(positionals).toEqual(['skill1', 'skill2']);
       expect(flags.force).toBe(true);
-      expect(flags.target).toBe('gemini');
+      expect(flags.target).toBe('codex');
     });
   });
 });

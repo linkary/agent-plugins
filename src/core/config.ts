@@ -21,7 +21,6 @@ function defaultConfig(): ConfigV1 {
     version: 1,
     targets: {
       cursor: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
-      gemini: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
       codex: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
       'claude-code': { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },
       antigravity: { defaultScope: 'global', include: ['*'], includeAgents: ['*'], includeRules: ['*'] },

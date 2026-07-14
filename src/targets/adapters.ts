@@ -6,7 +6,6 @@ export type Scope = 'local' | 'global';
 
 export type TargetId =
   | 'cursor'
-  | 'gemini'
   | 'codex'
   | 'claude-code'
   | 'antigravity'
@@ -79,31 +78,6 @@ const adapters: TargetAdapter[] = [
     resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
       configPath:
         scope === 'global' ? path.join(homeDir, '.cursor', 'mcp.json') : path.join(projectRoot, '.cursor', 'mcp.json'),
-      format: 'json',
-      serversKey: 'mcpServers',
-    }),
-  },
-  {
-    id: 'gemini',
-    label: 'Gemini CLI',
-    color: ANSI.googleBlue,
-    aliases: ['gemini', 'gemini-cli'],
-    agentFormat: 'filesystem-markdown',
-    resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global' ? path.join(homeDir, '.gemini', 'skills') : path.join(projectRoot, '.gemini', 'skills'),
-    resolveAgentsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global' ? path.join(homeDir, '.gemini', 'agents') : path.join(projectRoot, '.gemini', 'agents'),
-    resolveCommandsDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global'
-        ? path.join(homeDir, '.gemini', 'commands')
-        : path.join(projectRoot, '.gemini', 'commands'),
-    resolveRulesDir: ({ scope, projectRoot, homeDir }) =>
-      scope === 'global' ? path.join(homeDir, '.gemini', 'rules') : path.join(projectRoot, '.gemini', 'rules'),
-    resolveMcpConfig: ({ scope, projectRoot, homeDir }) => ({
-      configPath:
-        scope === 'global'
-          ? path.join(homeDir, '.gemini', 'settings.json')
-          : path.join(projectRoot, '.gemini', 'settings.json'),
       format: 'json',
       serversKey: 'mcpServers',
     }),

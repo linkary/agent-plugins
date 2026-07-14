@@ -1,6 +1,6 @@
 # agent-plugins (ap)
 
-A CLI tool for centralized management and cross-tool synchronization of **LLM Agent Skills**, **Subagents**, and **Commands**.
+A CLI tool for centralized management and cross-tool synchronization of **LLM Agent Skills**, **Subagents**, **Commands**, **Rules**, and **MCP server configs**.
 
 <div align="center">
   <a href="assets/intro.mp4">
@@ -223,7 +223,7 @@ ap c show         # commands show
 ### Compatibility-Aware Organize
 
 - `organize` compares exact canonical content only. Same name is not enough.
-- Skills are the only v1 workflow with safe promotion into a shared destination: Gemini CLI + Agents can consolidate into `.agents/skills`.
+- Skills are the only v1 workflow with safe promotion into a shared destination: Agents can consolidate into `.agents/skills`.
 - Commands, agents, rules, and MCP mostly remain preview/report-only in cross-tool cases because their official storage models are still tool-specific.
 - `organize` does not rewrite `config.json`; later `sync` can recreate removed copies if your include lists still target them.
 
@@ -231,7 +231,7 @@ ap c show         # commands show
 
 `--target` supports `all`, comma-separated values (e.g., `--target cursor,codex`), or repeated flags (e.g., `--target cursor --target codex`).
 
-Supported targets: `cursor`, `gemini`, `codex`, `claude-code`, `antigravity`, `agents`, `opencode`, `qoder`.
+Supported targets: `cursor`, `codex`, `claude-code`, `antigravity`, `agents`, `opencode`, `qoder`, `qodercli`.
 
 ## Sync Targets and Default Paths (macOS)
 
@@ -243,39 +243,36 @@ Qoder rules are the exception: `ap rules sync --target qoder` defaults to `local
 | Target               | local                       | global                                 |
 | -------------------- | --------------------------- | -------------------------------------- |
 | Cursor               | `<project>/.cursor/skills/` | `~/.cursor/skills/`                    |
-| Gemini CLI           | `<project>/.gemini/skills/` | `~/.gemini/skills/`                    |
 | Codex                | `<project>/.codex/skills/`  | `$CODEX_HOME/skills/`                  |
 | Claude Code          | `<project>/.claude/skills/` | `~/.claude/skills/`                    |
 | Antigravity          | `<project>/.agent/skills/`  | `~/.gemini/antigravity/global_skills/` |
 | Agentskills            | `<project>/.agents/skills/` | `~/.agents/skills/`                    |
 | OpenCode             | `<project>/.opencode/skills/` | `~/.opencode/skills/`                |
-| Qoder                | `<project>/.qoder/skills/`    | `~/.qoder/skills/`                   |
+| Qoder / QoderCLI     | `<project>/.qoder/skills/`    | `~/.qoder/skills/`                   |
 
 ### Commands Paths
 
 | Target               | local                         | global                                   |
 | -------------------- | ----------------------------- | ---------------------------------------- |
 | Cursor               | `<project>/.cursor/commands/` | `~/.cursor/commands/`                    |
-| Gemini CLI           | `<project>/.gemini/commands/` | `~/.gemini/commands/`                    |
 | Codex                | `<project>/.codex/commands/`  | `$CODEX_HOME/commands/`                  |
 | Claude Code          | `<project>/.claude/commands/` | `~/.claude/commands/`                    |
 | Antigravity          | `<project>/.agent/commands/`  | `~/.gemini/antigravity/global_commands/` |
 | Agentskills            | `<project>/.agents/commands/` | `~/.agents/commands/`                    |
 | OpenCode             | `<project>/.opencode/commands/` | `~/.opencode/commands/`               |
-| Qoder                | `<project>/.qoder/commands/`    | `~/.qoder/commands/`                  |
+| Qoder / QoderCLI     | `<project>/.qoder/commands/`    | `~/.qoder/commands/`                  |
 
 ### Rules Paths
 
 | Target               | local                      | global                                |
 | -------------------- | -------------------------- | ------------------------------------- |
 | Cursor               | `<project>/.cursor/rules/` | `~/.cursor/rules/`                    |
-| Gemini CLI           | `<project>/.gemini/rules/` | `~/.gemini/rules/`                    |
 | Codex                | `<project>/.codex/rules/`  | `$CODEX_HOME/rules/`                  |
 | Claude Code          | `<project>/.claude/rules/` | `~/.claude/rules/`                    |
 | Antigravity          | `<project>/.agent/rules/`  | `~/.gemini/antigravity/global_rules/` |
 | Agentskills            | `<project>/.agents/rules/` | `~/.agents/rules/`                    |
 | OpenCode             | `<project>/.opencode/rules/` | `~/.opencode/rules/`                |
-| Qoder                | `<project>/.qoder/rules/`    | `-`                                |
+| Qoder / QoderCLI     | `<project>/.qoder/rules/`    | `-`                                |
 
 Cursor special case (global scope):
 
@@ -291,7 +288,7 @@ Qoder special case (local scope):
 - Prompt-rule sync/collect with conversion: `cursor`, `claude-code`, `qoder`
 - Skipped as incompatible for prompt rules:
   - `codex` (uses execution-policy `.rules`)
-  - `gemini`, `antigravity`, `agents`, `opencode`
+  - `antigravity`, `agents`, `opencode`
 
 ## Configuration and State Files
 

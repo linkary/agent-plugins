@@ -53,48 +53,44 @@ afterEach(async () => {
 describe('skills organize', () => {
   it('keeps dry-run non-mutating while previewing shared cleanup', async () => {
     await writeSkill(path.join(tmpProjectRoot, '.agents', 'skills', 'reviewer'), '# shared');
-    await writeSkill(path.join(tmpProjectRoot, '.gemini', 'skills', 'reviewer'), '# shared');
-
-    const code = await cmdSkillsOrganize(
-      [],
-      { target: 'agents,gemini', scope: 'local', 'dry-run': true },
-      { cwd: tmpProjectRoot },
-    );
-
-    expect(code).toBe(0);
-    expect(await fs.access(path.join(tmpProjectRoot, '.agents', 'skills', 'reviewer')).then(() => true).catch(() => false)).toBe(true);
-    expect(await fs.access(path.join(tmpProjectRoot, '.gemini', 'skills', 'reviewer')).then(() => true).catch(() => false)).toBe(true);
-    expect(stripAnsi(capturedStdout)).toContain('remove redundant copy');
-  });
-
-  it('removes the redundant Gemini copy while keeping the shared .agents destination', async () => {
-    await writeSkill(path.join(tmpProjectRoot, '.agents', 'skills', 'reviewer'), '# shared');
-    await writeSkill(path.join(tmpProjectRoot, '.gemini', 'skills', 'reviewer'), '# shared');
-
-    const code = await cmdSkillsOrganize(
-      [],
-      { target: 'agents,gemini', scope: 'local', force: true },
-      { cwd: tmpProjectRoot },
-    );
-
-    expect(code).toBe(0);
-    expect(await fs.access(path.join(tmpProjectRoot, '.agents', 'skills', 'reviewer')).then(() => true).catch(() => false)).toBe(true);
-    expect(await fs.access(path.join(tmpProjectRoot, '.gemini', 'skills', 'reviewer')).then(() => true).catch(() => false)).toBe(false);
-  });
-
-  it('can promote a Gemini-compatible duplicate into .agents while leaving non-shared targets alone', async () => {
-    await writeSkill(path.join(tmpProjectRoot, '.gemini', 'skills', 'reviewer'), '# shared');
     await writeSkill(path.join(tmpProjectRoot, '.cursor', 'skills', 'reviewer'), '# shared');
 
     const code = await cmdSkillsOrganize(
       [],
-      { target: 'agents,gemini,cursor', scope: 'local', force: true },
+      { target: 'agents,cursor', scope: 'local', 'dry-run': true },
       { cwd: tmpProjectRoot },
     );
 
     expect(code).toBe(0);
     expect(await fs.access(path.join(tmpProjectRoot, '.agents', 'skills', 'reviewer')).then(() => true).catch(() => false)).toBe(true);
-    expect(await fs.access(path.join(tmpProjectRoot, '.gemini', 'skills', 'reviewer')).then(() => true).catch(() => false)).toBe(false);
+    expect(await fs.access(path.join(tmpProjectRoot, '.cursor', 'skills', 'reviewer')).then(() => true).catch(() => false)).toBe(true);
+  });
+
+  it('keeps the shared .agents destination intact during organize', async () => {
+    await writeSkill(path.join(tmpProjectRoot, '.agents', 'skills', 'reviewer'), '# shared');
+    await writeSkill(path.join(tmpProjectRoot, '.cursor', 'skills', 'reviewer'), '# shared');
+
+    const code = await cmdSkillsOrganize(
+      [],
+      { target: 'agents,cursor', scope: 'local', force: true },
+      { cwd: tmpProjectRoot },
+    );
+
+    expect(code).toBe(0);
+    expect(await fs.access(path.join(tmpProjectRoot, '.agents', 'skills', 'reviewer')).then(() => true).catch(() => false)).toBe(true);
+    expect(await fs.access(path.join(tmpProjectRoot, '.cursor', 'skills', 'reviewer')).then(() => true).catch(() => false)).toBe(true);
+  });
+
+  it('reports only for non-shared targets', async () => {
+    await writeSkill(path.join(tmpProjectRoot, '.cursor', 'skills', 'reviewer'), '# shared');
+
+    const code = await cmdSkillsOrganize(
+      [],
+      { target: 'agents,cursor', scope: 'local', force: true },
+      { cwd: tmpProjectRoot },
+    );
+
+    expect(code).toBe(0);
     expect(await fs.access(path.join(tmpProjectRoot, '.cursor', 'skills', 'reviewer')).then(() => true).catch(() => false)).toBe(true);
   });
 
