@@ -2,7 +2,7 @@
  * ap mcp collect — 从目标工具配置文件中提取 MCP 服务器定义到中央存储。
  * 核心操作是 readConfig -> extract entries -> writeJson to central。
  */
-import { readCentralMcpServer, writeCentralMcpServer, computeMcpHash, ensureCentralMcpStore } from '../../core/mcp-store.js';
+import { readCentralMcpServer, writeCentralMcpServer, computeMcpHash, computeMcpSerializedSize, ensureCentralMcpStore, getCentralMcpPath } from '../../core/mcp-store.js';
 import { loadConfig } from '../../core/config.js';
 import { loadRegistry, saveRegistry } from '../../core/registry.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
@@ -13,8 +13,10 @@ import { readMcpServers } from '../../util/mcp-config-io.js';
 import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import { ANSI } from '../../util/ansi.js';
 import { filterMcpAdapters } from './manage-utils.js';
-import { normalizeCentralMcpDef, parseMcpToCanonical, serializeCanonicalMcpForTarget } from '../../util/mcp-transform.js';
-import { formatTargetReviewLine } from '../../util/review-display.js';
+import { normalizeCentralMcpDef, parseMcpToCanonical } from '../../util/mcp-transform.js';
+import { formatCollectReviewLine } from '../../util/review-display.js';
+import { formatSize, formatSyncMetadata, formatSyncMetadataChange, type SyncItemMetadata } from '../../util/sync-preview.js';
+import fs from 'node:fs/promises';
 import type { McpServerDef } from '../../core/mcp-types.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
@@ -29,6 +31,8 @@ type CollectEntry = {
   scope: Scope;
   projectRoot: string;
   status: CollectStatus;
+  sourceMeta: SyncItemMetadata;
+  centralMeta?: SyncItemMetadata | null;
 };
 
 const STATUS_LABELS: Record<CollectStatus, string> = {
@@ -63,9 +67,7 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
   const config = await loadConfig();
   await ensureCentralMcpStore();
   let incompatibleCount = 0;
-  let lossyCount = 0;
   let duplicateConflictCount = 0;
-  let skippedCount = 0;
 
   // Phase 1: 收集所有目标中的 MCP 服务器定义
   const allEntries: CollectEntry[] = [];
@@ -94,28 +96,23 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
         );
         continue;
       }
-      const transformed = serializeCanonicalMcpForTarget(parsed.canonical, 'cursor');
-      if (!transformed.def) {
+
+      const normalizedDef = normalizeCentralMcpDef(def);
+      if (!normalizedDef.def) {
         incompatibleCount++;
         process.stderr.write(
-          `${ANSI.yellow}Skipped ${name} from ${adapter.label}:${ANSI.reset} ${transformed.incompatibleReason ?? 'incompatible definition'}\n`,
+          `${ANSI.yellow}Skipped ${name} from ${adapter.label}:${ANSI.reset} ${normalizedDef.error ?? 'invalid definition'}\n`,
         );
         continue;
       }
-      if (transformed.lossy) {
-        lossyCount++;
-        if (!force) {
-          skippedCount++;
-          process.stderr.write(
-            `Skipped ${name} from ${adapter.label}: lossy normalization (${transformed.lossyReasons.join(', ')}) (use --force)\n`,
-          );
-          continue;
-        }
-      }
 
-      const hash = computeMcpHash(transformed.def);
+      const hash = computeMcpHash(normalizedDef.def);
+      const sourceSize = computeMcpSerializedSize(normalizedDef.def);
+      const configStat = await fs.stat(mcpSpec.configPath).catch(() => null);
+      const sourceMeta: SyncItemMetadata = { sizeBytes: sourceSize, changedAtMs: configStat?.mtimeMs ?? Date.now() };
       const centralDef = await readCentralMcpServer(name);
       let status: CollectStatus;
+      let centralMeta: SyncItemMetadata | null = null;
 
       if (!centralDef) {
         status = 'new';
@@ -124,12 +121,16 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
         if (!normalizedCentral.def) {
           status = 'conflict';
         } else {
+          const centralSize = computeMcpSerializedSize(normalizedCentral.def);
+          const centralPath = getCentralMcpPath(name);
+          const centralStat = await fs.stat(centralPath).catch(() => null);
+          centralMeta = { sizeBytes: centralSize, changedAtMs: centralStat?.mtimeMs ?? Date.now() };
           const centralHash = computeMcpHash(normalizedCentral.def);
           status = centralHash === hash ? 'identical' : 'conflict';
         }
       }
 
-      allEntries.push({ name, def: transformed.def, hash, adapter, scope, projectRoot, status });
+      allEntries.push({ name, def: normalizedDef.def, hash, adapter, scope, projectRoot, status, sourceMeta, centralMeta });
     }
   }
 
@@ -162,8 +163,16 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
   } else {
     const options = uniqueEntries.map((e, i) => {
       const statusLabel = STATUS_LABELS[e.status];
+      let meta = '';
+      if (e.status === 'identical') {
+        meta = ` ${formatSize(e.sourceMeta.sizeBytes)}`;
+      } else if (e.centralMeta) {
+        meta = ` ${formatSyncMetadataChange(e.sourceMeta, e.centralMeta)}`;
+      } else {
+        meta = ` ${formatSyncMetadata(e.sourceMeta)}`;
+      }
       return {
-        label: `${formatTargetReviewLine(e.name, getColoredLabel(e.adapter), e.scope)} [${statusLabel}]`,
+        label: `${formatCollectReviewLine(e.name, getColoredLabel(e.adapter), e.scope)} [${statusLabel}]${meta}`,
         value: String(i),
       };
     });
@@ -266,9 +275,7 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
   }
   const summaryParts: string[] = [];
   if (incompatibleCount > 0) summaryParts.push(`${ANSI.red}${incompatibleCount} incompatible${ANSI.reset}`);
-  if (lossyCount > 0) summaryParts.push(`${ANSI.magenta}${lossyCount} lossy${ANSI.reset}`);
   if (duplicateConflictCount > 0) summaryParts.push(`${ANSI.yellow}${duplicateConflictCount} source-conflict${ANSI.reset}`);
-  if (skippedCount > 0) summaryParts.push(`${ANSI.gray}${skippedCount} skipped${ANSI.reset}`);
   if (summaryParts.length > 0) process.stdout.write(`\n${ANSI.dim}MCP transform:${ANSI.reset} ${summaryParts.join(', ')}\n`);
 
   return 0;

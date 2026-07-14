@@ -145,6 +145,7 @@ async function interactiveBuildDef(): Promise<McpServerDef> {
     options: [
       { label: 'stdio (command + args)', value: 'stdio' },
       { label: 'SSE (URL)', value: 'sse' },
+      { label: 'Streamable HTTP (URL)', value: 'streamable-http' },
       { label: 'HTTP (URL)', value: 'http' },
     ],
   })) as McpTransport;

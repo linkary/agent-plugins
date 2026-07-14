@@ -4,7 +4,7 @@
  */
 
 /** MCP 传输协议类型 */
-export type McpTransport = 'stdio' | 'sse' | 'http' | 'ws';
+export type McpTransport = 'stdio' | 'sse' | 'http' | 'streamable-http' | 'ws';
 
 /**
  * 标准化的 MCP 服务器定义。

@@ -86,7 +86,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'gemini',
     label: 'Gemini CLI',
-    color: ANSI.magenta,
+    color: ANSI.googleBlue,
     aliases: ['gemini', 'gemini-cli'],
     agentFormat: 'filesystem-markdown',
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
@@ -111,7 +111,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'codex',
     label: 'Codex',
-    color: ANSI.green,
+    color: ANSI.cyan,
     aliases: ['codex'],
     agentFormat: 'codex-toml',
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
@@ -133,7 +133,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'claude-code',
     label: 'Claude Code',
-    color: ANSI.yellow,
+    color: ANSI.anthropicClay,
     aliases: ['claude', 'claude-code', 'claudecode'],
     agentFormat: 'filesystem-markdown',
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
@@ -159,7 +159,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'antigravity',
     label: 'Google Antigravity',
-    color: ANSI.brightBlue,
+    color: ANSI.skyBlue,
     aliases: ['antigravity', 'anti-gravity'],
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
       scope === 'global'
@@ -220,7 +220,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'qoder',
     label: 'Qoder',
-    color: ANSI.pink,
+    color: ANSI.qoderGreen,
     aliases: ['qoder'],
     agentFormat: 'filesystem-markdown',
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>
@@ -247,7 +247,7 @@ const adapters: TargetAdapter[] = [
   {
     id: 'qodercli',
     label: 'QoderCLI',
-    color: ANSI.pink,
+    color: ANSI.qoderGreen,
     aliases: ['qodercli', 'qoder-cli'],
     agentFormat: 'filesystem-markdown',
     resolveSkillsDir: ({ scope, projectRoot, homeDir }) =>

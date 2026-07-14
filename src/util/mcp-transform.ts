@@ -24,7 +24,7 @@ type McpCapability = {
 
 const DEFAULT_CAPABILITY: McpCapability = {
   includeType: true,
-  supportedTransports: ['stdio', 'sse', 'http', 'ws'],
+  supportedTransports: ['stdio', 'sse', 'http', 'streamable-http', 'ws'],
   supportEnv: true,
   supportHeaders: true,
   supportEnabled: true,
@@ -33,6 +33,15 @@ const DEFAULT_CAPABILITY: McpCapability = {
 
 function getMcpCapability(target: TargetId): McpCapability {
   switch (target) {
+    case 'cursor':
+      return {
+        includeType: true,
+        supportedTransports: ['stdio', 'sse', 'http', 'ws'],
+        supportEnv: true,
+        supportHeaders: true,
+        supportEnabled: true,
+        supportToolTimeout: true,
+      };
     case 'codex':
       return {
         includeType: false,
@@ -169,9 +178,21 @@ export function serializeCanonicalMcpForTarget(
 export function normalizeCentralMcpDef(def: McpServerDef): { def: McpServerDef | null; error?: string } {
   const parsed = parseMcpToCanonical(def);
   if (!parsed.canonical) return { def: null, error: parsed.error ?? 'Invalid MCP definition' };
-  const normalized = serializeCanonicalMcpForTarget(parsed.canonical, 'cursor');
-  if (!normalized.def) return { def: null, error: normalized.incompatibleReason ?? 'Invalid MCP definition' };
-  return { def: normalized.def };
+
+  const canonical = parsed.canonical;
+  const out: McpServerDef = { type: canonical.type };
+  if (canonical.type === 'stdio') {
+    out.command = canonical.command;
+    if (canonical.args?.length) out.args = [...canonical.args];
+  } else {
+    out.url = canonical.url;
+  }
+  if (canonical.env) out.env = { ...canonical.env };
+  if (canonical.headers) out.headers = { ...canonical.headers };
+  if (typeof canonical.enabled === 'boolean') out.enabled = canonical.enabled;
+  if (typeof canonical.tool_timeout_sec === 'number') out.tool_timeout_sec = canonical.tool_timeout_sec;
+
+  return { def: out };
 }
 
 export function computeCanonicalMcpHash(canonical: CanonicalMcpDef): string {

@@ -48,11 +48,12 @@ type SyncEntry = {
   destCommandsDir: string;
 };
 
-type EntryStatus = 'new' | 'replace' | 'same';
-const ENTRY_STATUS_ORDER = ['new', 'replace', 'same'] as const;
+type EntryStatus = 'new' | 'replace' | 'conflict' | 'same';
+const ENTRY_STATUS_ORDER = ['new', 'replace', 'conflict', 'same'] as const;
 const ENTRY_STATUS_STYLES: StatusStyle<EntryStatus> = {
   new: { color: 'green' },
   replace: { color: 'yellow' },
+  conflict: { color: 'red' },
   same: { color: 'dim' },
 };
 
@@ -78,6 +79,7 @@ export async function cmdCommandsSync(
   if (selectedAdapters.length === 0) return 1;
 
   const config = await loadConfig();
+  const syncState = await loadSyncState();
 
   const availableCommands = await listCentralCommands();
   if (availableCommands.length === 0) {
@@ -203,8 +205,17 @@ export async function cmdCommandsSync(
       });
 
       if (destHash === srcHash) return { ...s, status: 'same' as const };
+
+      const contextId = makeContextId({
+        target: s.adapter.id,
+        scope: s.scope,
+        projectRoot: s.scope === 'local' ? s.projectRoot : undefined,
+      });
+      const lastSync = syncState.contexts[contextId]?.commands?.[s.name];
+      const status: EntryStatus = lastSync?.hash === destHash ? 'replace' : 'conflict';
+
       const [sourceMeta, targetMeta] = await Promise.all([getSourceMeta(s), getTargetMeta(s)]);
-      return { ...s, status: 'replace' as const, sourceMeta, targetMeta };
+      return { ...s, status, sourceMeta, targetMeta };
     }),
   );
 
@@ -262,7 +273,6 @@ export async function cmdCommandsSync(
   }
 
   // Phase 4: 执行同步
-  const syncState = await loadSyncState();
   const conflictResolver = createConflictResolver({ interactive, force });
 
   if (!dryRun) {

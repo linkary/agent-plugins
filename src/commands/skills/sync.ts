@@ -36,11 +36,12 @@ type SyncEntry = {
   projectRoot: string;
 };
 
-type EntryStatus = 'new' | 'replace' | 'same';
-const ENTRY_STATUS_ORDER = ['new', 'replace', 'same'] as const;
+type EntryStatus = 'new' | 'replace' | 'conflict' | 'same';
+const ENTRY_STATUS_ORDER = ['new', 'replace', 'conflict', 'same'] as const;
 const ENTRY_STATUS_STYLES: StatusStyle<EntryStatus> = {
   new: { color: 'green' },
   replace: { color: 'yellow' },
+  conflict: { color: 'red' },
   same: { color: 'dim' },
 };
 
@@ -67,6 +68,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   if (selectedAdapters.length === 0) return 1;
 
   const config = await loadConfig();
+  const syncState = await loadSyncState();
 
   const availableSkills = await listCentralSkills();
   if (availableSkills.length === 0) {
@@ -145,11 +147,20 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
         computeDirHash(s.destDir, { ignoreNames: ['.git'] }),
       ]);
       if (destHash === srcHash) return { ...s, status: 'same' as const };
+
+      const contextId = makeContextId({
+        target: s.adapter.id,
+        scope: s.scope,
+        projectRoot: s.scope === 'local' ? s.projectRoot : undefined,
+      });
+      const lastSync = syncState.contexts[contextId]?.skills?.[s.name];
+      const status: EntryStatus = lastSync?.hash === destHash ? 'replace' : 'conflict';
+
       const [sourceMeta, targetMeta] = await Promise.all([
         getSourceMeta(s.srcDir),
         computeItemStats(s.destDir, { ignoreNames: ['.git'] }),
       ]);
-      return { ...s, status: 'replace' as const, sourceMeta, targetMeta };
+      return { ...s, status, sourceMeta, targetMeta };
     }),
   );
 
@@ -211,7 +222,6 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   const entriesToExecute = finalEntries;
 
   // Phase 4: Execute sync
-  const syncState = await loadSyncState();
   const conflictResolver = createConflictResolver({ interactive, force });
 
   // Ensure all destination directories exist

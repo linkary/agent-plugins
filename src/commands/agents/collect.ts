@@ -21,10 +21,12 @@ import { ANSI } from '../../util/ansi.js';
 import { getCentralAgentsDir } from '../../util/apg-paths.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { ensureDir, pathExists } from '../../util/fs-utils.js';
+import { computeItemStats } from '../../util/item-utils.js';
+import { formatSize, formatSyncMetadata, formatSyncMetadataChange, type SyncItemMetadata } from '../../util/sync-preview.js';
 import type { ParsedFlags } from '../../util/options.js';
 import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
-import { formatTargetReviewLine } from '../../util/review-display.js';
+import { formatCollectReviewLine } from '../../util/review-display.js';
 import {
   classifyFilesystemAgentPath,
   compareAgentEntries,
@@ -105,6 +107,8 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
     status: CollectStatus;
     isDuplicate: boolean;
     srcHash: string;
+    sourceMeta?: SyncItemMetadata | null;
+    centralMeta?: SyncItemMetadata | null;
   };
 
   const seenNames = new Set<string>();
@@ -127,7 +131,10 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
       status = comparison === 'same' ? 'identical' : 'conflict';
     }
 
-    agentsWithStatus.push({ ...agent, status, isDuplicate, srcHash });
+    const sourceMeta = await computeItemStats(agent.sourceEntry.path);
+    const centralMeta = existingEntry ? await computeItemStats(existingEntry.path) : null;
+
+    agentsWithStatus.push({ ...agent, status, isDuplicate, srcHash, sourceMeta, centralMeta });
   }
 
   const destBaseDir = getCentralAgentsDir();
@@ -146,7 +153,7 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
     );
 
     const defaultSelected = agentsWithStatus
-      .map((item, index) => (!item.isDuplicate && (item.status === 'new' || item.status === 'conflict') ? String(index) : null))
+      .map((item, index) => (!item.isDuplicate && item.status === 'new' ? String(index) : null))
       .filter((value): value is string => value !== null);
 
     const selectedKeys = await promptMultiSelect({
@@ -160,8 +167,18 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
               : item.status === 'identical'
                 ? `${ANSI.gray}identical${ANSI.reset}`
                 : `${ANSI.red}conflict${ANSI.reset}`;
+        let meta = '';
+        if (item.sourceMeta) {
+          if (item.status === 'identical') {
+            meta = ` ${formatSize(item.sourceMeta.sizeBytes)}`;
+          } else if (item.centralMeta) {
+            meta = ` ${formatSyncMetadataChange(item.sourceMeta, item.centralMeta)}`;
+          } else {
+            meta = ` ${formatSyncMetadata(item.sourceMeta)}`;
+          }
+        }
         return {
-          label: `${formatTargetReviewLine(item.name, getColoredLabel(item.adapter), item.scope)} [${statusLabel}]`,
+          label: `${formatCollectReviewLine(item.name, getColoredLabel(item.adapter), item.scope)} [${statusLabel}]${meta}`,
           value: String(index),
         };
       }),
@@ -179,7 +196,7 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
     process.stdout.write(`\nCollect ${toCollect.length} agent(s) to ${destBaseDir}:\n`);
     for (const item of toCollect) {
       const statusLabel = item.status === 'conflict' ? `${ANSI.red}conflict${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
-      process.stdout.write(`  ${formatTargetReviewLine(item.name, getColoredLabel(item.adapter), item.scope)} [${statusLabel}]\n`);
+      process.stdout.write(`  ${formatCollectReviewLine(item.name, getColoredLabel(item.adapter), item.scope)} [${statusLabel}]\n`);
     }
     const skipped = agentsWithStatus.length - toCollect.length;
     if (skipped > 0) {

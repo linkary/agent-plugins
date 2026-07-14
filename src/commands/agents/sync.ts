@@ -52,11 +52,12 @@ type SyncEntry = {
   altDestPaths: string[];
 };
 
-type EntryStatus = 'new' | 'replace' | 'same';
-const ENTRY_STATUS_ORDER = ['new', 'replace', 'same'] as const;
+type EntryStatus = 'new' | 'replace' | 'conflict' | 'same';
+const ENTRY_STATUS_ORDER = ['new', 'replace', 'conflict', 'same'] as const;
 const ENTRY_STATUS_STYLES: StatusStyle<EntryStatus> = {
   new: { color: 'green' },
   replace: { color: 'yellow' },
+  conflict: { color: 'red' },
   same: { color: 'dim' },
 };
 
@@ -86,6 +87,7 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
   if (selectedAdapters.length === 0) return 1;
 
   const config = await loadConfig();
+  const syncState = await loadSyncState();
   const availableAgentItems = await listCentralAgentItems();
   const availableAgentNames = availableAgentItems.map((agent) => agent.name);
   const availableAgentNamesSet = new Set(availableAgentNames);
@@ -172,11 +174,23 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
         targetEntry ? await compareAgentEntries(entry.sourceEntry, targetEntry, entry.adapter) : 'different';
       if (comparison === 'same') return { ...entry, status: 'same' as const };
 
+      const contextId = makeContextId({
+        target: entry.adapter.id,
+        scope: entry.scope,
+        projectRoot: entry.scope === 'local' ? entry.projectRoot : undefined,
+      });
+      const lastSync = syncState.contexts[contextId]?.agents?.[entry.name];
+      let status: EntryStatus = 'conflict';
+      if (lastSync && targetEntry) {
+        const currentTargetHash = await computeAgentHashForTarget(targetEntry, entry.adapter);
+        if (currentTargetHash && lastSync.hash === currentTargetHash) status = 'replace';
+      }
+
       const [sourceMeta, targetMeta] = await Promise.all([
         getSourceMeta(entry.sourceEntry.path),
         computeItemStats(existingPath),
       ]);
-      return { ...entry, status: 'replace' as const, sourceMeta, targetMeta };
+      return { ...entry, status, sourceMeta, targetMeta };
     }),
   );
 
@@ -232,7 +246,6 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
     finalEntries = entriesWithStatus;
   }
 
-  const syncState = await loadSyncState();
   const conflictResolver = createConflictResolver({ interactive, force });
 
   if (!dryRun) {

@@ -49,11 +49,12 @@ type SyncEntry = {
   projectRoot: string;
 };
 
-type EntryStatus = 'new' | 'replace' | 'same';
-const ENTRY_STATUS_ORDER = ['new', 'replace', 'same'] as const;
+type EntryStatus = 'new' | 'replace' | 'conflict' | 'same';
+const ENTRY_STATUS_ORDER = ['new', 'replace', 'conflict', 'same'] as const;
 const ENTRY_STATUS_STYLES: StatusStyle<EntryStatus> = {
   new: { color: 'green' },
   replace: { color: 'yellow' },
+  conflict: { color: 'red' },
   same: { color: 'dim' },
 };
 
@@ -93,6 +94,7 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
   if (selectedAdapters.length === 0) return 1;
 
   const config = await loadConfig();
+  const syncState = await loadSyncState();
   let incompatibleCount = 0;
   let lossyCount = 0;
   let skippedCount = 0;
@@ -199,21 +201,33 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
     allEntries.map(async (entry) => {
       const targetServers = await getTargetServers(entry.mcpSpec);
       const existingDef = targetServers[entry.name] ?? null;
-      const existingHash = existingDef ? computeMcpHash(existingDef) : '';
-      const status = !existingDef ? ('new' as const) : existingHash === entry.targetHash ? ('same' as const) : ('replace' as const);
-      if (status === 'same') {
+      if (!existingDef) {
         return {
           ...entry,
           existingDef,
-          status,
+          status: 'new' as const,
+          sourceMeta: await getSourceMeta(entry),
         };
       }
+      const existingHash = computeMcpHash(existingDef);
+      if (existingHash === entry.targetHash) {
+        return { ...entry, existingDef, status: 'same' as const };
+      }
+
+      const contextId = makeContextId({
+        target: entry.adapter.id,
+        scope: entry.scope,
+        projectRoot: entry.scope === 'local' ? entry.projectRoot : undefined,
+      });
+      const lastSync = syncState.contexts[contextId]?.mcp?.[entry.name];
+      const status: EntryStatus = lastSync?.hash === existingHash ? 'replace' : 'conflict';
+
       return {
         ...entry,
         existingDef,
         status,
         sourceMeta: await getSourceMeta(entry),
-        targetMeta: existingDef ? await computeMcpMetadata(entry.mcpSpec.configPath, existingDef) : undefined,
+        targetMeta: await computeMcpMetadata(entry.mcpSpec.configPath, existingDef),
       };
     }),
   );
@@ -272,7 +286,6 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
   }
 
   // Phase 4: 执行同步
-  const syncState = await loadSyncState();
   const conflictResolver = createConflictResolver({ interactive, force, supportBackup: false });
 
   for (const entry of finalEntries) {

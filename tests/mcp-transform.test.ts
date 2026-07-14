@@ -26,6 +26,46 @@ describe('mcp-transform', () => {
     expect(parsed.error).toContain('command');
   });
 
+  it('parses streamable-http transport correctly', () => {
+    const parsed = parseMcpToCanonical({
+      type: 'streamable-http',
+      url: 'https://mcp-gw.dingtalk.com/server/abc123',
+      headers: { 'X-Token': 'secret' },
+    });
+    expect(parsed.canonical).toBeDefined();
+    expect(parsed.canonical?.type).toBe('streamable-http');
+    expect(parsed.canonical?.url).toBe('https://mcp-gw.dingtalk.com/server/abc123');
+    expect(parsed.canonical?.headers).toEqual({ 'X-Token': 'secret' });
+  });
+
+  it('cursor rejects streamable-http as incompatible', () => {
+    const parsed = parseMcpToCanonical({
+      type: 'streamable-http',
+      url: 'https://example.com/mcp',
+    });
+    expect(parsed.canonical).toBeDefined();
+
+    const converted = serializeCanonicalMcpForTarget(parsed.canonical!, 'cursor');
+    expect(converted.def).toBeNull();
+    expect(converted.incompatibleReason).toContain('does not support');
+    expect(converted.incompatibleReason).toContain('streamable-http');
+  });
+
+  it('claude-code accepts streamable-http', () => {
+    const parsed = parseMcpToCanonical({
+      type: 'streamable-http',
+      url: 'https://example.com/mcp',
+      headers: { Authorization: 'Bearer token' },
+    });
+    expect(parsed.canonical).toBeDefined();
+
+    const converted = serializeCanonicalMcpForTarget(parsed.canonical!, 'claude-code');
+    expect(converted.def).toBeDefined();
+    expect(converted.def?.type).toBe('streamable-http');
+    expect(converted.def?.url).toBe('https://example.com/mcp');
+    expect(converted.lossy).toBe(false);
+  });
+
   it('marks codex conversion as lossy when unsupported fields exist', () => {
     const parsed = parseMcpToCanonical({
       type: 'sse',
@@ -54,6 +94,19 @@ describe('mcp-transform', () => {
     const converted = serializeCanonicalMcpForTarget(parsed.canonical!, 'codex');
     expect(converted.def).toBeNull();
     expect(converted.incompatibleReason).toContain('does not support');
+  });
+
+  it('normalizes central definition preserving all transports', () => {
+    const normalized = normalizeCentralMcpDef({
+      type: 'streamable-http',
+      url: 'https://example.com/mcp',
+      headers: { 'X-Key': 'val' },
+    });
+    expect(normalized.def).toEqual({
+      type: 'streamable-http',
+      url: 'https://example.com/mcp',
+      headers: { 'X-Key': 'val' },
+    });
   });
 
   it('normalizes central definition into stable canonical json shape', () => {

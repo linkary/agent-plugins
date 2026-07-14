@@ -10,7 +10,11 @@ export function formatTargetScopeLabel(targetLabel: string, scope: Scope | strin
 }
 
 export function formatTargetReviewLine(name: string, targetLabel: string, scope: Scope | string): string {
-  return `${name} -> ${formatTargetScopeLabel(targetLabel, scope)}`;
+  return `${name} → ${formatTargetScopeLabel(targetLabel, scope)}`;
+}
+
+export function formatCollectReviewLine(name: string, targetLabel: string, scope: Scope | string): string {
+  return `${name} ← ${formatTargetScopeLabel(targetLabel, scope)}`;
 }
 
 export function uniqueTargetScopeLabels(targets: TargetContext[]): string[] {

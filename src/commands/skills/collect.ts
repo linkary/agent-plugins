@@ -11,10 +11,12 @@ import { resolveTargetContext } from '../../util/scope.js';
 import { copyDir } from '../../util/copy-dir.js';
 import { ensureDir, listDirNames, pathExists, removeDirContents } from '../../util/fs-utils.js';
 import { computeDirHash } from '../../util/hash-dir.js';
+import { computeItemStats } from '../../util/item-utils.js';
 import type { ParsedFlags } from '../../util/options.js';
 import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
-import { formatTargetReviewLine } from '../../util/review-display.js';
+import { formatCollectReviewLine } from '../../util/review-display.js';
+import { formatSize, formatSyncMetadata, formatSyncMetadataChange, type SyncItemMetadata } from '../../util/sync-preview.js';
 import { removeGitSourceTracking } from '../../util/source-conflict.js';
 
 const IGNORED_DIR_NAMES = ['.git'];
@@ -98,6 +100,8 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
     isDuplicate: boolean;
     srcHash: string;
     destHash?: string;
+    sourceMeta?: SyncItemMetadata | null;
+    centralMeta?: SyncItemMetadata | null;
   };
 
   const seenSkillNames = new Set<string>();
@@ -121,7 +125,10 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
       status = destHash === srcHash ? 'identical' : 'conflict';
     }
 
-    skillsWithStatus.push({ ...s, status, isDuplicate, srcHash, destHash });
+    const sourceMeta = await computeItemStats(s.srcDir, { ignoreNames: IGNORED_DIR_NAMES });
+    const centralMeta = status !== 'new' ? await computeItemStats(s.destDir, { ignoreNames: IGNORED_DIR_NAMES }) : null;
+
+    skillsWithStatus.push({ ...s, status, isDuplicate, srcHash, destHash, sourceMeta, centralMeta });
   }
 
   const destBaseDir = getCentralSkillsDir();
@@ -143,7 +150,7 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
     // Default: select 'new' and 'conflict' (skip identical and duplicates)
     const defaultSelected = skillsWithStatus
       .map((s, i) =>
-        !s.isDuplicate && (s.status === 'new' || s.status === 'conflict') ? String(i) : null,
+        !s.isDuplicate && s.status === 'new' ? String(i) : null,
       )
       .filter((v): v is string => v !== null);
 
@@ -158,8 +165,18 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
       message: `Confirm skills to collect (target: ${destBaseDir}):`,
       options: skillsWithStatus.map((s, i) => {
         const statusLabel = s.isDuplicate ? `${ANSI.dim}dup${ANSI.reset}` : STATUS_LABELS[s.status];
+        let meta = '';
+        if (s.sourceMeta) {
+          if (s.status === 'identical') {
+            meta = ` ${formatSize(s.sourceMeta.sizeBytes)}`;
+          } else if (s.centralMeta) {
+            meta = ` ${formatSyncMetadataChange(s.sourceMeta, s.centralMeta)}`;
+          } else {
+            meta = ` ${formatSyncMetadata(s.sourceMeta)}`;
+          }
+        }
         return {
-          label: `${formatTargetReviewLine(s.name, getColoredLabel(s.adapter), s.scope)} [${statusLabel}]`,
+          label: `${formatCollectReviewLine(s.name, getColoredLabel(s.adapter), s.scope)} [${statusLabel}]${meta}`,
           value: String(i),
         };
       }),
@@ -180,7 +197,7 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
     process.stdout.write(`\nCollect ${toCollect.length} skill(s) to ${destBaseDir}:\n`);
     for (const s of toCollect) {
       const statusLabel = s.status === 'conflict' ? `${ANSI.red}conflict${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
-      process.stdout.write(`  ${formatTargetReviewLine(s.name, getColoredLabel(s.adapter), s.scope)} [${statusLabel}]\n`);
+      process.stdout.write(`  ${formatCollectReviewLine(s.name, getColoredLabel(s.adapter), s.scope)} [${statusLabel}]\n`);
     }
     const skipped = skillsWithStatus.length - toCollect.length;
     if (skipped > 0) {

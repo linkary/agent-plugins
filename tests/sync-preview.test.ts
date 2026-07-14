@@ -67,7 +67,7 @@ describe('sync-preview utilities', () => {
       { sizeBytes: 3072, changedAtMs: Date.UTC(2026, 3, 6, 14, 33) },
       { timeZone: 'UTC' },
     );
-    expect(stripAnsi(formatted)).toBe('1.5 KB 2026-04-01 09:12 -> 3 KB 2026-04-06 14:33');
+    expect(stripAnsi(formatted)).toBe('1.5 KB 2026-04-01 09:12 → 3 KB 2026-04-06 14:33');
     expect(formatted).toContain(`${ANSI.dim}2026-04-01 09:12${ANSI.reset}`);
     expect(formatted).toContain(`${ANSI.dim}2026-04-06 14:33${ANSI.reset}`);
   });
@@ -89,7 +89,7 @@ describe('sync-preview utilities', () => {
       timeZone: 'UTC',
     });
 
-    expect(stripAnsi(label)).toBe('foo -> Cursor [replace] 1.2 KB 2026-04-01 09:12 -> 1.8 KB 2026-04-06 14:33');
+    expect(stripAnsi(label)).toBe('foo → Cursor [replace] 1.2 KB 2026-04-01 09:12 → 1.8 KB 2026-04-06 14:33');
   });
 
   test('formats multi-target grouped lines with changed segments only', () => {
@@ -113,7 +113,7 @@ describe('sync-preview utilities', () => {
       timeZone: 'UTC',
     });
 
-    expect(stripAnsi(label)).toBe('foo [1 replace, 1 same] | Cursor [replace] 12 B 2026-04-01 09:12 -> 18 B 2026-04-06 14:33');
+    expect(stripAnsi(label)).toBe('foo [1 replace, 1 same] | Cursor [replace] 12 B 2026-04-01 09:12 → 18 B 2026-04-06 14:33');
     expect(stripAnsi(label)).not.toContain('Claude');
   });
 
@@ -160,7 +160,7 @@ describe('sync-preview utilities', () => {
 
     expect(stripAnsi(option.label)).toBe('foo [1 new, 1 replace, 1 same]');
     expect(option.detailLines?.map(stripAnsi)).toEqual([
-      'Cursor [replace] 12 B 2026-04-01 09:12 -> 18 B 2026-04-06 14:33',
+      'Cursor [replace] 12 B 2026-04-01 09:12 → 18 B 2026-04-06 14:33',
       'Claude Code [new] 12 B 2026-04-01 09:12',
     ]);
   });

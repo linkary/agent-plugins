@@ -24,14 +24,15 @@ import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { ANSI } from '../../util/ansi.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { ensureDir, pathExists, removeDirContents } from '../../util/fs-utils.js';
-import { computeCommandHash } from '../../util/item-utils.js';
+import { computeCommandHash, computeItemStats } from '../../util/item-utils.js';
 import { detectTargetCommands, collectToDirectory, collectToFile } from '../../util/command-transform.js';
 import { copyDir } from '../../util/copy-dir.js';
 import type { ParsedFlags } from '../../util/options.js';
 import { promptChoice, promptConfirm, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
 import { parseCommandMeta } from '../../util/command-meta.js';
-import { formatTargetReviewLine } from '../../util/review-display.js';
+import { formatCollectReviewLine } from '../../util/review-display.js';
+import { formatSize, formatSyncMetadata, formatSyncMetadataChange, type SyncItemMetadata } from '../../util/sync-preview.js';
 import { removeGitSourceTracking } from '../../util/source-conflict.js';
 
 const IGNORED_DIR_NAMES = ['.git'];
@@ -140,6 +141,8 @@ export async function cmdCommandsCollect(
     srcHash: string;
     destHash?: string;
     form: 'directory' | 'file';
+    sourceMeta?: SyncItemMetadata | null;
+    centralMeta?: SyncItemMetadata | null;
   };
 
   const seenNames = new Set<string>();
@@ -189,7 +192,10 @@ export async function cmdCommandsCollect(
       status = destHash === srcHash ? 'identical' : 'conflict';
     }
 
-    commandsWithStatus.push({ ...c, status, isDuplicate, srcHash, destHash, form });
+    commandsWithStatus.push({ ...c, status, isDuplicate, srcHash, destHash, form,
+      sourceMeta: await computeItemStats(c.mdPath),
+      centralMeta: status !== 'new' ? await computeItemStats(getCentralCommandFile(c.name)) : null,
+    });
   }
 
   const destBaseDir = centralRoot;
@@ -209,7 +215,7 @@ export async function cmdCommandsCollect(
     );
 
     const defaultSelected = commandsWithStatus
-      .map((c, i) => (!c.isDuplicate && (c.status === 'new' || c.status === 'conflict') ? String(i) : null))
+      .map((c, i) => (!c.isDuplicate && c.status === 'new' ? String(i) : null))
       .filter((v): v is string => v !== null);
 
     const selectedKeys = await promptMultiSelect({
@@ -220,8 +226,18 @@ export async function cmdCommandsCollect(
         else if (c.status === 'new') labels.push(`${ANSI.green}new${ANSI.reset}`);
         else if (c.status === 'identical') labels.push(`${ANSI.gray}identical${ANSI.reset}`);
         else if (c.status === 'conflict') labels.push(`${ANSI.red}conflict${ANSI.reset}`);
+        let meta = '';
+        if (c.sourceMeta) {
+          if (c.status === 'identical') {
+            meta = ` ${formatSize(c.sourceMeta.sizeBytes)}`;
+          } else if (c.centralMeta) {
+            meta = ` ${formatSyncMetadataChange(c.sourceMeta, c.centralMeta)}`;
+          } else {
+            meta = ` ${formatSyncMetadata(c.sourceMeta)}`;
+          }
+        }
         return {
-          label: `${formatTargetReviewLine(c.name, getColoredLabel(c.adapter), c.scope)} [${labels.join(', ')}]`,
+          label: `${formatCollectReviewLine(c.name, getColoredLabel(c.adapter), c.scope)} [${labels.join(', ')}]${meta}`,
           value: String(i),
         };
       }),
@@ -239,7 +255,7 @@ export async function cmdCommandsCollect(
     process.stdout.write(`\nCollect ${toCollect.length} command(s) to ${destBaseDir}:\n`);
     for (const c of toCollect) {
       const statusLabel = c.status === 'conflict' ? `${ANSI.red}conflict${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
-      process.stdout.write(`  ${formatTargetReviewLine(c.name, getColoredLabel(c.adapter), c.scope)} [${statusLabel}]\n`);
+      process.stdout.write(`  ${formatCollectReviewLine(c.name, getColoredLabel(c.adapter), c.scope)} [${statusLabel}]\n`);
     }
     const skipped = commandsWithStatus.length - toCollect.length;
     if (skipped > 0) {

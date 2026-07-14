@@ -112,7 +112,7 @@ export function formatSyncMetadataChange(
 ): string {
   const source = formatSyncMetadata(sourceMeta, options);
   if (!targetMeta) return source;
-  return `${source} -> ${formatSyncMetadata(targetMeta, options)}`;
+  return `${source} → ${formatSyncMetadata(targetMeta, options)}`;
 }
 
 export function formatChangedTargetSegment<T extends string>(params: {
@@ -179,10 +179,10 @@ export function formatSyncPromptOption<T extends string>(params: {
     const [entry] = params.entries;
     if (!entry) return { label: params.name };
     if (entry.status === params.unchangedStatus || !entry.sourceMeta) {
-      return { label: `${params.name} -> ${entry.targetLabel} [${formatStatusLabel(entry.status, params.styles)}]` };
+      return { label: `${params.name} → ${entry.targetLabel} [${formatStatusLabel(entry.status, params.styles)}]` };
     }
     return {
-      label: `${params.name} -> ${formatChangedTargetSegment({
+      label: `${params.name} → ${formatChangedTargetSegment({
         targetLabel: entry.targetLabel,
         status: entry.status,
         styles: params.styles,
