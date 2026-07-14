@@ -32,9 +32,9 @@ export const CLI_OPTIONS = {
   target: {
     short: 't',
     arg: '<tools>',
-    desc: 'Target tools (cursor|gemini|codex|claude-code|antigravity|agents|opencode|qoder|qodercli|all)',
+    desc: 'Target tools (cursor|codex|claude-code|antigravity|agents|opencode|qoder|qodercli|all); "all" = installed only, add -A for every known target',
   },
-  'all-targets': { short: 'A', desc: 'List all targets for selection, not just installed ones' },
+  'all-targets': { short: 'A', desc: 'Include all known targets, not just installed ones (also widens "--target all")' },
   scope: { arg: '<scope>', desc: 'Scope: global (default) or local' },
   global: { short: 'g', desc: 'Alias for --scope=global' },
   local: { short: 'l', desc: 'Alias for --scope=local' },

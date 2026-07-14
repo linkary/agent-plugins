@@ -16,17 +16,49 @@ describe('select-targets', () => {
     expect(selected).toEqual([]);
   });
 
-  test('supports --target=all against provided adapter list', async () => {
+  test('--target all resolves to installed targets only', async () => {
     const all = getAdapters();
-    const subset = all.filter((adapter) => adapter.id === 'cursor' || adapter.id === 'codex');
+    const installedOnly = all.filter((a) => a.id === 'codex' || a.id === 'claude-code');
     const selected = await selectTargetAdapters({
-      adapters: subset,
+      adapters: all,
       flags: { target: 'all' },
       interactive: false,
       mode: 'multi',
       promptMessage: 'unused',
+      filterInstalled: async () => installedOnly,
     });
-    expect(selected.map((adapter) => adapter.id)).toEqual(['cursor', 'codex']);
+    expect(selected.map((a) => a.id)).toEqual(['codex', 'claude-code']);
+  });
+
+  test('--target all with --all-targets resolves to every known target', async () => {
+    const all = getAdapters();
+    let filterCalled = false;
+    const selected = await selectTargetAdapters({
+      adapters: all,
+      flags: { target: 'all', 'all-targets': true },
+      interactive: false,
+      mode: 'multi',
+      promptMessage: 'unused',
+      filterInstalled: async () => {
+        filterCalled = true;
+        return [];
+      },
+    });
+    expect(filterCalled).toBe(false);
+    expect(selected.map((a) => a.id)).toEqual(all.map((a) => a.id));
+  });
+
+  test('an explicitly named target resolves even when not installed', async () => {
+    const all = getAdapters();
+    const selected = await selectTargetAdapters({
+      adapters: all,
+      flags: { target: 'opencode' },
+      interactive: false,
+      mode: 'multi',
+      promptMessage: 'unused',
+      filterInstalled: async () => [], // detection says nothing is installed
+    });
+    expect(selected.map((a) => a.id)).toEqual(['opencode']);
   });
 
   test('auto-selects the only installed target without a prompt (non-interactive)', async () => {

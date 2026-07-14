@@ -26,9 +26,18 @@ export async function selectTargetAdapters(params: {
 }): Promise<TargetAdapter[]> {
   const { adapters, flags, interactive, mode, promptMessage } = params;
   const selectableById = new Map(adapters.map((adapter) => [adapter.id, adapter]));
+  const allTargets = flags['all-targets'] === true;
 
   let inputs = normalizeTargetFlag(flags.target);
-  if (inputs.includes('all')) inputs = adapters.map((a) => a.id);
+  if (inputs.includes('all')) {
+    // 'all' = 候选集:默认为「已安装 / 始终可用」的目标,--all-targets/-A 时为全部已知目标。
+    // 显式列出的具体名称(如 --target opencode)仍照常解析,即使未安装。
+    const { candidates } = await resolveCandidateAdapters(adapters, {
+      allTargets,
+      filterInstalled: params.filterInstalled,
+    });
+    inputs = candidates.map((a) => a.id);
+  }
 
   if (inputs.length > 0) {
     const resolved: TargetAdapter[] = [];
@@ -64,7 +73,6 @@ export async function selectTargetAdapters(params: {
   }
 
   // 无显式 --target:默认只在「已安装」的目标中选择;--all-targets/-A 可列出全部。
-  const allTargets = flags['all-targets'] === true;
   const { candidates, source } = await resolveCandidateAdapters(adapters, {
     allTargets,
     filterInstalled: params.filterInstalled,
