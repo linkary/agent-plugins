@@ -5,6 +5,7 @@ import { listCentralAgentItems, readCentralAgentSpec } from '../../core/agent-st
 import { ensureDir, pathExists } from '../../util/fs-utils.js';
 import { promptMultiSelect } from '../../util/prompt.js';
 import { createConflictResolver } from '../../util/sync-conflict.js';
+import { classifySyncStatus, type SyncStatus } from '../../util/sync-status.js';
 import {
   filterAgentAdapters,
   getAdapters,
@@ -14,6 +15,7 @@ import {
 } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { getCentralAgentsDir } from '../../util/apg-paths.js';
+import { ANSI } from '../../util/ansi.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
 import { loadConfig } from '../../core/config.js';
@@ -52,11 +54,12 @@ type SyncEntry = {
   altDestPaths: string[];
 };
 
-type EntryStatus = 'new' | 'replace' | 'conflict' | 'same';
-const ENTRY_STATUS_ORDER = ['new', 'replace', 'conflict', 'same'] as const;
+type EntryStatus = SyncStatus;
+const ENTRY_STATUS_ORDER = ['new', 'replace', 'dest-ahead', 'conflict', 'same'] as const;
 const ENTRY_STATUS_STYLES: StatusStyle<EntryStatus> = {
   new: { color: 'green' },
   replace: { color: 'yellow' },
+  'dest-ahead': { color: 'red', label: 'target newer' },
   conflict: { color: 'red' },
   same: { color: 'dim' },
 };
@@ -170,8 +173,9 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
       }
 
       const targetEntry = await classifyFilesystemAgentPath(existingPath, entry.name);
-      const comparison =
-        targetEntry ? await compareAgentEntries(entry.sourceEntry, targetEntry, entry.adapter) : 'different';
+      const comparison = targetEntry
+        ? await compareAgentEntries(entry.sourceEntry, targetEntry, entry.adapter)
+        : 'different';
       if (comparison === 'same') return { ...entry, status: 'same' as const };
 
       const contextId = makeContextId({
@@ -180,11 +184,16 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
         projectRoot: entry.scope === 'local' ? entry.projectRoot : undefined,
       });
       const lastSync = syncState.contexts[contextId]?.agents?.[entry.name];
-      let status: EntryStatus = 'conflict';
-      if (lastSync && targetEntry) {
-        const currentTargetHash = await computeAgentHashForTarget(targetEntry, entry.adapter);
-        if (currentTargetHash && lastSync.hash === currentTargetHash) status = 'replace';
-      }
+      const [sourceHash, currentTargetHash] = await Promise.all([
+        computeAgentHashForTarget(entry.sourceEntry, entry.adapter),
+        targetEntry ? computeAgentHashForTarget(targetEntry, entry.adapter) : Promise.resolve(null),
+      ]);
+      const status = classifySyncStatus({
+        destExists: true,
+        srcHash: sourceHash ?? '',
+        destHash: currentTargetHash ?? undefined,
+        baselineHash: lastSync?.hash,
+      });
 
       const [sourceMeta, targetMeta] = await Promise.all([
         getSourceMeta(entry.sourceEntry.path),
@@ -200,6 +209,11 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
   } else if (interactive && !force) {
     const previewCounts = countByStatus(entriesWithStatus, ENTRY_STATUS_ORDER);
     process.stdout.write(`\nPreview: ${formatCountSummary(previewCounts, ENTRY_STATUS_ORDER, ENTRY_STATUS_STYLES)}\n`);
+    if (entriesWithStatus.some((item) => item.status === 'dest-ahead')) {
+      process.stdout.write(
+        `${ANSI.dim}  ↳ "target newer": the target changed since last sync; syncing overwrites it. Use "ap agents collect" to pull those edits instead.${ANSI.reset}\n`,
+      );
+    }
 
     const grouped = groupEntriesByName(entriesWithStatus);
     const groupedItems = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
@@ -241,7 +255,9 @@ export async function cmdAgentsSync(positionals: string[], flags: ParsedFlags, c
     process.stdout.write(`\nSync ${entriesWithStatus.length} agent(s) from ${srcBaseDir} (${scopeTitle}):\n`);
     for (const entry of entriesWithStatus) {
       const status = formatStatusLabel(entry.status, ENTRY_STATUS_STYLES);
-      process.stdout.write(`  ${formatTargetReviewLine(entry.name, getColoredLabel(entry.adapter), entry.scope)} [${status}]\n`);
+      process.stdout.write(
+        `  ${formatTargetReviewLine(entry.name, getColoredLabel(entry.adapter), entry.scope)} [${status}]\n`,
+      );
     }
     finalEntries = entriesWithStatus;
   }

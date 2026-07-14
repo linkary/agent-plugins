@@ -12,6 +12,7 @@ import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { computeCombinedItemStats, computeCommandHash, type ItemStats } from '../../util/item-utils.js';
 import { promptMultiSelect } from '../../util/prompt.js';
 import { createConflictResolver } from '../../util/sync-conflict.js';
+import { classifySyncStatus, type SyncStatus } from '../../util/sync-status.js';
 import {
   filterCommandAdapters,
   getAdapters,
@@ -48,20 +49,17 @@ type SyncEntry = {
   destCommandsDir: string;
 };
 
-type EntryStatus = 'new' | 'replace' | 'conflict' | 'same';
-const ENTRY_STATUS_ORDER = ['new', 'replace', 'conflict', 'same'] as const;
+type EntryStatus = SyncStatus;
+const ENTRY_STATUS_ORDER = ['new', 'replace', 'dest-ahead', 'conflict', 'same'] as const;
 const ENTRY_STATUS_STYLES: StatusStyle<EntryStatus> = {
   new: { color: 'green' },
   replace: { color: 'yellow' },
+  'dest-ahead': { color: 'red', label: 'target newer' },
   conflict: { color: 'red' },
   same: { color: 'dim' },
 };
 
-export async function cmdCommandsSync(
-  positionals: string[],
-  flags: ParsedFlags,
-  ctx: CliRunContext,
-): Promise<number> {
+export async function cmdCommandsSync(positionals: string[], flags: ParsedFlags, ctx: CliRunContext): Promise<number> {
   const dryRun = flags['dry-run'] === true;
   const force = flags.force === true || flags.overwrite === true;
   const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
@@ -84,7 +82,9 @@ export async function cmdCommandsSync(
   const availableCommands = await listCentralCommands();
   if (availableCommands.length === 0) {
     process.stdout.write('(no commands in central store)\n');
-    process.stdout.write(`${ANSI.dim}Tip: use "ap commands collect" to import commands from targets, or "ap commands add" to add from a path/repo.${ANSI.reset}\n`);
+    process.stdout.write(
+      `${ANSI.dim}Tip: use "ap commands collect" to import commands from targets, or "ap commands add" to add from a path/repo.${ANSI.reset}\n`,
+    );
     return 0;
   }
 
@@ -176,7 +176,11 @@ export async function cmdCommandsSync(
     );
   };
 
-  type EntryWithStatus = SyncEntry & { status: EntryStatus; sourceMeta?: ItemStats | null; targetMeta?: ItemStats | null };
+  type EntryWithStatus = SyncEntry & {
+    status: EntryStatus;
+    sourceMeta?: ItemStats | null;
+    targetMeta?: ItemStats | null;
+  };
   const entriesWithStatus: EntryWithStatus[] = await Promise.all(
     allEntries.map(async (s) => {
       const targetMd = targetMdPath(s);
@@ -212,7 +216,7 @@ export async function cmdCommandsSync(
         projectRoot: s.scope === 'local' ? s.projectRoot : undefined,
       });
       const lastSync = syncState.contexts[contextId]?.commands?.[s.name];
-      const status: EntryStatus = lastSync?.hash === destHash ? 'replace' : 'conflict';
+      const status = classifySyncStatus({ destExists: true, srcHash, destHash, baselineHash: lastSync?.hash });
 
       const [sourceMeta, targetMeta] = await Promise.all([getSourceMeta(s), getTargetMeta(s)]);
       return { ...s, status, sourceMeta, targetMeta };
@@ -226,6 +230,11 @@ export async function cmdCommandsSync(
   } else if (interactive && !force) {
     const previewCounts = countByStatus(entriesWithStatus, ENTRY_STATUS_ORDER);
     process.stdout.write(`\nPreview: ${formatCountSummary(previewCounts, ENTRY_STATUS_ORDER, ENTRY_STATUS_STYLES)}\n`);
+    if (entriesWithStatus.some((e) => e.status === 'dest-ahead')) {
+      process.stdout.write(
+        `${ANSI.dim}  ↳ "target newer": the target changed since last sync; syncing overwrites it. Use "ap commands collect" to pull those edits instead.${ANSI.reset}\n`,
+      );
+    }
 
     const grouped = groupEntriesByName(entriesWithStatus);
     const groupedItems = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
@@ -299,7 +308,9 @@ export async function cmdCommandsSync(
       scope,
       projectRoot: scope === 'local' ? projectRoot : undefined,
     });
-    const context = syncState.contexts[contextId] ?? ({} as { skills?: Record<string, unknown>; commands?: Record<string, { hash: string; syncedAt: string }> });
+    const context =
+      syncState.contexts[contextId] ??
+      ({} as { skills?: Record<string, unknown>; commands?: Record<string, { hash: string; syncedAt: string }> });
     syncState.contexts[contextId] = context;
     context.commands ??= {};
 

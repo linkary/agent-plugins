@@ -25,14 +25,20 @@ import { ANSI } from '../../util/ansi.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { ensureDir, pathExists, removeDirContents } from '../../util/fs-utils.js';
 import { computeCommandHash, computeItemStats } from '../../util/item-utils.js';
+import { classifySyncStatus, isAutoApplyStatus, isGatedStatus, type SyncStatus } from '../../util/sync-status.js';
 import { detectTargetCommands, collectToDirectory, collectToFile } from '../../util/command-transform.js';
 import { copyDir } from '../../util/copy-dir.js';
 import type { ParsedFlags } from '../../util/options.js';
-import { promptChoice, promptConfirm, promptMultiSelect } from '../../util/prompt.js';
+import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
 import { parseCommandMeta } from '../../util/command-meta.js';
 import { formatCollectReviewLine } from '../../util/review-display.js';
-import { formatSize, formatSyncMetadata, formatSyncMetadataChange, type SyncItemMetadata } from '../../util/sync-preview.js';
+import {
+  formatSize,
+  formatSyncMetadata,
+  formatSyncMetadataChange,
+  type SyncItemMetadata,
+} from '../../util/sync-preview.js';
 import { removeGitSourceTracking } from '../../util/source-conflict.js';
 
 const IGNORED_DIR_NAMES = ['.git'];
@@ -87,6 +93,7 @@ export async function cmdCommandsCollect(
 
   const config = await loadConfig();
   const centralRoot = getCentralCommandsDir();
+  const syncState = await loadSyncState();
 
   // Phase 1: 从所有选中的目标收集可用命令
   const allCommands: CommandEntry[] = [];
@@ -133,8 +140,8 @@ export async function cmdCommandsCollect(
     return 0;
   }
 
-  // Phase 2: 检测每个命令的状态 (skip selection — go directly to status analysis)
-  type CollectStatus = 'new' | 'identical' | 'conflict' | 'overwrite';
+  // Phase 2: 检测每个命令的状态（三方比较，基线来自 sync-state）
+  type CollectStatus = SyncStatus;
   type CommandWithStatus = CommandEntry & {
     status: CollectStatus;
     isDuplicate: boolean;
@@ -165,7 +172,6 @@ export async function cmdCommandsCollect(
       sharedResources: srcSharedResources,
     });
     let destHash: string | undefined;
-    let status: CollectStatus = 'new';
     const form = c.resourceDirPath ? 'directory' : 'file';
 
     const existingForm = await detectCommandForm(c.name);
@@ -175,7 +181,6 @@ export async function cmdCommandsCollect(
         commandsDir: centralRoot,
         form: 'directory',
       });
-      status = destHash === srcHash ? 'identical' : 'conflict';
     } else if (existingForm === 'file') {
       const centralMdPath = getCentralCommandFile(c.name);
       const centralMeta = await parseCommandMeta(centralMdPath);
@@ -189,46 +194,74 @@ export async function cmdCommandsCollect(
         form: 'file',
         sharedResources: centralSharedResources,
       });
-      status = destHash === srcHash ? 'identical' : 'conflict';
     }
 
-    commandsWithStatus.push({ ...c, status, isDuplicate, srcHash, destHash, form,
+    const contextId = makeContextId({
+      target: c.adapter.id,
+      scope: c.scope,
+      projectRoot: c.scope === 'local' ? c.projectRoot : undefined,
+    });
+    const baselineHash = syncState.contexts[contextId]?.commands?.[c.name]?.hash;
+    const status = classifySyncStatus({ destExists: existingForm !== null, srcHash, destHash, baselineHash });
+
+    commandsWithStatus.push({
+      ...c,
+      status,
+      isDuplicate,
+      srcHash,
+      destHash,
+      form,
       sourceMeta: await computeItemStats(c.mdPath),
-      centralMeta: status !== 'new' ? await computeItemStats(getCentralCommandFile(c.name)) : null,
+      centralMeta: existingForm !== null ? await computeItemStats(getCentralCommandFile(c.name)) : null,
     });
   }
 
   const destBaseDir = centralRoot;
   let finalCommands: CommandWithStatus[];
 
+  const STATUS_LABELS: Record<CollectStatus, string> = {
+    new: `${ANSI.green}new${ANSI.reset}`,
+    same: `${ANSI.gray}same${ANSI.reset}`,
+    replace: `${ANSI.yellow}replace${ANSI.reset}`,
+    'dest-ahead': `${ANSI.red}central newer${ANSI.reset}`,
+    conflict: `${ANSI.red}conflict${ANSI.reset}`,
+  };
+
   const newCount = commandsWithStatus.filter((c) => c.status === 'new' && !c.isDuplicate).length;
+  const replaceCount = commandsWithStatus.filter((c) => c.status === 'replace').length;
+  const destAheadCount = commandsWithStatus.filter((c) => c.status === 'dest-ahead').length;
   const conflictCount = commandsWithStatus.filter((c) => c.status === 'conflict').length;
-  const identicalCount = commandsWithStatus.filter((c) => c.status === 'identical').length;
+  const sameCount = commandsWithStatus.filter((c) => c.status === 'same').length;
   const dedupCount = commandsWithStatus.filter((c) => c.isDuplicate).length;
 
   if (interactive && !force) {
-    process.stderr.write(
-      `Preview: ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.red}${conflictCount} conflict${ANSI.reset}, ` +
-        `${ANSI.gray}${identicalCount} identical${ANSI.reset}` +
-        (dedupCount > 0 ? `, ${ANSI.dim}${dedupCount} duplicates${ANSI.reset}` : '') +
-        '\n',
-    );
+    const previewParts: string[] = [];
+    if (newCount) previewParts.push(`${ANSI.green}${newCount} new${ANSI.reset}`);
+    if (replaceCount) previewParts.push(`${ANSI.yellow}${replaceCount} replace${ANSI.reset}`);
+    if (destAheadCount) previewParts.push(`${ANSI.red}${destAheadCount} central-newer${ANSI.reset}`);
+    if (conflictCount) previewParts.push(`${ANSI.red}${conflictCount} conflict${ANSI.reset}`);
+    if (sameCount) previewParts.push(`${ANSI.gray}${sameCount} same${ANSI.reset}`);
+    if (dedupCount) previewParts.push(`${ANSI.dim}${dedupCount} duplicates${ANSI.reset}`);
+    if (previewParts.length === 0) previewParts.push(`${ANSI.dim}0 changes${ANSI.reset}`);
+    process.stderr.write(`Preview: ${previewParts.join(', ')}\n`);
+    if (destAheadCount > 0) {
+      process.stderr.write(
+        `${ANSI.dim}  ↳ "central newer": the hub changed since last sync; collecting overwrites it. Use "ap commands sync" to push instead.${ANSI.reset}\n`,
+      );
+    }
 
+    // Default: select safe pulls only ('new' + 'replace')
     const defaultSelected = commandsWithStatus
-      .map((c, i) => (!c.isDuplicate && c.status === 'new' ? String(i) : null))
+      .map((c, i) => (!c.isDuplicate && isAutoApplyStatus(c.status) ? String(i) : null))
       .filter((v): v is string => v !== null);
 
     const selectedKeys = await promptMultiSelect({
       message: `Confirm commands to collect (target: ${destBaseDir}):`,
       options: commandsWithStatus.map((c, i) => {
-        const labels: string[] = [];
-        if (c.isDuplicate) labels.push(`${ANSI.dim}dup${ANSI.reset}`);
-        else if (c.status === 'new') labels.push(`${ANSI.green}new${ANSI.reset}`);
-        else if (c.status === 'identical') labels.push(`${ANSI.gray}identical${ANSI.reset}`);
-        else if (c.status === 'conflict') labels.push(`${ANSI.red}conflict${ANSI.reset}`);
+        const statusLabel = c.isDuplicate ? `${ANSI.dim}dup${ANSI.reset}` : STATUS_LABELS[c.status];
         let meta = '';
         if (c.sourceMeta) {
-          if (c.status === 'identical') {
+          if (c.status === 'same') {
             meta = ` ${formatSize(c.sourceMeta.sizeBytes)}`;
           } else if (c.centralMeta) {
             meta = ` ${formatSyncMetadataChange(c.sourceMeta, c.centralMeta)}`;
@@ -237,7 +270,7 @@ export async function cmdCommandsCollect(
           }
         }
         return {
-          label: `${formatCollectReviewLine(c.name, getColoredLabel(c.adapter), c.scope)} [${labels.join(', ')}]${meta}`,
+          label: `${formatCollectReviewLine(c.name, getColoredLabel(c.adapter), c.scope)} [${statusLabel}]${meta}`,
           value: String(i),
         };
       }),
@@ -251,39 +284,41 @@ export async function cmdCommandsCollect(
     }
     finalCommands = selectedKeys.map((i) => commandsWithStatus[Number(i)]!);
   } else {
-    const toCollect = commandsWithStatus.filter((c) => !c.isDuplicate && c.status !== 'identical');
+    const toCollect = commandsWithStatus.filter((c) => !c.isDuplicate && c.status !== 'same');
     process.stdout.write(`\nCollect ${toCollect.length} command(s) to ${destBaseDir}:\n`);
     for (const c of toCollect) {
-      const statusLabel = c.status === 'conflict' ? `${ANSI.red}conflict${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
-      process.stdout.write(`  ${formatCollectReviewLine(c.name, getColoredLabel(c.adapter), c.scope)} [${statusLabel}]\n`);
+      process.stdout.write(
+        `  ${formatCollectReviewLine(c.name, getColoredLabel(c.adapter), c.scope)} [${STATUS_LABELS[c.status]}]\n`,
+      );
     }
     const skipped = commandsWithStatus.length - toCollect.length;
     if (skipped > 0) {
-      process.stdout.write(`  ${ANSI.dim}(${skipped} skipped: identical or duplicates)${ANSI.reset}\n`);
+      process.stdout.write(`  ${ANSI.dim}(${skipped} skipped: same or duplicates)${ANSI.reset}\n`);
     }
     finalCommands = toCollect;
   }
 
   const commandsToExecute = finalCommands;
 
-  // Phase 4:  conflict 解决策略
+  // Phase 4: 需确认（conflict / central-newer）解决策略
   if (!dryRun) await ensureCentralCommandStore();
 
   const registry = await loadRegistry();
   registry.commands ??= {};
-  const syncState = await loadSyncState();
 
-  const conflicts = commandsToExecute.filter((c) => c.status === 'conflict');
+  const conflicts = commandsToExecute.filter((c) => isGatedStatus(c.status));
   const resolutions = new Map<string, 'overwrite' | 'backup' | 'keep' | 'skip'>();
 
   for (const c of commandsToExecute) {
-    if (c.status !== 'conflict') {
+    if (!isGatedStatus(c.status)) {
       resolutions.set(c.name, 'overwrite');
     }
   }
 
   if (conflicts.length > 0 && interactive && !force) {
-    process.stdout.write(`\n${ANSI.red}Conflicts detected for ${conflicts.length} command(s).${ANSI.reset}\n`);
+    process.stdout.write(
+      `\n${ANSI.red}${conflicts.length} command(s) need review (conflict or central-newer).${ANSI.reset}\n`,
+    );
 
     const batchAction = await promptChoice({
       message: 'How would you like to resolve these conflicts?',
@@ -331,7 +366,7 @@ export async function cmdCommandsCollect(
     conflicts.forEach((c) => resolutions.set(c.name, 'overwrite'));
   } else if (conflicts.length > 0) {
     process.stderr.write(
-      `${conflicts.length} conflict(s) detected. Re-run with --force or in an interactive terminal.\n`,
+      `${conflicts.length} command(s) need review (conflict or central-newer). Re-run with --force or in an interactive terminal.\n`,
     );
     return 1;
   }
@@ -350,7 +385,9 @@ export async function cmdCommandsCollect(
       scope,
       projectRoot: scope === 'local' ? projectRoot : undefined,
     });
-    const context = syncState.contexts[contextId] ?? ({} as { skills?: Record<string, unknown>; commands?: Record<string, { hash: string; syncedAt: string }> });
+    const context =
+      syncState.contexts[contextId] ??
+      ({} as { skills?: Record<string, unknown>; commands?: Record<string, { hash: string; syncedAt: string }> });
     syncState.contexts[contextId] = context;
     context.commands ??= {};
 

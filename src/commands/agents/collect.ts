@@ -22,14 +22,19 @@ import { getCentralAgentsDir } from '../../util/apg-paths.js';
 import { resolveTargetContext } from '../../util/scope.js';
 import { ensureDir, pathExists } from '../../util/fs-utils.js';
 import { computeItemStats } from '../../util/item-utils.js';
-import { formatSize, formatSyncMetadata, formatSyncMetadataChange, type SyncItemMetadata } from '../../util/sync-preview.js';
+import { classifySyncStatus, isAutoApplyStatus, isGatedStatus, type SyncStatus } from '../../util/sync-status.js';
+import {
+  formatSize,
+  formatSyncMetadata,
+  formatSyncMetadataChange,
+  type SyncItemMetadata,
+} from '../../util/sync-preview.js';
 import type { ParsedFlags } from '../../util/options.js';
 import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
 import { formatCollectReviewLine } from '../../util/review-display.js';
 import {
   classifyFilesystemAgentPath,
-  compareAgentEntries,
   computeAgentHashForTarget,
   readAgentSpecFromEntry,
   scanFilesystemAgents,
@@ -66,6 +71,7 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
   if (selectedAdapters.length === 0) return 1;
 
   const config = await loadConfig();
+  const syncState = await loadSyncState();
   const allAgents: AgentEntry[] = [];
 
   for (const adapter of selectedAdapters) {
@@ -102,13 +108,21 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
     return 0;
   }
 
-  type CollectStatus = 'new' | 'identical' | 'conflict';
+  type CollectStatus = SyncStatus;
   type AgentWithStatus = AgentEntry & {
     status: CollectStatus;
     isDuplicate: boolean;
     srcHash: string;
     sourceMeta?: SyncItemMetadata | null;
     centralMeta?: SyncItemMetadata | null;
+  };
+
+  const STATUS_LABELS: Record<CollectStatus, string> = {
+    new: `${ANSI.green}new${ANSI.reset}`,
+    same: `${ANSI.gray}same${ANSI.reset}`,
+    replace: `${ANSI.yellow}replace${ANSI.reset}`,
+    'dest-ahead': `${ANSI.red}central newer${ANSI.reset}`,
+    conflict: `${ANSI.red}conflict${ANSI.reset}`,
   };
 
   const seenNames = new Set<string>();
@@ -124,12 +138,17 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
     const srcHash = await computeAgentHashForTarget(agent.sourceEntry, agent.adapter);
     if (!srcHash) continue;
 
-    let status: CollectStatus = 'new';
     const existingEntry = await resolveCentralAgentEntry(agent.name);
-    if (existingEntry) {
-      const comparison = await compareAgentEntries(agent.sourceEntry, existingEntry, agent.adapter);
-      status = comparison === 'same' ? 'identical' : 'conflict';
-    }
+    const destHash = existingEntry
+      ? ((await computeAgentHashForTarget(existingEntry, agent.adapter)) ?? undefined)
+      : undefined;
+    const contextId = makeContextId({
+      target: agent.adapter.id,
+      scope: agent.scope,
+      projectRoot: agent.scope === 'local' ? agent.projectRoot : undefined,
+    });
+    const baselineHash = syncState.contexts[contextId]?.agents?.[agent.name]?.hash;
+    const status = classifySyncStatus({ destExists: existingEntry !== null, srcHash, destHash, baselineHash });
 
     const sourceMeta = await computeItemStats(agent.sourceEntry.path);
     const centralMeta = existingEntry ? await computeItemStats(existingEntry.path) : null;
@@ -141,35 +160,40 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
   let finalAgents: AgentWithStatus[];
 
   const newCount = agentsWithStatus.filter((item) => item.status === 'new' && !item.isDuplicate).length;
+  const replaceCount = agentsWithStatus.filter((item) => item.status === 'replace').length;
+  const destAheadCount = agentsWithStatus.filter((item) => item.status === 'dest-ahead').length;
   const conflictCount = agentsWithStatus.filter((item) => item.status === 'conflict').length;
-  const identicalCount = agentsWithStatus.filter((item) => item.status === 'identical').length;
+  const sameCount = agentsWithStatus.filter((item) => item.status === 'same').length;
   const dedupCount = agentsWithStatus.filter((item) => item.isDuplicate).length;
 
   if (interactive && !force) {
-    process.stderr.write(
-      `Preview: ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.red}${conflictCount} conflict${ANSI.reset}, ${ANSI.gray}${identicalCount} identical${ANSI.reset}` +
-        (dedupCount > 0 ? `, ${ANSI.dim}${dedupCount} duplicates${ANSI.reset}` : '') +
-        '\n',
-    );
+    const previewParts: string[] = [];
+    if (newCount) previewParts.push(`${ANSI.green}${newCount} new${ANSI.reset}`);
+    if (replaceCount) previewParts.push(`${ANSI.yellow}${replaceCount} replace${ANSI.reset}`);
+    if (destAheadCount) previewParts.push(`${ANSI.red}${destAheadCount} central-newer${ANSI.reset}`);
+    if (conflictCount) previewParts.push(`${ANSI.red}${conflictCount} conflict${ANSI.reset}`);
+    if (sameCount) previewParts.push(`${ANSI.gray}${sameCount} same${ANSI.reset}`);
+    if (dedupCount) previewParts.push(`${ANSI.dim}${dedupCount} duplicates${ANSI.reset}`);
+    if (previewParts.length === 0) previewParts.push(`${ANSI.dim}0 changes${ANSI.reset}`);
+    process.stderr.write(`Preview: ${previewParts.join(', ')}\n`);
+    if (destAheadCount > 0) {
+      process.stderr.write(
+        `${ANSI.dim}  ↳ "central newer": the hub changed since last sync; collecting overwrites it. Use "ap agents sync" to push instead.${ANSI.reset}\n`,
+      );
+    }
 
+    // Default: select safe pulls only ('new' + 'replace')
     const defaultSelected = agentsWithStatus
-      .map((item, index) => (!item.isDuplicate && item.status === 'new' ? String(index) : null))
+      .map((item, index) => (!item.isDuplicate && isAutoApplyStatus(item.status) ? String(index) : null))
       .filter((value): value is string => value !== null);
 
     const selectedKeys = await promptMultiSelect({
       message: `Confirm agents to collect (target: ${destBaseDir}):`,
       options: agentsWithStatus.map((item, index) => {
-        const statusLabel =
-          item.isDuplicate
-            ? `${ANSI.dim}dup${ANSI.reset}`
-            : item.status === 'new'
-              ? `${ANSI.green}new${ANSI.reset}`
-              : item.status === 'identical'
-                ? `${ANSI.gray}identical${ANSI.reset}`
-                : `${ANSI.red}conflict${ANSI.reset}`;
+        const statusLabel = item.isDuplicate ? `${ANSI.dim}dup${ANSI.reset}` : STATUS_LABELS[item.status];
         let meta = '';
         if (item.sourceMeta) {
-          if (item.status === 'identical') {
+          if (item.status === 'same') {
             meta = ` ${formatSize(item.sourceMeta.sizeBytes)}`;
           } else if (item.centralMeta) {
             meta = ` ${formatSyncMetadataChange(item.sourceMeta, item.centralMeta)}`;
@@ -192,15 +216,16 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
     }
     finalAgents = selectedKeys.map((index) => agentsWithStatus[Number(index)]!);
   } else {
-    const toCollect = agentsWithStatus.filter((item) => !item.isDuplicate && item.status !== 'identical');
+    const toCollect = agentsWithStatus.filter((item) => !item.isDuplicate && item.status !== 'same');
     process.stdout.write(`\nCollect ${toCollect.length} agent(s) to ${destBaseDir}:\n`);
     for (const item of toCollect) {
-      const statusLabel = item.status === 'conflict' ? `${ANSI.red}conflict${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
-      process.stdout.write(`  ${formatCollectReviewLine(item.name, getColoredLabel(item.adapter), item.scope)} [${statusLabel}]\n`);
+      process.stdout.write(
+        `  ${formatCollectReviewLine(item.name, getColoredLabel(item.adapter), item.scope)} [${STATUS_LABELS[item.status]}]\n`,
+      );
     }
     const skipped = agentsWithStatus.length - toCollect.length;
     if (skipped > 0) {
-      process.stdout.write(`  ${ANSI.dim}(${skipped} skipped: identical or duplicates)${ANSI.reset}\n`);
+      process.stdout.write(`  ${ANSI.dim}(${skipped} skipped: same or duplicates)${ANSI.reset}\n`);
     }
     finalAgents = toCollect;
   }
@@ -209,17 +234,18 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
 
   const registry = await loadRegistry();
   registry.agents ??= {};
-  const syncState = await loadSyncState();
 
-  const conflicts = finalAgents.filter((item) => item.status === 'conflict');
+  const conflicts = finalAgents.filter((item) => isGatedStatus(item.status));
   type Resolution = 'overwrite' | 'backup' | 'keep' | 'skip';
   const resolutions = new Map<string, Resolution>();
   for (const item of finalAgents) {
-    if (item.status !== 'conflict') resolutions.set(item.name, 'overwrite');
+    if (!isGatedStatus(item.status)) resolutions.set(item.name, 'overwrite');
   }
 
-  if (conflicts.length > 0 && interactive) {
-    process.stdout.write(`\n${ANSI.red}Conflicts detected for ${conflicts.length} agent(s).${ANSI.reset}\n`);
+  if (conflicts.length > 0 && interactive && !force) {
+    process.stdout.write(
+      `\n${ANSI.red}${conflicts.length} agent(s) need review (conflict or central-newer).${ANSI.reset}\n`,
+    );
     const batchAction = await promptChoice({
       message: 'How would you like to resolve these conflicts?',
       options: [
@@ -255,7 +281,9 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
   } else if (force) {
     conflicts.forEach((item) => resolutions.set(item.name, 'overwrite'));
   } else if (conflicts.length > 0) {
-    process.stderr.write(`${conflicts.length} conflict(s) detected. Re-run with --force or in an interactive terminal.\n`);
+    process.stderr.write(
+      `${conflicts.length} agent(s) need review (conflict or central-newer). Re-run with --force or in an interactive terminal.\n`,
+    );
     return 1;
   }
 
@@ -278,7 +306,8 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
       projectRoot: scope === 'local' ? projectRoot : undefined,
     });
     const context =
-      syncState.contexts[contextId] ?? ({ skills: {}, agents: {} as Record<string, { hash: string; syncedAt: string }> } as const);
+      syncState.contexts[contextId] ??
+      ({ skills: {}, agents: {} as Record<string, { hash: string; syncedAt: string }> } as const);
     context.agents ??= {};
     syncState.contexts[contextId] = context;
 
@@ -318,7 +347,12 @@ export async function cmdAgentsCollect(positionals: string[], flags: ParsedFlags
 
     const now = new Date().toISOString();
     if (targetName === name) {
-      removeGitSourceTracking({ registry, kind: 'agents', name: targetName, source: registry.agents[targetName]?.source });
+      removeGitSourceTracking({
+        registry,
+        kind: 'agents',
+        name: targetName,
+        source: registry.agents[targetName]?.source,
+      });
     }
     registry.agents[targetName] = {
       name: targetName,

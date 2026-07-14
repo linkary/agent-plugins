@@ -18,6 +18,7 @@ import { resolveTargetContext } from '../../util/scope.js';
 import { readMcpServers, writeMcpServer } from '../../util/mcp-config-io.js';
 import { promptMultiSelect } from '../../util/prompt.js';
 import { createConflictResolver } from '../../util/sync-conflict.js';
+import { classifySyncStatus, type SyncStatus } from '../../util/sync-status.js';
 import { ANSI } from '../../util/ansi.js';
 import { getCentralMcpDir } from '../../util/apg-paths.js';
 import { filterMcpAdapters } from './manage-utils.js';
@@ -49,11 +50,12 @@ type SyncEntry = {
   projectRoot: string;
 };
 
-type EntryStatus = 'new' | 'replace' | 'conflict' | 'same';
-const ENTRY_STATUS_ORDER = ['new', 'replace', 'conflict', 'same'] as const;
+type EntryStatus = SyncStatus;
+const ENTRY_STATUS_ORDER = ['new', 'replace', 'dest-ahead', 'conflict', 'same'] as const;
 const ENTRY_STATUS_STYLES: StatusStyle<EntryStatus> = {
   new: { color: 'green' },
   replace: { color: 'yellow' },
+  'dest-ahead': { color: 'red', label: 'target newer' },
   conflict: { color: 'red' },
   same: { color: 'dim' },
 };
@@ -220,7 +222,12 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
         projectRoot: entry.scope === 'local' ? entry.projectRoot : undefined,
       });
       const lastSync = syncState.contexts[contextId]?.mcp?.[entry.name];
-      const status: EntryStatus = lastSync?.hash === existingHash ? 'replace' : 'conflict';
+      const status = classifySyncStatus({
+        destExists: true,
+        srcHash: entry.targetHash,
+        destHash: existingHash,
+        baselineHash: lastSync?.hash,
+      });
 
       return {
         ...entry,
@@ -239,6 +246,11 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
   } else if (interactive && !force) {
     const previewCounts = countByStatus(entriesWithStatus, ENTRY_STATUS_ORDER);
     process.stdout.write(`\nPreview: ${formatCountSummary(previewCounts, ENTRY_STATUS_ORDER, ENTRY_STATUS_STYLES)}\n`);
+    if (entriesWithStatus.some((e) => e.status === 'dest-ahead')) {
+      process.stdout.write(
+        `${ANSI.dim}  ↳ "target newer": the target changed since last sync; syncing overwrites it. Use "ap mcp collect" to pull those edits instead.${ANSI.reset}\n`,
+      );
+    }
 
     const grouped = groupEntriesByName(entriesWithStatus);
     const groupedItems = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
@@ -276,7 +288,9 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
     const selectedNameSet = new Set(selectedNames);
     finalEntries = entriesWithStatus.filter((entry) => selectedNameSet.has(entry.name));
   } else {
-    process.stdout.write(`\nSync ${entriesWithStatus.length} MCP server target(s) from ${srcBaseDir} (${scopeTitle}):\n`);
+    process.stdout.write(
+      `\nSync ${entriesWithStatus.length} MCP server target(s) from ${srcBaseDir} (${scopeTitle}):\n`,
+    );
     for (const s of entriesWithStatus) {
       process.stdout.write(
         `  ${formatTargetReviewLine(s.name, getColoredLabel(s.adapter), s.scope)} [${formatStatusLabel(s.status, ENTRY_STATUS_STYLES)}]\n`,
@@ -289,7 +303,8 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
   const conflictResolver = createConflictResolver({ interactive, force, supportBackup: false });
 
   for (const entry of finalEntries) {
-    const { name, targetDef, targetHash, lossy, lossyReasons, mcpSpec, adapter, scope, projectRoot, existingDef } = entry;
+    const { name, targetDef, targetHash, lossy, lossyReasons, mcpSpec, adapter, scope, projectRoot, existingDef } =
+      entry;
 
     const contextId = makeContextId({
       target: adapter.id,
@@ -353,7 +368,8 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
   if (incompatibleCount > 0) summaryParts.push(`${ANSI.red}${incompatibleCount} incompatible${ANSI.reset}`);
   if (lossyCount > 0) summaryParts.push(`${ANSI.magenta}${lossyCount} lossy${ANSI.reset}`);
   if (skippedCount > 0) summaryParts.push(`${ANSI.gray}${skippedCount} skipped${ANSI.reset}`);
-  if (summaryParts.length > 0) process.stdout.write(`\n${ANSI.dim}MCP transform:${ANSI.reset} ${summaryParts.join(', ')}\n`);
+  if (summaryParts.length > 0)
+    process.stdout.write(`\n${ANSI.dim}MCP transform:${ANSI.reset} ${summaryParts.join(', ')}\n`);
 
   return 0;
 }

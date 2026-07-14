@@ -7,6 +7,7 @@ import { ensureDir, pathExists, removeDir } from '../../util/fs-utils.js';
 import { computeDirHash } from '../../util/hash-dir.js';
 import { promptMultiSelect } from '../../util/prompt.js';
 import { createConflictResolver } from '../../util/sync-conflict.js';
+import { classifySyncStatus, type SyncStatus } from '../../util/sync-status.js';
 import { getAdapters, getColoredLabel, type Scope, type TargetAdapter } from '../../targets/adapters.js';
 import { selectTargetAdapters } from '../../targets/select-targets.js';
 import { getCentralSkillsDir } from '../../util/apg-paths.js';
@@ -36,11 +37,12 @@ type SyncEntry = {
   projectRoot: string;
 };
 
-type EntryStatus = 'new' | 'replace' | 'conflict' | 'same';
-const ENTRY_STATUS_ORDER = ['new', 'replace', 'conflict', 'same'] as const;
+type EntryStatus = SyncStatus;
+const ENTRY_STATUS_ORDER = ['new', 'replace', 'dest-ahead', 'conflict', 'same'] as const;
 const ENTRY_STATUS_STYLES: StatusStyle<EntryStatus> = {
   new: { color: 'green' },
   replace: { color: 'yellow' },
+  'dest-ahead': { color: 'red', label: 'target newer' },
   conflict: { color: 'red' },
   same: { color: 'dim' },
 };
@@ -154,7 +156,7 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
         projectRoot: s.scope === 'local' ? s.projectRoot : undefined,
       });
       const lastSync = syncState.contexts[contextId]?.skills?.[s.name];
-      const status: EntryStatus = lastSync?.hash === destHash ? 'replace' : 'conflict';
+      const status = classifySyncStatus({ destExists: true, srcHash, destHash, baselineHash: lastSync?.hash });
 
       const [sourceMeta, targetMeta] = await Promise.all([
         getSourceMeta(s.srcDir),
@@ -172,6 +174,11 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
   } else if (interactive && !force) {
     const previewCounts = countByStatus(entriesWithStatus, ENTRY_STATUS_ORDER);
     process.stdout.write(`\nPreview: ${formatCountSummary(previewCounts, ENTRY_STATUS_ORDER, ENTRY_STATUS_STYLES)}\n`);
+    if (entriesWithStatus.some((e) => e.status === 'dest-ahead')) {
+      process.stdout.write(
+        `${ANSI.dim}  ↳ "target newer": the target changed since last sync; syncing overwrites it. Use "ap skills collect" to pull those edits instead.${ANSI.reset}\n`,
+      );
+    }
 
     const grouped = groupEntriesByName(entriesWithStatus);
     const groupedItems = Array.from(grouped.entries()).sort(([a], [b]) => a.localeCompare(b));
@@ -245,8 +252,9 @@ export async function cmdSkillsSync(_positionals: string[], _flags: ParsedFlags,
       scope,
       projectRoot: scope === 'local' ? projectRoot : undefined,
     });
-    const context =
-      syncState.contexts[contextId] ?? ({ skills: {} as Record<string, { hash: string; syncedAt: string }> });
+    const context = syncState.contexts[contextId] ?? {
+      skills: {} as Record<string, { hash: string; syncedAt: string }>,
+    };
     if (!context.skills) context.skills = {};
     syncState.contexts[contextId] = context;
 

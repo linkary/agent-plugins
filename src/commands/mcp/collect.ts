@@ -2,7 +2,14 @@
  * ap mcp collect — 从目标工具配置文件中提取 MCP 服务器定义到中央存储。
  * 核心操作是 readConfig -> extract entries -> writeJson to central。
  */
-import { readCentralMcpServer, writeCentralMcpServer, computeMcpHash, computeMcpSerializedSize, ensureCentralMcpStore, getCentralMcpPath } from '../../core/mcp-store.js';
+import {
+  readCentralMcpServer,
+  writeCentralMcpServer,
+  computeMcpHash,
+  computeMcpSerializedSize,
+  ensureCentralMcpStore,
+  getCentralMcpPath,
+} from '../../core/mcp-store.js';
 import { loadConfig } from '../../core/config.js';
 import { loadRegistry, saveRegistry } from '../../core/registry.js';
 import { loadSyncState, makeContextId, saveSyncState } from '../../core/sync-state.js';
@@ -15,13 +22,19 @@ import { ANSI } from '../../util/ansi.js';
 import { filterMcpAdapters } from './manage-utils.js';
 import { normalizeCentralMcpDef, parseMcpToCanonical } from '../../util/mcp-transform.js';
 import { formatCollectReviewLine } from '../../util/review-display.js';
-import { formatSize, formatSyncMetadata, formatSyncMetadataChange, type SyncItemMetadata } from '../../util/sync-preview.js';
+import {
+  formatSize,
+  formatSyncMetadata,
+  formatSyncMetadataChange,
+  type SyncItemMetadata,
+} from '../../util/sync-preview.js';
+import { classifySyncStatus, isAutoApplyStatus, isGatedStatus, type SyncStatus } from '../../util/sync-status.js';
 import fs from 'node:fs/promises';
 import type { McpServerDef } from '../../core/mcp-types.js';
 import type { ParsedFlags } from '../../util/options.js';
 import type { CliRunContext } from '../../runner/cli.js';
 
-type CollectStatus = 'new' | 'identical' | 'conflict';
+type CollectStatus = SyncStatus;
 
 type CollectEntry = {
   name: string;
@@ -37,7 +50,9 @@ type CollectEntry = {
 
 const STATUS_LABELS: Record<CollectStatus, string> = {
   new: `${ANSI.green}new${ANSI.reset}`,
-  identical: `${ANSI.gray}identical${ANSI.reset}`,
+  same: `${ANSI.gray}same${ANSI.reset}`,
+  replace: `${ANSI.yellow}replace${ANSI.reset}`,
+  'dest-ahead': `${ANSI.red}central newer${ANSI.reset}`,
   conflict: `${ANSI.red}conflict${ANSI.reset}`,
 };
 
@@ -66,6 +81,7 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
 
   const config = await loadConfig();
   await ensureCentralMcpStore();
+  const syncState = await loadSyncState();
   let incompatibleCount = 0;
   let duplicateConflictCount = 0;
 
@@ -114,6 +130,13 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
       let status: CollectStatus;
       let centralMeta: SyncItemMetadata | null = null;
 
+      const contextId = makeContextId({
+        target: adapter.id,
+        scope,
+        projectRoot: scope === 'local' ? projectRoot : undefined,
+      });
+      const baselineHash = syncState.contexts[contextId]?.mcp?.[name]?.hash;
+
       if (!centralDef) {
         status = 'new';
       } else {
@@ -126,11 +149,21 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
           const centralStat = await fs.stat(centralPath).catch(() => null);
           centralMeta = { sizeBytes: centralSize, changedAtMs: centralStat?.mtimeMs ?? Date.now() };
           const centralHash = computeMcpHash(normalizedCentral.def);
-          status = centralHash === hash ? 'identical' : 'conflict';
+          status = classifySyncStatus({ destExists: true, srcHash: hash, destHash: centralHash, baselineHash });
         }
       }
 
-      allEntries.push({ name, def: normalizedDef.def, hash, adapter, scope, projectRoot, status, sourceMeta, centralMeta });
+      allEntries.push({
+        name,
+        def: normalizedDef.def,
+        hash,
+        adapter,
+        scope,
+        projectRoot,
+        status,
+        sourceMeta,
+        centralMeta,
+      });
     }
   }
 
@@ -159,12 +192,12 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
   // Phase 2: 交互选择
   let selectedEntries: CollectEntry[];
   if (positionals.length > 0 || !interactive) {
-    selectedEntries = uniqueEntries.filter((e) => e.status !== 'identical');
+    selectedEntries = uniqueEntries.filter((e) => e.status !== 'same');
   } else {
     const options = uniqueEntries.map((e, i) => {
       const statusLabel = STATUS_LABELS[e.status];
       let meta = '';
-      if (e.status === 'identical') {
+      if (e.status === 'same') {
         meta = ` ${formatSize(e.sourceMeta.sizeBytes)}`;
       } else if (e.centralMeta) {
         meta = ` ${formatSyncMetadataChange(e.sourceMeta, e.centralMeta)}`;
@@ -177,8 +210,15 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
       };
     });
 
+    if (uniqueEntries.some((e) => e.status === 'dest-ahead')) {
+      process.stderr.write(
+        `${ANSI.dim}  ↳ "central newer": the hub changed since last sync; collecting overwrites it. Use "ap mcp sync" to push instead.${ANSI.reset}\n`,
+      );
+    }
+
+    // Default: select safe pulls only ('new' + 'replace')
     const defaultSelected = uniqueEntries
-      .map((e, i) => (e.status === 'new' ? String(i) : null))
+      .map((e, i) => (isAutoApplyStatus(e.status) ? String(i) : null))
       .filter((v): v is string => v !== null);
 
     const selectedKeys = await promptMultiSelect({
@@ -195,29 +235,31 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
     selectedEntries = selectedKeys.map((i) => uniqueEntries[Number(i)]!);
   }
 
-  // Phase 3: 处理冲突并执行
+  // Phase 3: 处理需确认条目并执行
   const registry = await loadRegistry();
   if (!registry.mcp) registry.mcp = {};
-  const syncState = await loadSyncState();
   let conflictMode: 'ask' | 'overwrite' | 'skip' = force ? 'overwrite' : 'ask';
 
   for (const entry of selectedEntries) {
     const { name, def, hash, adapter, scope, projectRoot, status } = entry;
 
-    if (status === 'identical') {
+    if (status === 'same') {
       process.stdout.write(`Up-to-date: ${name}\n`);
       continue;
     }
 
-    if (status === 'conflict') {
+    if (isGatedStatus(status)) {
+      const detail = status === 'dest-ahead' ? 'central is newer than' : 'central differs from';
       let mode = conflictMode;
       if (mode === 'ask') {
         if (!interactive) {
-          process.stderr.write(`Conflict for ${name}. Re-run with --force or in an interactive terminal.\n`);
+          process.stderr.write(
+            `${name} needs review (${status}). Re-run with --force or in an interactive terminal.\n`,
+          );
           return 1;
         }
         const choice = await promptChoice({
-          message: `Conflict for ${name}: central differs from ${getColoredLabel(adapter)} (${scope}).`,
+          message: `Review ${name}: ${detail} ${getColoredLabel(adapter)} (${scope}).`,
           options: [
             { key: 'o', label: 'Overwrite central' },
             { key: 's', label: 'Skip' },
@@ -275,8 +317,10 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
   }
   const summaryParts: string[] = [];
   if (incompatibleCount > 0) summaryParts.push(`${ANSI.red}${incompatibleCount} incompatible${ANSI.reset}`);
-  if (duplicateConflictCount > 0) summaryParts.push(`${ANSI.yellow}${duplicateConflictCount} source-conflict${ANSI.reset}`);
-  if (summaryParts.length > 0) process.stdout.write(`\n${ANSI.dim}MCP transform:${ANSI.reset} ${summaryParts.join(', ')}\n`);
+  if (duplicateConflictCount > 0)
+    summaryParts.push(`${ANSI.yellow}${duplicateConflictCount} source-conflict${ANSI.reset}`);
+  if (summaryParts.length > 0)
+    process.stdout.write(`\n${ANSI.dim}MCP transform:${ANSI.reset} ${summaryParts.join(', ')}\n`);
 
   return 0;
 }

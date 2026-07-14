@@ -11,12 +11,18 @@ import { resolveTargetContext } from '../../util/scope.js';
 import { copyDir } from '../../util/copy-dir.js';
 import { ensureDir, listDirNames, pathExists, removeDirContents } from '../../util/fs-utils.js';
 import { computeDirHash } from '../../util/hash-dir.js';
+import { classifySyncStatus, isAutoApplyStatus, isGatedStatus, type SyncStatus } from '../../util/sync-status.js';
 import { computeItemStats } from '../../util/item-utils.js';
 import type { ParsedFlags } from '../../util/options.js';
 import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import type { CliRunContext } from '../../runner/cli.js';
 import { formatCollectReviewLine } from '../../util/review-display.js';
-import { formatSize, formatSyncMetadata, formatSyncMetadataChange, type SyncItemMetadata } from '../../util/sync-preview.js';
+import {
+  formatSize,
+  formatSyncMetadata,
+  formatSyncMetadataChange,
+  type SyncItemMetadata,
+} from '../../util/sync-preview.js';
 import { removeGitSourceTracking } from '../../util/source-conflict.js';
 
 const IGNORED_DIR_NAMES = ['.git'];
@@ -49,6 +55,7 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
   if (selectedAdapters.length === 0) return 1;
 
   const config = await loadConfig();
+  const syncState = await loadSyncState();
 
   // Phase 1: Gather all available skills from all selected targets
   const allSkills: SkillEntry[] = [];
@@ -91,10 +98,11 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
   }
 
   // Phase 2: Detect status for each skill (skip selection — go directly to status analysis)
-  // Status definitions:
-  // - isDuplicate: name appeared in previous source (deduplicated)
-  // - status: 'new' (no dest), 'identical' (hashes match), 'conflict' (hashes differ), 'overwrite' (force mode)
-  type CollectStatus = 'new' | 'identical' | 'conflict' | 'overwrite';
+  // Status definitions (three-way against the last-synced baseline in sync-state):
+  // - isDuplicate: name appeared in an earlier source (deduplicated)
+  // - status: 'new' (no central), 'same' (identical), 'replace' (only target moved -> safe pull),
+  //   'dest-ahead' (only central moved -> pulling discards hub edits), 'conflict' (both moved)
+  type CollectStatus = SyncStatus;
   type SkillWithStatus = SkillEntry & {
     status: CollectStatus;
     isDuplicate: boolean;
@@ -115,18 +123,20 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
     const isDuplicate = seenSkillNames.has(lowerName);
     seenSkillNames.add(lowerName);
 
-    // Calculate hashes
+    // Calculate hashes and classify against the last-synced baseline
     const srcHash = await computeDirHash(s.srcDir, { ignoreNames: IGNORED_DIR_NAMES });
-    let destHash: string | undefined;
-    let status: CollectStatus = 'new';
-
-    if (await pathExists(s.destDir)) {
-      destHash = await computeDirHash(s.destDir, { ignoreNames: IGNORED_DIR_NAMES });
-      status = destHash === srcHash ? 'identical' : 'conflict';
-    }
+    const destExists = await pathExists(s.destDir);
+    const destHash = destExists ? await computeDirHash(s.destDir, { ignoreNames: IGNORED_DIR_NAMES }) : undefined;
+    const contextId = makeContextId({
+      target: s.adapter.id,
+      scope: s.scope,
+      projectRoot: s.scope === 'local' ? s.projectRoot : undefined,
+    });
+    const baselineHash = syncState.contexts[contextId]?.skills?.[s.name]?.hash;
+    const status = classifySyncStatus({ destExists, srcHash, destHash, baselineHash });
 
     const sourceMeta = await computeItemStats(s.srcDir, { ignoreNames: IGNORED_DIR_NAMES });
-    const centralMeta = status !== 'new' ? await computeItemStats(s.destDir, { ignoreNames: IGNORED_DIR_NAMES }) : null;
+    const centralMeta = destExists ? await computeItemStats(s.destDir, { ignoreNames: IGNORED_DIR_NAMES }) : null;
 
     skillsWithStatus.push({ ...s, status, isDuplicate, srcHash, destHash, sourceMeta, centralMeta });
   }
@@ -134,32 +144,42 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
   const destBaseDir = getCentralSkillsDir();
   let finalSkills: SkillWithStatus[];
 
+  const STATUS_LABELS: Record<CollectStatus, string> = {
+    new: `${ANSI.green}new${ANSI.reset}`,
+    same: `${ANSI.gray}same${ANSI.reset}`,
+    replace: `${ANSI.yellow}replace${ANSI.reset}`,
+    'dest-ahead': `${ANSI.red}central newer${ANSI.reset}`,
+    conflict: `${ANSI.red}conflict${ANSI.reset}`,
+  };
+
   // Count by status
   const newCount = skillsWithStatus.filter((s) => s.status === 'new' && !s.isDuplicate).length;
+  const replaceCount = skillsWithStatus.filter((s) => s.status === 'replace').length;
+  const destAheadCount = skillsWithStatus.filter((s) => s.status === 'dest-ahead').length;
   const conflictCount = skillsWithStatus.filter((s) => s.status === 'conflict').length;
-  const identicalCount = skillsWithStatus.filter((s) => s.status === 'identical').length;
+  const sameCount = skillsWithStatus.filter((s) => s.status === 'same').length;
   const dedupCount = skillsWithStatus.filter((s) => s.isDuplicate).length;
 
   if (interactive && !force) {
-    process.stderr.write(
-      `Preview: ${ANSI.green}${newCount} new${ANSI.reset}, ${ANSI.red}${conflictCount} conflict${ANSI.reset}, ${ANSI.gray}${identicalCount} identical${ANSI.reset}` +
-        (dedupCount > 0 ? `, ${ANSI.dim}${dedupCount} duplicates${ANSI.reset}` : '') +
-        '\n',
-    );
+    const previewParts: string[] = [];
+    if (newCount) previewParts.push(`${ANSI.green}${newCount} new${ANSI.reset}`);
+    if (replaceCount) previewParts.push(`${ANSI.yellow}${replaceCount} replace${ANSI.reset}`);
+    if (destAheadCount) previewParts.push(`${ANSI.red}${destAheadCount} central-newer${ANSI.reset}`);
+    if (conflictCount) previewParts.push(`${ANSI.red}${conflictCount} conflict${ANSI.reset}`);
+    if (sameCount) previewParts.push(`${ANSI.gray}${sameCount} same${ANSI.reset}`);
+    if (dedupCount) previewParts.push(`${ANSI.dim}${dedupCount} duplicates${ANSI.reset}`);
+    if (previewParts.length === 0) previewParts.push(`${ANSI.dim}0 changes${ANSI.reset}`);
+    process.stderr.write(`Preview: ${previewParts.join(', ')}\n`);
+    if (destAheadCount > 0) {
+      process.stderr.write(
+        `${ANSI.dim}  ↳ "central newer": the hub changed since last sync; collecting overwrites it. Use "ap skills sync" to push instead.${ANSI.reset}\n`,
+      );
+    }
 
-    // Default: select 'new' and 'conflict' (skip identical and duplicates)
+    // Default: select safe pulls only ('new' + 'replace'); leave central-newer / conflict / same unselected
     const defaultSelected = skillsWithStatus
-      .map((s, i) =>
-        !s.isDuplicate && s.status === 'new' ? String(i) : null,
-      )
+      .map((s, i) => (!s.isDuplicate && isAutoApplyStatus(s.status) ? String(i) : null))
       .filter((v): v is string => v !== null);
-
-    const STATUS_LABELS: Record<CollectStatus, string> = {
-      new: `${ANSI.green}new${ANSI.reset}`,
-      identical: `${ANSI.gray}identical${ANSI.reset}`,
-      conflict: `${ANSI.red}conflict${ANSI.reset}`,
-      overwrite: `${ANSI.green}overwrite${ANSI.reset}`,
-    };
 
     const selectedKeys = await promptMultiSelect({
       message: `Confirm skills to collect (target: ${destBaseDir}):`,
@@ -167,7 +187,7 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
         const statusLabel = s.isDuplicate ? `${ANSI.dim}dup${ANSI.reset}` : STATUS_LABELS[s.status];
         let meta = '';
         if (s.sourceMeta) {
-          if (s.status === 'identical') {
+          if (s.status === 'same') {
             meta = ` ${formatSize(s.sourceMeta.sizeBytes)}`;
           } else if (s.centralMeta) {
             meta = ` ${formatSyncMetadataChange(s.sourceMeta, s.centralMeta)}`;
@@ -190,45 +210,47 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
     }
     finalSkills = selectedKeys.map((i) => skillsWithStatus[Number(i)]!);
   } else {
-    // Non-interactive: exclude identical matches and duplicates
-    // If strict processing is needed, maybe include identical? user usually wants updates or new stuff
-    const toCollect = skillsWithStatus.filter((s) => !s.isDuplicate && s.status !== 'identical');
+    // Non-interactive: skip 'same' matches and duplicates; auto-apply new/replace, gate the rest
+    const toCollect = skillsWithStatus.filter((s) => !s.isDuplicate && s.status !== 'same');
 
     process.stdout.write(`\nCollect ${toCollect.length} skill(s) to ${destBaseDir}:\n`);
     for (const s of toCollect) {
-      const statusLabel = s.status === 'conflict' ? `${ANSI.red}conflict${ANSI.reset}` : `${ANSI.green}new${ANSI.reset}`;
-      process.stdout.write(`  ${formatCollectReviewLine(s.name, getColoredLabel(s.adapter), s.scope)} [${statusLabel}]\n`);
+      process.stdout.write(
+        `  ${formatCollectReviewLine(s.name, getColoredLabel(s.adapter), s.scope)} [${STATUS_LABELS[s.status]}]\n`,
+      );
     }
     const skipped = skillsWithStatus.length - toCollect.length;
     if (skipped > 0) {
-      process.stdout.write(`  ${ANSI.dim}(${skipped} skipped: identical or duplicates)${ANSI.reset}\n`);
+      process.stdout.write(`  ${ANSI.dim}(${skipped} skipped: same or duplicates)${ANSI.reset}\n`);
     }
     finalSkills = toCollect;
   }
 
-  // Phase 5: Execution with Batch Conflict Resolution
+  // Phase 5: Execution with batch conflict resolution
   if (!dryRun) await ensureCentralStore();
 
   const registry = await loadRegistry();
-  const syncState = await loadSyncState();
   const centralSkills = await listDirNames(getCentralSkillsDir());
 
-  const conflicts = finalSkills.filter((s) => s.status === 'conflict');
+  // Gated = needs confirmation: 'conflict' (both changed) or 'dest-ahead' (hub newer, overwrite loses edits)
+  const conflicts = finalSkills.filter((s) => isGatedStatus(s.status));
 
   // 冲突解决策略映射（skill name → action）
   type Resolution = 'overwrite' | 'backup' | 'keep' | 'skip';
   const resolutions = new Map<string, Resolution>();
 
-  // 非冲突条目自动设为 overwrite
+  // 非受限条目（new / replace / same）自动 overwrite/copy
   for (const s of finalSkills) {
-    if (s.status !== 'conflict') {
-      resolutions.set(s.name, 'overwrite'); // New or identical, just overwrite/copy
+    if (!isGatedStatus(s.status)) {
+      resolutions.set(s.name, 'overwrite');
     }
   }
 
-  // 处理冲突
-  if (conflicts.length > 0 && interactive) {
-    process.stdout.write(`\n${ANSI.red}Conflicts detected for ${conflicts.length} skill(s).${ANSI.reset}\n`);
+  // 处理需确认条目
+  if (conflicts.length > 0 && interactive && !force) {
+    process.stdout.write(
+      `\n${ANSI.red}${conflicts.length} skill(s) need review (conflict or central-newer).${ANSI.reset}\n`,
+    );
 
     const batchAction = await promptChoice({
       message: 'How would you like to resolve these conflicts?',
@@ -273,11 +295,11 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
       }
     }
   } else if (force) {
-    conflicts.forEach(c => resolutions.set(c.name, 'overwrite'));
+    conflicts.forEach((c) => resolutions.set(c.name, 'overwrite'));
   } else if (conflicts.length > 0) {
     // 非交互环境且未指定 --force，冲突时报错退出
     process.stderr.write(
-      `${conflicts.length} conflict(s) detected. Re-run with --force or in an interactive terminal.\n`,
+      `${conflicts.length} skill(s) need review (conflict or central-newer). Re-run with --force or in an interactive terminal.\n`,
     );
     return 1;
   }
@@ -295,20 +317,22 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
       scope,
       projectRoot: scope === 'local' ? projectRoot : undefined,
     });
-    const context = syncState.contexts[contextId] ?? { skills: {} as Record<string, { hash: string; syncedAt: string }> };
+    const context = syncState.contexts[contextId] ?? {
+      skills: {} as Record<string, { hash: string; syncedAt: string }>,
+    };
     if (!context.skills) context.skills = {};
     syncState.contexts[contextId] = context;
 
     let targetDest = destDir;
     let targetName = name;
-    
+
     const action = resolutions.get(name) ?? 'skip';
 
     if (action === 'skip') {
       process.stdout.write(`Skipped: ${name}\n`);
       continue;
     }
-    
+
     if (dryRun) {
       const actionLabel = action === 'keep' ? `keep-both as ${targetName}` : action;
       process.stdout.write(`[dry-run] ${actionLabel} ${name} -> ${targetDest}\n`);
@@ -332,16 +356,21 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
         await copyDir(destDir, backupDir, { ignoreNames: IGNORED_DIR_NAMES });
         await removeDirContents(destDir, IGNORED_DIR_NAMES);
       }
-    } else if (action === 'overwrite' && await pathExists(destDir)) {
+    } else if (action === 'overwrite' && (await pathExists(destDir))) {
       await removeDirContents(destDir, IGNORED_DIR_NAMES);
     }
 
     await copyDir(srcDir, targetDest, { ignoreNames: IGNORED_DIR_NAMES });
-    
+
     // Update registry/state
     const now = new Date().toISOString();
     if (targetName === name) {
-      removeGitSourceTracking({ registry, kind: 'skills', name: targetName, source: registry.skills[targetName]?.source });
+      removeGitSourceTracking({
+        registry,
+        kind: 'skills',
+        name: targetName,
+        source: registry.skills[targetName]?.source,
+      });
     }
     registry.skills[targetName] = {
       name: targetName,
@@ -350,7 +379,7 @@ export async function cmdSkillsCollect(positionals: string[], flags: ParsedFlags
       source: { type: 'collected', from: { target: adapter.id, scope, path: srcDir } },
     };
     context.skills[name] = { hash: srcHash, syncedAt: now };
-    
+
     process.stdout.write(`Collected: ${targetName}\n`);
     if (!centralSkills.includes(targetName)) centralSkills.push(targetName);
   }
