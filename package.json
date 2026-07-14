@@ -1,6 +1,6 @@
 {
   "name": "agent-plugins",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Manage and sync AI agent skills, commands, rules and MCP configs across Cursor, Claude Code, Codex, Antigravity, OpenCode and Qoder",
   "type": "module",
   "main": "dist/cli.mjs",
