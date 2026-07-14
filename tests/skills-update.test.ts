@@ -12,11 +12,24 @@ let missingRepos = new Set<string>();
 let cloneAttempts: string[] = [];
 let originalFetch: typeof globalThis.fetch | undefined;
 
+// Import the real modules so the mocks below can preserve every export they
+// don't override. Bun's mock.module is process-global and is NOT restored
+// between test files, so a partial mock here would otherwise leak into every
+// later-loaded file that imports these modules (e.g. git-utils' URL helpers),
+// surfacing as "Export named X not found" load errors elsewhere in the suite.
+const actualGitUtils = await import('../src/util/git-utils.js');
+const actualSkillCompare = await import('../src/util/skill-compare.js');
+
 mock.module('../src/util/git-utils.js', () => ({
+  ...actualGitUtils,
   runGit: async (args: string[], opts?: { env?: NodeJS.ProcessEnv }) => {
     if (args[0] === 'clone') {
       const repoUrl = args[args.length - 2]!;
-      if (cloneFailures.has(repoUrl) || missingRepos.has(repoUrl) || (credentialFailures.has(repoUrl) && !opts?.env?.GIT_ASKPASS)) {
+      if (
+        cloneFailures.has(repoUrl) ||
+        missingRepos.has(repoUrl) ||
+        (credentialFailures.has(repoUrl) && !opts?.env?.GIT_ASKPASS)
+      ) {
         return 1;
       }
       const cloneDest = args[args.length - 1]!;
@@ -29,7 +42,11 @@ mock.module('../src/util/git-utils.js', () => ({
     if (args.includes('clone')) {
       const repoUrl = args[args.length - 2]!;
       cloneAttempts.push(repoUrl);
-      if (cloneFailures.has(repoUrl) || missingRepos.has(repoUrl) || (credentialFailures.has(repoUrl) && !opts?.env?.GIT_ASKPASS)) {
+      if (
+        cloneFailures.has(repoUrl) ||
+        missingRepos.has(repoUrl) ||
+        (credentialFailures.has(repoUrl) && !opts?.env?.GIT_ASKPASS)
+      ) {
         return {
           code: 128,
           stdout: '',
@@ -69,6 +86,7 @@ mock.module('../src/util/git-utils.js', () => ({
 }));
 
 mock.module('../src/util/skill-compare.js', () => ({
+  ...actualSkillCompare,
   detectSkillStatus: async (srcDir: string) => {
     if (srcDir.includes('skill-missing')) {
       await fs.rm(srcDir, { recursive: true, force: true });
