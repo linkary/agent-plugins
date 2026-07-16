@@ -23,7 +23,11 @@ import { ANSI } from '../../util/ansi.js';
 import { getCentralMcpDir } from '../../util/apg-paths.js';
 import { filterMcpAdapters } from './manage-utils.js';
 import { formatTargetReviewLine, formatTargetScopeLabel } from '../../util/review-display.js';
-import { parseMcpToCanonical, serializeCanonicalMcpForTarget } from '../../util/mcp-transform.js';
+import {
+  computeCanonicalMcpHash,
+  parseMcpToCanonical,
+  serializeCanonicalMcpForTarget,
+} from '../../util/mcp-transform.js';
 import {
   countByStatus,
   formatCountSummary,
@@ -42,6 +46,8 @@ type SyncEntry = {
   name: string;
   targetDef: McpServerDef;
   targetHash: string;
+  /** Direction-independent canonical hash — the baseline space shared with collect. */
+  canonicalHash: string;
   lossy: boolean;
   lossyReasons: string[];
   mcpSpec: McpConfigSpec;
@@ -155,6 +161,7 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
         name,
         targetDef: transformed.def,
         targetHash: computeMcpHash(transformed.def),
+        canonicalHash: computeCanonicalMcpHash(parsed.canonical),
         lossy: transformed.lossy,
         lossyReasons: transformed.lossyReasons,
         mcpSpec,
@@ -222,10 +229,14 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
         projectRoot: entry.scope === 'local' ? entry.projectRoot : undefined,
       });
       const lastSync = syncState.contexts[contextId]?.mcp?.[entry.name];
+      const parsedExisting = parseMcpToCanonical(existingDef);
+      const canonicalExistingHash = parsedExisting.canonical
+        ? computeCanonicalMcpHash(parsedExisting.canonical)
+        : undefined;
       const status = classifySyncStatus({
         destExists: true,
-        srcHash: entry.targetHash,
-        destHash: existingHash,
+        srcHash: entry.canonicalHash,
+        destHash: canonicalExistingHash,
         baselineHash: lastSync?.hash,
       });
 
@@ -303,8 +314,19 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
   const conflictResolver = createConflictResolver({ interactive, force, supportBackup: false });
 
   for (const entry of finalEntries) {
-    const { name, targetDef, targetHash, lossy, lossyReasons, mcpSpec, adapter, scope, projectRoot, existingDef } =
-      entry;
+    const {
+      name,
+      targetDef,
+      targetHash,
+      canonicalHash,
+      lossy,
+      lossyReasons,
+      mcpSpec,
+      adapter,
+      scope,
+      projectRoot,
+      existingDef,
+    } = entry;
 
     const contextId = makeContextId({
       target: adapter.id,
@@ -330,22 +352,26 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
         continue;
       }
       await writeMcpServer(mcpSpec, name, targetDef);
-      context.mcp[name] = { hash: targetHash, syncedAt: new Date().toISOString() };
+      context.mcp[name] = { hash: canonicalHash, syncedAt: new Date().toISOString() };
       process.stdout.write(`Synced: ${name} -> ${getColoredLabel(adapter)}\n`);
       continue;
     }
 
-    // 对比 hash
+    // 对比 hash（format 空间用于 same 短路；canonical 空间用于 baseline / 冲突判定）
     const existingHash = computeMcpHash(existingDef);
     if (existingHash === targetHash) {
-      context.mcp[name] = { hash: targetHash, syncedAt: context.mcp[name]?.syncedAt ?? new Date().toISOString() };
+      context.mcp[name] = { hash: canonicalHash, syncedAt: context.mcp[name]?.syncedAt ?? new Date().toISOString() };
       process.stdout.write(`Up-to-date: ${name} (${getColoredLabel(adapter)})\n`);
       continue;
     }
 
-    // 冲突处理
+    // 冲突处理（在 canonical 空间比较 baseline，与 collect 保持一致）
     const lastSync = context.mcp[name];
-    const action = await conflictResolver.resolve(name, adapter, lastSync?.hash, existingHash);
+    const parsedExisting = parseMcpToCanonical(existingDef);
+    const canonicalExistingHash = parsedExisting.canonical
+      ? computeCanonicalMcpHash(parsedExisting.canonical)
+      : existingHash;
+    const action = await conflictResolver.resolve(name, adapter, lastSync?.hash, canonicalExistingHash);
     if (action === 'quit') return 1;
 
     if (action === 'skip') {
@@ -359,7 +385,7 @@ export async function cmdMcpSync(positionals: string[], flags: ParsedFlags, ctx:
     }
 
     await writeMcpServer(mcpSpec, name, targetDef);
-    context.mcp[name] = { hash: targetHash, syncedAt: new Date().toISOString() };
+    context.mcp[name] = { hash: canonicalHash, syncedAt: new Date().toISOString() };
     process.stdout.write(`Synced: ${name} -> ${getColoredLabel(adapter)}\n`);
   }
 

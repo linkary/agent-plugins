@@ -5,7 +5,6 @@
 import {
   readCentralMcpServer,
   writeCentralMcpServer,
-  computeMcpHash,
   computeMcpSerializedSize,
   ensureCentralMcpStore,
   getCentralMcpPath,
@@ -20,7 +19,7 @@ import { readMcpServers } from '../../util/mcp-config-io.js';
 import { promptChoice, promptMultiSelect } from '../../util/prompt.js';
 import { ANSI } from '../../util/ansi.js';
 import { filterMcpAdapters } from './manage-utils.js';
-import { normalizeCentralMcpDef, parseMcpToCanonical } from '../../util/mcp-transform.js';
+import { computeCanonicalMcpHash, normalizeCentralMcpDef, parseMcpToCanonical } from '../../util/mcp-transform.js';
 import { formatCollectReviewLine } from '../../util/review-display.js';
 import {
   formatSize,
@@ -122,7 +121,9 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
         continue;
       }
 
-      const hash = computeMcpHash(normalizedDef.def);
+      // Baseline space is the direction-independent canonical hash, so a baseline
+      // written by `mcp sync` (target serialization) stays comparable here.
+      const canonicalHash = computeCanonicalMcpHash(parsed.canonical);
       const sourceSize = computeMcpSerializedSize(normalizedDef.def);
       const configStat = await fs.stat(mcpSpec.configPath).catch(() => null);
       const sourceMeta: SyncItemMetadata = { sizeBytes: sourceSize, changedAtMs: configStat?.mtimeMs ?? Date.now() };
@@ -140,23 +141,29 @@ export async function cmdMcpCollect(positionals: string[], flags: ParsedFlags, c
       if (!centralDef) {
         status = 'new';
       } else {
+        const parsedCentral = parseMcpToCanonical(centralDef);
         const normalizedCentral = normalizeCentralMcpDef(centralDef);
-        if (!normalizedCentral.def) {
+        if (!parsedCentral.canonical || !normalizedCentral.def) {
           status = 'conflict';
         } else {
           const centralSize = computeMcpSerializedSize(normalizedCentral.def);
           const centralPath = getCentralMcpPath(name);
           const centralStat = await fs.stat(centralPath).catch(() => null);
           centralMeta = { sizeBytes: centralSize, changedAtMs: centralStat?.mtimeMs ?? Date.now() };
-          const centralHash = computeMcpHash(normalizedCentral.def);
-          status = classifySyncStatus({ destExists: true, srcHash: hash, destHash: centralHash, baselineHash });
+          const canonicalCentralHash = computeCanonicalMcpHash(parsedCentral.canonical);
+          status = classifySyncStatus({
+            destExists: true,
+            srcHash: canonicalHash,
+            destHash: canonicalCentralHash,
+            baselineHash,
+          });
         }
       }
 
       allEntries.push({
         name,
         def: normalizedDef.def,
-        hash,
+        hash: canonicalHash,
         adapter,
         scope,
         projectRoot,

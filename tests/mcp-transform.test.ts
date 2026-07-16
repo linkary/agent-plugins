@@ -5,6 +5,7 @@ import {
   parseMcpToCanonical,
   serializeCanonicalMcpForTarget,
 } from '../src/util/mcp-transform.js';
+import { computeMcpHash } from '../src/core/mcp-store.js';
 
 describe('mcp-transform', () => {
   it('infers stdio transport when type is omitted', () => {
@@ -139,5 +140,29 @@ describe('mcp-transform', () => {
     expect(a.canonical).toBeDefined();
     expect(b.canonical).toBeDefined();
     expect(computeCanonicalMcpHash(a.canonical!)).toBe(computeCanonicalMcpHash(b.canonical!));
+  });
+
+  // Guards the sync<->collect baseline: `mcp sync` records the baseline from the
+  // target serialization while `mcp collect` computes it from the central form.
+  // For the three-way status to work across that boundary, both must land on the
+  // same canonical hash even when the target format drops fields (e.g. codex omits
+  // `type`). This is the property that keeps a clean pull as `replace`, not `conflict`.
+  it('produces a direction-independent canonical baseline across target/central serializations', () => {
+    const central = { type: 'stdio' as const, command: 'npx', args: ['-y', 'tavily-mcp'], env: { A: '1' } };
+    const canonical = parseMcpToCanonical(central).canonical;
+    expect(canonical).toBeDefined();
+
+    // What `mcp sync` writes to the target (codex drops `type`).
+    const targetDef = serializeCanonicalMcpForTarget(canonical!, 'codex').def;
+    expect(targetDef).toBeDefined();
+    expect('type' in targetDef!).toBe(false);
+
+    // Byte-level format hashes differ between the two serializations...
+    expect(computeMcpHash(targetDef!)).not.toBe(computeMcpHash(normalizeCentralMcpDef(central).def!));
+
+    // ...but the canonical baseline hash is identical in both directions.
+    const syncBaseline = computeCanonicalMcpHash(parseMcpToCanonical(targetDef!).canonical!);
+    const collectHash = computeCanonicalMcpHash(parseMcpToCanonical(normalizeCentralMcpDef(central).def!).canonical!);
+    expect(syncBaseline).toBe(collectHash);
   });
 });
